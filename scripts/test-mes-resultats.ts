@@ -1,142 +1,155 @@
-// Test permanent — prompt "Onglets Tableau de bord/Résultats élève" : GET /api/eleves/mes-resultats,
-// exécuté contre le VRAI handler compilé (require()'d tel quel, jamais réimplémenté), même technique
-// que scripts/test-badge-serie.ts. Le faux client Supabase ne trie pas réellement les lignes passées
-// à `.order(...)` — les tableaux `reponses` ci-dessous sont donc écrits DÉJÀ dans l'ordre que
-// produirait la vraie requête `.order("horodatage", { ascending: true })` (la plus ancienne en
-// premier).
+// Test permanent — GET /api/eleves/mes-resultats, exécuté contre le VRAI handler (via le vrai routeur)
+// et une base en mémoire (scripts/support/). Réécrit en phase 2 pour utiliser le faux Supabase à filtres
+// réels (l'ancien faux ignorait `.eq`/`.in`, donc incapable de tester la complétion par le moteur de
+// tentatives). Les 4 vérifications d'origine (historique, C04, évolution, ordreCategories) sont
+// conservées ; s'y ajoutent les cas de complétion : un champ n'est « terminé » qu'à l'état du moteur de
+// tentatives, jamais dès la première réponse.
 
-export {};
+export {}; // module
 
-const cheminSupabaseAdmin = require.resolve("../lib/supabaseAdmin");
+import { appeler, creerScenario, creerTache, installerBase, type Scenario } from "./support/harnaisRouteur";
 
-function construireChaineFausse(donnees: unknown): any {
-  const chaine: any = {
-    select: () => chaine,
-    eq: () => chaine,
-    in: () => chaine,
-    order: () => chaine,
-    returns: () => chaine,
-    then: (resolve: (v: { data: unknown; error: null }) => void) => resolve({ data: donnees, error: null }),
-  };
-  return chaine;
-}
-
-const ELEVE_ID = "eleve-resultats-uuid";
-const TACHE_A = "tache-effectuee";
-const TACHE_B = "tache-anterieure";
-const CLASSE_ID = "classe-resultats";
-const EX_A = "ex-a";
-const EX_B = "ex-b";
 const FUTUR = "2099-01-01T00:00:00.000Z";
 const PASSE = "2020-01-01T00:00:00.000Z";
 const DEBUT = "2024-01-01T00:00:00.000Z";
 
-const DONNEES: Record<string, unknown> = {
-  exercices_assignes: [
-    { id: EX_A, tache_id: TACHE_A, champs_attendus: ["champ1", "champ2"] },
-    { id: EX_B, tache_id: TACHE_B, champs_attendus: ["champ1"] },
-  ],
-  taches: [
-    { id: TACHE_A, nom: "Devoir A" },
-    { id: TACHE_B, nom: "Devoir B" },
-  ],
-  inscriptions: [{ classe_id: CLASSE_ID }],
-  taches_assignations: [
-    { tache_id: TACHE_A, classe_id: CLASSE_ID, date_echeance: FUTUR, date_debut: DEBUT }, // pas encore échue + complète -> "effectuees"
-    { tache_id: TACHE_B, classe_id: CLASSE_ID, date_echeance: PASSE, date_debut: DEBUT }, // échue -> "anterieures"
-  ],
-  // Ordre chronologique croissant. 2 échecs C04 (ancien) puis 2 réussites (récent) sur la tâche A :
-  // évolution attendue "en_progres". Tâche B : 1 réussite directe.
-  reponses: [
-    { exercice_assigne_id: EX_A, champ: "champ1", statut: "not_equivalent", bug_detecte: "C04", horodatage: "2024-02-01T00:00:00.000Z" },
-    { exercice_assigne_id: EX_A, champ: "champ2", statut: "not_equivalent", bug_detecte: "C04", horodatage: "2024-02-02T00:00:00.000Z" },
-    { exercice_assigne_id: EX_A, champ: "champ1", statut: "correct", bug_detecte: null, horodatage: "2024-02-03T00:00:00.000Z" },
-    { exercice_assigne_id: EX_A, champ: "champ2", statut: "correct", bug_detecte: null, horodatage: "2024-02-04T00:00:00.000Z" },
-    { exercice_assigne_id: EX_B, champ: "champ1", statut: "correct", bug_detecte: null, horodatage: "2024-02-05T00:00:00.000Z" },
-  ],
-};
-
-const DONNEES_VIDES: Record<string, unknown> = { exercices_assignes: [], taches: [], inscriptions: [], taches_assignations: [], reponses: [] };
-
-async function appelerHandler(donnees: Record<string, unknown>): Promise<{ statusCode: number | null; corps: any }> {
-  const fauxAdmin = {
-    from(table: string) {
-      if (!(table in donnees)) throw new Error("Table non simulée dans ce test : " + table);
-      return construireChaineFausse(donnees[table]);
-    },
-  };
-
-  require.cache[cheminSupabaseAdmin] = {
-    id: cheminSupabaseAdmin,
-    filename: cheminSupabaseAdmin,
-    loaded: true,
-    exports: {
-      supabaseAdmin: () => fauxAdmin,
-      eleveAuthentifie: async () => ({ id: ELEVE_ID }),
-    },
-  } as any;
-  delete require.cache[require.resolve("../lib/routes/eleves/mes-resultats")];
-
-  const { gererElevesMesResultats: handler } = require("../lib/routes/eleves/mes-resultats");
-
-  const req = { method: "GET", headers: { authorization: "Bearer stub" } };
-  let statusCode: number | null = null;
-  let corps: any = null;
-  const res = {
-    status(code: number) {
-      statusCode = code;
-      return this;
-    },
-    json(objet: unknown) {
-      corps = objet;
-    },
-  };
-
-  await handler(req, res, {});
-  return { statusCode, corps };
+const echecs: string[] = [];
+let nb = 0;
+function verifier(condition: boolean, message: string): void {
+  nb++;
+  if (!condition) echecs.push(message);
 }
 
+let horloge = 0;
+function repondre(s: Scenario, exercice: string, champ: string, statut: string, bug: string | null = null): void {
+  s.base.inserer("reponses", { exercice_assigne_id: exercice, champ, valeur_saisie: "x", statut, bug_detecte: bug, indice_utilise: false, horodatage: new Date(Date.UTC(2024, 1, 1, 0, 0, horloge++)).toISOString(), duree_ecoulee_secondes: null });
+}
+
+function exercice(s: Scenario, tacheId: string, champs: string[], eleveId = "eleve-1"): string {
+  return s.base.inserer("exercices_assignes", { tache_id: tacheId, eleve_id: eleveId, generateur_id: "g", variante_id: "v", champs_attendus: champs, graine: 1 }).id as string;
+}
+
+function classe(s: Scenario, tacheId: string, echeance: string, debut = DEBUT): void {
+  s.base.inserer("taches_assignations", { tache_id: tacheId, classe_id: s.classeId, date_echeance: echeance, date_debut: debut });
+}
+
+const lire = async (jeton = "eleve:eleve-1") => appeler("eleves/mes-resultats", "GET", { jeton });
+
 async function main() {
-  const { statusCode: scVide, corps: corpsVide } = await appelerHandler(DONNEES_VIDES);
-  if (scVide !== 200) throw new Error(`Vide : attendu 200, obtenu ${scVide}`);
-  if (corpsVide.competences.length !== 0 || corpsVide.evolution.length !== 0 || corpsVide.historiqueTaches.length !== 0) {
-    throw new Error(`Vide : attendu tout vide, obtenu ${JSON.stringify(corpsVide)}`);
+  // ── Aucun exercice ──
+  {
+    const s = creerScenario();
+    installerBase(s.base);
+    const { statut, corps } = await lire();
+    verifier(statut === 200 && corps.competences.length === 0 && corps.evolution.length === 0 && corps.historiqueTaches.length === 0, "vide : tout vide attendu");
+    verifier(corps.tendanceScore === "stable", "vide : tendanceScore « stable »");
   }
-  if (corpsVide.tendanceScore !== "stable") throw new Error(`Vide : tendanceScore attendu "stable", obtenu ${corpsVide.tendanceScore}`);
-  console.log("OK : aucun exercice assigné -> compétences/évolution/historique vides, tendanceScore stable");
 
-  const { statusCode: sc, corps } = await appelerHandler(DONNEES);
-  if (sc !== 200) throw new Error(`Principal : attendu 200, obtenu ${sc}`);
-
-  if (corps.historiqueTaches.length !== 2) throw new Error(`Historique : attendu 2 tâches, obtenu ${corps.historiqueTaches.length}`);
-  const [tacheA, tacheB] = corps.historiqueTaches; // triées par date croissante -> A avant B
-  if (tacheA.tacheId !== TACHE_A || tacheA.correct !== 2 || tacheA.total !== 2 || tacheA.pourcentage !== 100) {
-    throw new Error(`Tâche A : attendu {correct:2,total:2,pourcentage:100}, obtenu ${JSON.stringify(tacheA)}`);
+  // ── Scénario d'origine (avec 1 tentative supplémentaire : « échec puis réussite » est alors réaliste) ──
+  {
+    const s = creerScenario();
+    installerBase(s.base);
+    const tA = creerTache(s, { nom: "Devoir A", tentatives_supplementaires: 1 });
+    const tB = creerTache(s, { nom: "Devoir B", tentatives_supplementaires: 1 });
+    const exA = exercice(s, tA, ["champ1", "champ2"]);
+    const exB = exercice(s, tB, ["champ1"]);
+    classe(s, tA, FUTUR); // pas encore échue + complète -> « effectuées »
+    classe(s, tB, PASSE); // échue -> « antérieures »
+    repondre(s, exA, "champ1", "not_equivalent", "C04");
+    repondre(s, exA, "champ2", "not_equivalent", "C04");
+    repondre(s, exA, "champ1", "correct");
+    repondre(s, exA, "champ2", "correct");
+    repondre(s, exB, "champ1", "correct");
+    const { statut, corps } = await lire();
+    verifier(statut === 200, `principal : 200 attendu, obtenu ${statut}`);
+    verifier(corps.historiqueTaches.length === 2, `historique : 2 tâches attendues, obtenu ${corps.historiqueTaches.length}`);
+    const [a, b] = corps.historiqueTaches;
+    verifier(a?.tacheId === tA && a.correct === 2 && a.total === 2 && a.pourcentage === 100, `tâche A : ${JSON.stringify(a)}`);
+    verifier(b?.tacheId === tB && b.correct === 1 && b.total === 1, `tâche B : ${JSON.stringify(b)}`);
+    const c04 = corps.competences.find((c: any) => c.code === "C04");
+    verifier(!!c04 && c04.statut === "non_maitrisee" && c04.occurrences === 2, `C04 : ${JSON.stringify(c04)}`);
+    const evo = corps.evolution.find((e: any) => e.code === "C04");
+    verifier(!!evo && evo.tendance === "en_progres" && evo.occurrencesAnciennes === 2 && evo.occurrencesRecentes === 0, `évolution C04 : ${JSON.stringify(evo)}`);
+    verifier(corps.ordreCategories !== undefined, "ordreCategories absent");
   }
-  if (tacheB.tacheId !== TACHE_B || tacheB.correct !== 1 || tacheB.total !== 1) {
-    throw new Error(`Tâche B : attendu {correct:1,total:1}, obtenu ${JSON.stringify(tacheB)}`);
+
+  // ── Complétion : pas « terminé » dès la première réponse quand des tentatives supplémentaires existent ──
+  {
+    const s = creerScenario();
+    installerBase(s.base);
+    const t = creerTache(s, { nom: "Deux essais", tentatives_supplementaires: 1 });
+    const ex = exercice(s, t, ["champ1"]);
+    classe(s, t, FUTUR);
+    repondre(s, ex, "champ1", "not_equivalent"); // 1 essai raté sur 2 : le champ reste OUVERT
+    let { corps } = await lire();
+    verifier(corps.historiqueTaches.length === 0, "1 échec sur 2 essais : la tâche ne doit PAS être notée (champ encore ouvert)");
+    repondre(s, ex, "champ1", "not_equivalent"); // 2e échec : révélé -> terminé, score 0
+    ({ corps } = await lire());
+    verifier(corps.historiqueTaches.length === 1 && corps.historiqueTaches[0].correct === 0 && corps.historiqueTaches[0].total === 1, `2 échecs : tâche notée 0/1, obtenu ${JSON.stringify(corps.historiqueTaches)}`);
   }
-  console.log("OK : historiqueTaches — 2 tâches notées (effectuée + antérieure), scores corrects, triées chronologiquement");
-
-  const c04 = corps.competences.find((c: any) => c.code === "C04");
-  if (!c04 || c04.statut !== "non_maitrisee" || c04.occurrences !== 2) {
-    throw new Error(`Compétences : C04 attendu {statut:non_maitrisee, occurrences:2}, obtenu ${JSON.stringify(c04)}`);
+  {
+    const s = creerScenario();
+    installerBase(s.base);
+    const t = creerTache(s, { nom: "Un essai" }); // 0 tentative supplémentaire : la 1re réponse termine le champ
+    const ex = exercice(s, t, ["champ1"]);
+    classe(s, t, FUTUR);
+    repondre(s, ex, "champ1", "not_equivalent");
+    const { corps } = await lire();
+    verifier(corps.historiqueTaches.length === 1 && corps.historiqueTaches[0].correct === 0, "sans tentative supplémentaire : une seule réponse suffit à noter la tâche");
   }
-  console.log("OK : competences — C04 correctement remonté (2 occurrences, non_maitrisee)");
 
-  const evoC04 = corps.evolution.find((e: any) => e.code === "C04");
-  if (!evoC04 || evoC04.tendance !== "en_progres" || evoC04.occurrencesAnciennes !== 2 || evoC04.occurrencesRecentes !== 0) {
-    throw new Error(`Évolution : C04 attendu {tendance:en_progres, anciennes:2, recentes:0}, obtenu ${JSON.stringify(evoC04)}`);
+  // ── Sans correction immédiate : un seul essai effectif (option B), même avec des tentatives supplémentaires ──
+  {
+    const s = creerScenario();
+    installerBase(s.base);
+    const t = creerTache(s, { nom: "Muette", feedback_immediat: false, tentatives_supplementaires: 3 });
+    const ex = exercice(s, t, ["champ1"]);
+    classe(s, t, FUTUR);
+    repondre(s, ex, "champ1", "not_equivalent"); // 1re réponse = champ terminé (révélé), pas « encore 3 essais »
+    const { corps } = await lire();
+    verifier(corps.historiqueTaches.length === 1 && corps.historiqueTaches[0].correct === 0 && corps.historiqueTaches[0].total === 1, `feedback coupé + 3 essais stockés : 1 réponse suffit, obtenu ${JSON.stringify(corps.historiqueTaches)}`);
   }
-  console.log("OK : evolution — C04 correctement calculé en_progres (2 échecs anciens -> 0 récent)");
 
-  if (corps.ordreCategories === undefined) throw new Error("ordreCategories absent de la réponse");
-  console.log("OK : ordreCategories exposé (même convention que GET /api/profs/eleves/:id/profil)");
+  // ── Chrono écoulé sans réponse : champ terminé (révélé), compté raté dans le total ──
+  {
+    const s = creerScenario();
+    installerBase(s.base);
+    const t = creerTache(s, { nom: "Chrono", chrono_mode: "par_ecran", chrono_duree_secondes: 60 });
+    const ex = exercice(s, t, ["champ1", "champ2"]);
+    classe(s, t, FUTUR);
+    repondre(s, ex, "champ1", "correct");
+    s.base.inserer("debuts_ecran", { exercice_assigne_id: ex, champ: "champ2", horodatage_debut: new Date(Date.now() - 3600_000).toISOString() });
+    const { corps } = await lire();
+    verifier(corps.historiqueTaches.length === 1 && corps.historiqueTaches[0].correct === 1 && corps.historiqueTaches[0].total === 2, `chrono écoulé : 1/2 attendu, obtenu ${JSON.stringify(corps.historiqueTaches)}`);
+  }
 
-  console.log("TOUS LES TESTS MES-RESULTATS PASSENT");
+  // ── Assignation par élève : fenêtre de dates respectée ──
+  {
+    const s = creerScenario();
+    installerBase(s.base);
+    const t = creerTache(s, { nom: "Individuelle passée" });
+    const ex = exercice(s, t, ["champ1"]);
+    s.base.inserer("taches_assignations_eleves", { tache_id: t, eleve_id: "eleve-1", date_echeance: PASSE, date_debut: DEBUT });
+    repondre(s, ex, "champ1", "correct");
+    const { corps } = await lire();
+    verifier(corps.historiqueTaches.length === 1, "tâche assignée à l'élève, échue : classée « antérieure » (notée)");
+    const t2 = creerTache(s, { nom: "Individuelle future" });
+    const ex2 = exercice(s, t2, ["champ1"]);
+    s.base.inserer("taches_assignations_eleves", { tache_id: t2, eleve_id: "eleve-1", date_echeance: FUTUR, date_debut: FUTUR });
+    repondre(s, ex2, "champ1", "correct");
+    const apres = (await lire()).corps;
+    verifier(apres.historiqueTaches.length === 1, "tâche assignée à l'élève, pas encore commencée : absente de l'historique");
+  }
+
+  if (echecs.length > 0) {
+    console.error(`ECHEC : ${echecs.length} vérification(s) sur ${nb}`);
+    for (const e of echecs) console.error(" - " + e);
+    process.exit(1);
+  }
+  console.log(`TOUS LES TESTS MES-RESULTATS PASSENT (${nb} vérifications)`);
 }
 
 main().catch((e) => {
-  console.error("ECHEC :", e.message);
+  console.error("ECHEC :", e);
   process.exit(1);
 });

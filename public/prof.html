@@ -589,7 +589,7 @@
           <div class="ligne-reglage">
             <span class="libelle-reglage">
               <span class="icone-reglage icone-reglage-ambre" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></span>
-              Tentatives supplémentaires
+              Tentatives supplémentaires (si correction immédiate)
             </span>
             <div class="stepper">
               <button type="button" class="stepper-bouton" data-stepper-cible="tentatives-supplementaires" data-stepper-delta="-1" aria-label="Diminuer">−</button>
@@ -1514,6 +1514,18 @@
       enveloppe.appendChild(moins);
       enveloppe.appendChild(input);
       enveloppe.appendChild(plus);
+      if (!varianteIdActif) {
+        // Correctif d'ergonomie (phase 2) : le grisé seul (`opacity: 0.5`, stepper de 24px) ne se voyait
+        // pas sur une capture ni sur mobile (un curseur `not-allowed` n'existe qu'au survol). Étiquette
+        // TEXTUELLE permanente, sur la même ligne (`flex-wrap`) — l'état "non câblé" ne dépend plus de
+        // la seule perception d'une opacité. Vérité inchangée : `disabled` + absence de
+        // `data-variante-id` restent le seul verrou fonctionnel.
+        input.title = "Bientôt disponible";
+        const etiquette = document.createElement("span");
+        etiquette.className = "etiquette-bientot-disponible";
+        etiquette.textContent = "bientôt disponible";
+        enveloppe.appendChild(etiquette);
+      }
       return enveloppe;
     }
 
@@ -2348,6 +2360,16 @@
       const reponseVisible = document.getElementById("reponse-visible");
       reponseVisible.disabled = !feedbackImmediat;
       if (!feedbackImmediat) reponseVisible.checked = false;
+
+      // Sans correction immédiate, une seconde tentative n'a aucun sens (l'élève ne sait pas si la
+      // première était fausse) : « Tentatives supplémentaires » est verrouillé ET remis à 0, même patron
+      // que `reponse-visible` ci-dessus — jamais une valeur incohérente soumise. Le serveur applique la
+      // même règle de son côté (`tentativesMaxEffectif`, lib/moteurTentatives.ts) pour les tâches créées
+      // avant ce verrou ou hors interface.
+      const tentatives = document.getElementById("tentatives-supplementaires");
+      tentatives.disabled = !feedbackImmediat;
+      for (const bouton of document.querySelectorAll('[data-stepper-cible="tentatives-supplementaires"]')) bouton.disabled = !feedbackImmediat;
+      if (!feedbackImmediat) tentatives.value = "0";
 
       const aideActivee = document.getElementById("aide-activee").checked;
       const penalite = document.getElementById("aide-penalite-pourcent");

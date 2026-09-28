@@ -438,3 +438,188 @@ initialement suspecté. Aucun changement de code nécessaire pour la correction 
 amélioration de contraste visuel (ex. `opacity` plus faible, `cursor: not-allowed` déjà présent mais
 peu visible, ou un badge explicite) resterait une amélioration UX à discuter séparément, pas un
 correctif de sécurité/données.
+
+## §10 : Phase 2 — contrat de générateur, moteur générique, design system (témoin technique)
+
+Décisions de l'utilisateur appliquées : modules ES natifs sous `public/moteur/` ; **graine stockée en
+base, exercice régénéré à chaque appel** (colonne ajoutée à `schema.sql` ET `cumulatif.sql`, même
+commit) ; règle « état local d'édition ≠ réponse » **appliquée, pas seulement convenue** ; risque
+« le témoin ne garantit pas la couverture du vrai cas gen7 » et choix de l'étiquette « bientôt
+disponible » consignés ci-dessous. Vérification préalable par lecture directe : plusieurs éléments du
+prompt ne correspondaient pas au dépôt (voir « Écarts »).
+
+### Schéma Supabase (`CLAUDE.md` — discipline de migration)
+- `supabase/schema.sql:167-194` : `exercices_assignes.enonce`/`solution` deviennent nullables (l'exercice
+  n'est plus figé) ; `graine bigint` ajoutée (nullable : lignes historiques). `supabase/schema.sql:241` :
+  table `aides_utilisees`. Commentaire legacy gen1/gen6 de `reponses.champ` remplacé (`schema.sql:200`).
+- **Équivalent idempotent dans `supabase/migrations/cumulatif.sql:150-162`, même commit** :
+  `alter table exercices_assignes add column if not exists graine bigint;`,
+  `alter … alter column enonce drop not null;`, `alter … alter column solution drop not null;`,
+  `create table if not exists aides_utilisees (…)`. **À exécuter sur la vraie base avant de déployer** :
+  sans `graine`, `POST /api/assignations` échoue.
+
+### A. Contrat — `lib/contratGenerateur.ts`, `lib/prng.ts`, `lib/reponsesEcran.ts`
+- `Generateur<TExercice>` : `lib/contratGenerateur.ts:109` ; types d'écran `:43-81` ; `ResultatVerification`
+  (union, `parse_error` porte obligatoirement `messageErreur`) `:99` ; `etatActuelSequentiel` `:140`.
+- PRNG mulberry32 seedé `lib/prng.ts:32` (`creerPrng`), graine 32 bits `:12-19`. Aucun `Math.random()` dans
+  un générateur (seul `tirerGraine`, serveur, à l'assignation).
+- **Règle « état local d'édition ≠ réponse »** : documentée en tête de `lib/contratGenerateur.ts`, imposée par
+  `lib/routes/reponses.ts:22,34` (`CLES_AUTORISEES` : toute autre clé → 400), par les signatures
+  (`verifier` reçoit une chaîne, `etatActuel` des `ReponseConfirmee`), et côté client par la conception des
+  composants (`lireReponse()` n'est appelé qu'au clic « Valider », `public/moteur/moteur.js`). Vérifiée
+  en test (`brouillon`, `etat_edition` → 400) et en Chromium (0 requête `/api/reponses` pendant frappe, ajout/
+  retrait de lignes, cases de tableau, choix de QCM).
+- Contrôle croisé des codes : au chargement du registre (`lib/registreGenerateurs.ts:35`) ET à chaque vérification
+  (`verifierAvecControle`, `:81`, lève si un code n'est pas déclaré ou si `parse_error` n'a pas de message).
+- **Écarts avec la proposition du prompt** : (1) champ `curriculaire: boolean` ajouté (le témoin n'a pas de
+  codes dans `dictionnaireCompetences.ts`, mais un générateur curriculaire doit en avoir — contrôle conditionné
+  par ce champ) ; (2) `EtatActuel = { champCourant: string | null }` seulement (la fin d'exercice est dérivée
+  des `champs_attendus`) ; (3) `ReponseConfirmee` = dernière soumission d'un champ TERMINÉ (réussi ou révélé),
+  jamais une tentative intermédiaire ; (4) `EcranDeclare.aide` n'est jamais envoyé avec l'écran (voir D).
+
+### B. Types d'écran — `public/moteur/ecrans/`
+`champExpression.js`, `qcm.js`, `listeValeurs.js`, `tableauSignes.js`, table de répartition
+`public/moteur/ecrans/index.js:20` ; `rendreTexte.js` = point unique de rendu de texte (texte brut en phase 2,
+**KaTeX à brancher là en phase 3** : non couvert ici). Format de `reponse_brute` par type : en-tête de
+`lib/contratGenerateur.ts` ; décodeurs `lib/reponsesEcran.ts:9,26`. Ajouter un type d'écran ne touche ni le contrat
+`Generateur`, ni le moteur, ni les routes.
+
+### C. Moteur client — `public/moteur/moteur.js`, `public/moteur/api.js`
+`ouvrirExercice` `moteur.js:41`, `demarrerTache` `:262` : répartition par table sur le type d'écran (jamais une
+branche par générateur), séquençage, `POST /api/reponses`, affichage du verdict serveur, tentatives restantes,
+indice, compte à rebours (affichage seul : à zéro l'état est relu au serveur). Câblage `public/eleve.html:489-527`
+(`importerMoteur`, `demarrerFluxPasAPas`, `ouvrirExercice`, import dynamique) ; le traitement du 404 du tableau de
+bord est retiré (la route existe). **Conteneur `#conteneur-moteur` (`eleve.html:312`), pas `#exercice`** : `style.css`
+garde des règles héritées de l'ancien écran sous `#exercice` (`#exercice button { width: 100% }` en mobile,
+`style.css:3756`) — trouvé en Chromium (titre de tâche écrasé en colonne d'une lettre de large à 390px).
+
+### D. Dispatcher serveur — registre unique
+- `lib/registreGenerateurs.ts:17` (`REGISTRE_GENERATEURS`), `:72` (`chercherGenerateur`). Cohérence contrôlée au
+  chargement, échec bruyant (test : doublon, curriculaire absent du catalogue, `generateur_id` divergent, code hors
+  dictionnaire, témoin présent dans le catalogue → tous détectés). `variantesCatalogueSansGenerateur()` (`:62`)
+  liste les 4 variantes gen7 cataloguées sans générateur : **toléré en phase 2, à faire tomber à 0 en phase 3**.
+- **Fichiers « réécrits » : en réalité créés** (absents depuis la phase 1) : `lib/routes/assignations.ts:66`,
+  `lib/routes/reponses.ts:44`, `lib/routes/eleves/tableau-de-bord.ts:28` ; plus `lib/routes/reponses-aide.ts:12` (non
+  demandé, voir ci-dessous) et `lib/routes/exercices/[id].ts:18` réécrite (régénération). Routés `api/router.ts:63,119,224,238`.
+  Il n'y avait aucun ensemble `VARIANTES_*_SET` à supprimer (jamais portés) : le principe est inscrit dans `CLAUDE.md`.
+- État partagé (une seule dérivation pour GET exercice, POST réponse, tableau de bord) : `lib/etatExercice.ts:182`
+  (`calculerEtatExercice`), réutilise `moteurTentatives.ts`, `construireChampVue`, `resoudreChronoDureeSecondes`.
+- Assignation : générateurs résolus par le **registre**, jamais par le catalogue ; échec 409 **avant toute écriture**
+  si une variante n'a pas de générateur ; exercices écrits avant la ligne d'assignation ; idempotente par (tâche, élève).
+  **Conséquence à connaître** : un professeur peut composer une tâche gen7 (validé au §8) mais ne peut plus l'assigner
+  tant que gen7 n'existe pas (409 « Générateur pas encore disponible »).
+- **Aide côté serveur (ajout non demandé, assumé)** : `POST /api/reponses/aide` sert le texte et enregistre l'usage
+  (`aides_utilisees`) ; `reponses.indice_utilise` est dérivé de cette table. Sans cela, le texte d'aide voyagerait avec
+  l'écran et la pénalité dépendrait d'un booléen déclaré par le client — même faille que celle corrigée pour le chrono.
+- `verrouille` (nouvelle notion, `lib/etatExercice.ts:161-182`) : un champ est verrouillé côté client s'il est terminé
+  OU si `feedback_immediat` est faux et qu'une réponse existe (sinon la 2e tentative révélerait que la 1re était fausse).
+  Le score reste dérivé du seul moteur de tentatives. **HYPOTHÈSE à arbitrer** : combiner `feedback_immediat=false` et
+  `tentatives_supplementaires>0` reste possible côté professeur, sans effet côté élève.
+
+### Correctifs de code existant trouvés en chemin (tous testés)
+- `lib/tableauDeBord.ts:150-161` (`construireChampVue`) : un champ révélé **sans réponse** (chrono écoulé avant toute
+  soumission) n'exposait ni `revele` ni solution → élève bloqué sur un écran fermé sans correction.
+- `lib/etatExercice.ts:146` : `calculerEtatChampTentatives(…, chronoExpire=true)` court-circuite l'historique ; appliqué
+  à un champ déjà réussi il transformait une bonne réponse en révélation. Le chrono n'est appliqué qu'à un champ non terminé
+  (test : champ réussi reste réussi après expiration).
+- `lib/verrouillageTache.ts:19-31` : `categorieTachePourEleve` ignorait `taches_assignations_eleves` (assignation par élève).
+- **Non corrigé, à signaler** : `lib/routes/eleves/mes-resultats.ts` considère toujours un champ « terminé » dès qu'il a une
+  ligne `reponses` (l'ancien critère, remplacé ailleurs par l'état du moteur de tentatives) — incohérent avec le tableau de
+  bord dès que `tentatives_supplementaires > 0`.
+
+### E. Design system
+`public/style.css:35-83` : les 31 tokens regroupés par famille (marque, statut, accents, neutres, rayons, typographie,
+espacement), **aucune valeur ajoutée ni modifiée**. `docs/design-system.md` (tableaux nom/valeur/rôle, règle d'usage,
+manques connus : pas de token de taille de police ni d'épaisseur). `public/moteur/ecrans.css` : uniquement des `var(--token)`.
+`scripts/test-design-system.ts` (244 vérifications) : `:root` == documentation (31/31, valeurs identiques), et `ecrans.css` sans
+couleur/police/rayon/longueur en dur (exceptions : 0, auto, 1px, 2px, em).
+**Correctif d'ergonomie (catalogue grisé)** : étiquette « bientôt disponible » **permanente** (choix validé, plutôt qu'un
+changement d'opacité : le grisé ne se voyait pas sur capture, `cursor: not-allowed` n'existe qu'au survol donc jamais sur
+mobile) — `public/prof.html:1516-1528`, `public/style.css:1317` (`.etiquette-bientot-disponible`), `flex-wrap` du stepper pour
+que l'étiquette passe à la ligne plutôt que de déborder à 390px. Verrou fonctionnel inchangé (`disabled`, pas de
+`data-variante-id`). Chromium : 4 variantes gen7 actives sans étiquette ; chaque entrée non câblée en porte une.
+**Compromis** : ~1 200 entrées du catalogue portent maintenant l'étiquette — plus lisible mais plus dense.
+
+### F. Témoin technique — `src/generateurs/_temoinTechnique/index.ts:183` (`_temoin_technique_v1`)
+Un écran par type : somme (`champ_expression`, évaluateur arithmétique sans `eval`, `parse_error` pédagogique), parité (`qcm`),
+diviseurs (`liste_valeurs`, comparaison en ensemble), signes de (x−r₁)(x−r₂) (`tableau_signes`). Deux codes de compétence
+déclarés, déclenchés par des erreurs typiques. Absent de `CATALOGUE_GENERATEURS` (contrôlé au chargement), de
+`catalogue-generateurs-complet.json`, de `GET /api/catalogue-generateurs` et de la page professeur, et **refusé** par
+`POST /api/taches` (400) — tous testés (serveur et Chromium).
+**RISQUE CONNU (consigné, accepté)** : le témoin valide le contrat, le moteur et les 4 types d'écran, **pas leur adéquation au vrai
+gen7** — rien ne garantit que ce tableau de signes couvre les besoins réels (intervalles ouverts/fermés, valeurs interdites, ligne
+« résultat »…), ni que le rendu texte suffira (KaTeX). Ces écarts ne se verront qu'en phase 3.
+
+### Validation
+- `tsc -b` propre ; les 16 scripts existants passent (aucune régression) ; nouveaux : `scripts/test-temoin-technique.ts` (115
+  vérifications : reproductibilité par graine, 4 types × correct/not_equivalent/parse_error, registre, assignation, réponses, aide,
+  chrono, réglages de correction, fenêtres de dates, tableau de bord), `scripts/test-design-system.ts` (244),
+  `scripts/chromium-temoin-technique.ts` (80, outil manuel, `playwright` requis) — 390px et 1280px, **0 erreur console/JS**,
+  zones tactiles ≥ 44px, pas de défilement horizontal de la page. Support : `scripts/support/fauxSupabase.ts` (base en mémoire),
+  `scripts/support/harnaisRouteur.ts`.
+- **Défauts trouvés par inspection visuelle des captures, corrigés** (les vérifications chiffrées ne les voyaient pas) : titre
+  écrasé à 390px (cascade `#exercice`), libellés de ligne du tableau de signes hors écran au défilement horizontal (colonne
+  collante ajoutée), radio de QCM désaligné, `champ_expression` sans écouteur `input` (bouton « Valider » jamais activé —
+  trouvé par le premier passage Chromium).
+- Non couvert : aucun test sur la vraie base Supabase (donc `cumulatif.sql` non exécuté ici), aucun vrai navigateur mobile
+  (émulation Chromium seulement), pas de test de charge sur le tableau de bord (N requêtes par tâche/variante pour les contextes).
+
+## §11 : Suites de revue de la phase 2 — `feedback_immediat=false` × tentatives, `mes-resultats.ts`, `playwright`
+
+### 1. `feedback_immediat=false` + `tentatives_supplementaires>0` : enquête dans l'ancien pilote (lecture seule, HEAD `6acc102`) — AUCUNE décision prise
+**Constat : la combinaison est atteignable par un professeur mais jamais traitée comme un cas** — ni verrouillée dans l'interface, ni testée sur le score, et l'ancien pilote a la même incohérence latente que celle que j'avais signalée :
+- **Formulaire prof** — `plateforme-maths-pilote/public/prof.html:2546-2551` (`appliquerVerrouReglages`) verrouille `reponse_visible` quand « correction immédiate » est décochée (et la pénalité d'aide quand l'aide est décochée), mais **pas** `tentatives-supplementaires` (`prof.html:596`). Rien n'empêche donc un professeur de régler 5 essais sans feedback.
+- **Serveur** — `lib/validationCorpsTaches.ts:58` ne valide que le type booléen ; `lib/routes/reponses.ts` compte les tentatives quel que soit le feedback (seul l'affichage est masqué, `:3410-3434`).
+- **Client élève** — `public/eleve.html:13528` : `if (!feedbackImmediat || correct || reponse.revele)` verrouille le champ et propose « Question suivante » **après n'importe quelle réponse** dès que le feedback est coupé. Côté élève le comportement effectif est donc « un seul essai » — exactement mon `verrouille` (`lib/etatExercice.ts`). Le commentaire `eleve.html:11268-11277` reconnaît que, sans feedback, « le client ne sait jamais si sa réponse était correcte ».
+- **Serveur, conséquence non traitée** — `lib/routes/eleves/tableau-de-bord.ts:783` ne compte un champ comme terminé que si `etat.terminee` : avec feedback coupé et 1 essai raté sur 2, le serveur laisse le champ ouvert alors que le client l'a verrouillé → tâche jamais « complète » côté serveur.
+- **Tests** — un seul test passe cette combinaison, `scripts/test-messages-erreur-parsing.ts:118` (`tentatives_supplementaires: 5`) puis `:169-175` (« Cas D »), et il ne vérifie que le corps HTTP vide, jamais le score ni la complétion. Aucun écran d'utilisation réel n'est documenté (`RAPPORT.md` de l'ancien pilote : mentions du seul comportement d'affichage).
+**Ce que fait le nouveau dépôt aujourd'hui** : reproduit le client de l'ancien pilote (`verrouille`), mais **tranche la complétion du tableau de bord côté client** (le champ compte comme terminé) là où l'ancien pilote laissait la tâche bloquée ; `mes-resultats` (point 2) suit le moteur strict. Divergence résiduelle assumée en attendant votre arbitrage : sous cette combinaison, le tableau de bord voit la tâche « effectuée » et `mes-resultats` non.
+**Options à arbitrer (non implémentées)** : (A) verrouiller `tentatives_supplementaires` (ou le remettre à 0) dans le formulaire prof quand le feedback est coupé, comme pour `reponse_visible` — le plus cohérent avec l'existant ; (B) côté serveur, `tentativesMax=1` quand `feedback_immediat=false` (une seule source de vérité, protège aussi contre une tâche créée hors interface) ; (C) statu quo documenté. A+B ensemble sont compatibles.
+
+### 2. `mes-resultats.ts` — complétion par le moteur de tentatives (corrigé)
+- **Bug** : un champ comptait comme « terminé » dès qu'il avait une ligne `reponses` (`lib/routes/eleves/mes-resultats.ts`, ancien critère `derniereStatutParCle.has`). Avec des tentatives supplémentaires, une 1re réponse ratée faisait donc noter une tâche dont un champ restait ouvert.
+- **Correctif** : la complétion utilise `etatTentativesAvecChrono` (`lib/etatExercice.ts:144`, extrait de `calculerEtatChamp` : **une seule** dérivation de « un champ est terminé » pour GET exercice, POST réponse, tableau de bord et mes-résultats) ; `mes-resultats.ts:207-228`. Sont maintenant pris en compte : essais épuisés (révélé) et **chrono écoulé sans réponse** (champ compté raté au score, `total++` sans réponse, au lieu d'être ignoré du total).
+- **Même correction que `categorieTachePourEleve`** : les assignations **par élève** (`taches_assignations_eleves`) sont lues pour les dates de début/échéance (auparavant ignorées : une tâche individuelle pas commencée pouvait être notée).
+- **Test** : `scripts/test-mes-resultats.ts` réécrit sur la base en mémoire à filtres réels (l'ancien faux ignorait `.eq`/`.in`, donc incapable de tester ce cas) ; les 4 vérifications d'origine conservées, plus : 1 échec sur 2 essais → tâche non notée ; 2 échecs → notée 0/1 ; 0 tentative supplémentaire → 1 réponse suffit ; chrono écoulé → 1/2 ; assignation individuelle échue/future. **Vérifié : 3 de ces cas échouent sur l'ancien code** (`git stash` du seul `mes-resultats.ts`), 15/15 passent avec le correctif.
+- Limite connue : la règle `verrouille` (feedback coupé) n'est pas comptée ici — point 1.
+
+### 3. `playwright` en devDependency
+`package.json` : `"playwright": "1.56.1"` (version **épinglée** : elle détermine la révision de Chromium attendue), `package-lock.json` mis à jour. Le paquet ne télécharge pas de navigateur ici (`PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`) ; en dehors de ce bac à sable, il faut `npx playwright install chromium`. `scripts/chromium-temoin-technique.ts` importe désormais le paquet local (plus de repli sur un chemin global) ; **80/80 vérifications rejouées** avec lui après ces changements. Lancement : `npm run chromium-temoin`.
+
+## §12 : Options A + B implémentées (`feedback_immediat=false` × tentatives) — remplace la « divergence résiduelle » du §11
+
+Décision de l'utilisateur : A **et** B, ensemble.
+
+- **A — formulaire prof** : `public/prof.html` (`appliquerVerrouReglages`, bloc « Sans correction immédiate… ») verrouille (`disabled`) l'`<input id="tentatives-supplementaires">` **et** ses deux boutons −/+ (`data-stepper-cible`) et remet la valeur à 0, même patron que `reponse-visible`. Libellé : « Tentatives supplémentaires (si correction immédiate) ». Grisage explicite `public/style.css` (`.ligne-reglage .stepper-bouton:disabled`, `.ligne-reglage input.stepper-valeur:disabled`). Le rechargement d'une tâche existante (modifier/dupliquer) passe déjà par `appliquerVerrouReglages` : une ancienne tâche « feedback coupé + N essais » s'affiche donc à 0.
+- **B — serveur, source unique** : `lib/moteurTentatives.ts` `tentativesMaxEffectif(feedbackImmediat, tentativesSupplementaires)` (`feedback_immediat=false` ⇒ 1 essai quelle que soit la valeur stockée). Seuls deux endroits dérivent `tentativesMax` d'une ligne `taches` et passent désormais par elle : `lib/etatExercice.ts` (`chargerContexteTache`) et `lib/verrouillageTache.ts`. Protège les tâches créées avant le verrou ou hors interface.
+- **Simplification** : le cas particulier `verrouille = terminée OU (feedback coupé ET réponse existante)` de `calculerEtatExercice` (§10) est **supprimé** — avec 1 essai la première réponse termine le champ par le moteur seul. Conséquence : tableau de bord, `mes-resultats`, `categorieTachePourEleve` et le client voient désormais **exactement** le même état ; la divergence signalée au §11 n'existe plus, et la « Limite connue » de `mes-resultats.ts` est retirée.
+
+**⚠ Constat nouveau à connaître (hérité de l'ancien pilote, non modifié)** : à l'épuisement des essais la révélation est **forcée** quels que soient `feedback_immediat`/`reponse_visible` (`lib/tableauDeBord.ts` `construireChampVue`, identique à `plateforme-maths-pilote/lib/routes/reponses.ts:3388-3410`, justification : sinon l'élève reste bloqué sur un champ fermé). Avec 1 essai, **sous « correction immédiate » décochée, une mauvaise réponse révèle donc statut ET solution, tandis qu'une bonne réponse ne révèle rien**. Ce n'était pas nouveau pour le réglage par défaut (0 tentative supplémentaire), mais B l'étend à toute tâche sans feedback. Effet : « correction immédiate = non » ne cache rien sur un échec, et l'absence de révélation trahit la bonne réponse. **Non modifié** (décision de conception, pas de la mienne) ; à arbitrer : soit assumer (« sans correction immédiate » = « je ne vois que le verrouillage tant que c'est juste »), soit ne forcer la révélation sous feedback coupé qu'au relevé de fin de tâche. J'avais un test qui supposait l'inverse ; il est corrigé (`scripts/test-temoin-technique.ts`) et documente désormais ce comportement.
+
+**Tests ajoutés** : `scripts/test-temoin-technique.ts` (121 vérifications) — `tentatives_max` effectif = 1 sous feedback coupé même avec 2 essais stockés, réponse fausse ⇒ révélation forcée, réponse juste ⇒ ni statut ni solution, tâche répondue une fois par champ ⇒ « effectuée » au tableau de bord ET notée par `mes-resultats` (même verdict), `tentativesMaxEffectif` unitaire ; `scripts/test-mes-resultats.ts` (16) — feedback coupé + 3 essais stockés : 1 réponse suffit ; `scripts/chromium-temoin-technique.ts` (88) — stepper actif par défaut et fonctionnel, sans correction immédiate : champ + 2 boutons désactivés et valeur remise à 0 (même après avoir réglé 2), recocher déverrouille, aucune régression sur les 80 vérifications précédentes.
+
+**Régression complète après ce changement** : `tsc -b` propre ; les 18 scripts de test passent (dont `smoke-test`, `test-routeur`, `test-design-system` 244) ; Chromium 88/88 à 390 px et 1280 px, 0 erreur console/JS.
+
+**Toujours en attente avant fusion** : exécution de `supabase/migrations/cumulatif.sql` sur la vraie base (`graine`, `enonce`/`solution` nullables, `aides_utilisees`) — à confirmer par l'utilisateur.
+
+## §13 : Sous correction immédiate coupée, révélation à la fin de la TÂCHE entière — remplace le « constat » du §12
+
+Décision de l'utilisateur : la révélation, correction immédiate coupée, ne se déclenche qu'à la fin de la tâche entière, jamais à l'épuisement d'un champ ; un échec ne doit pas être plus visible qu'une réussite pour ce réglage.
+
+**Règle implémentée** (correction immédiate active : inchangée, y compris la révélation forcée à l'épuisement des essais) :
+- Sous correction immédiate coupée, tant que la tâche n'est pas terminée (tous ses exercices, pour l'élève) ni échue : **ni verdict, ni solution, ni message de syntaxe, ni `revele`** ne sont exposés, pour une réponse fausse comme pour une réponse juste. Réponse fausse et réponse juste ont **exactement** la même apparence (`verrouille: true`, `tentatives_restantes: 0`, « Réponse enregistrée. »).
+- Dès que la tâche est terminée (ou échue), **tout est révélé d'un coup** (verdicts + solutions de tous les exercices) ; la réponse qui termine la tâche révèle son propre champ (`tache_terminee: true`).
+
+**Où** :
+- `lib/tableauDeBord.ts:156` (`construireChampVue`) : `revele = revelee && (feedback_immediat || révélation forcée)` ; plus aucune révélation forcée à l'épuisement si le feedback est coupé.
+- `lib/etatExercice.ts:211,220` : `revelationFinDeTache` (règle, source unique) et `tacheEstCompletePourEleve` (complétion d'une tâche pour un élève, même critère que le tableau de bord).
+- `lib/routes/reponses.ts:134-135` (réponse `POST`, champ `tache_terminee`), `lib/routes/exercices/[id].ts:61-65` (consultation), `lib/routes/eleves/tableau-de-bord.ts:127-139`.
+- **Fuites indirectes fermées** (même principe : un échec caché ne doit pas se voir par un autre canal) : la **série** du tableau de bord ignore les réponses d'une tâche masquée (`tableau-de-bord.ts:98,128,154` — sinon un échec caché faisait retomber la série à 0) ; `mes-resultats` exclut les bugs détectés d'une tâche masquée de « compétences à travailler », de l'évolution et des segments (`mes-resultats.ts:191,230,260` — sinon un échec caché apparaissait comme compétence non maîtrisée). L'historique de scores ne porte déjà que sur les tâches terminées.
+
+**Tests** : `scripts/smoke-test.ts` (l'assertion qui figeait l'ancienne règle est remplacée : épuisement sous feedback actif → révélé ; sous feedback coupé → rien, fausse = juste, fin de tâche → tout) ; `scripts/test-temoin-technique.ts` (137 vérifications, dont un scénario 2 exercices : 2 fausses + 2 justes indiscernables, GET exercice / tableau de bord / mes-résultats / série muets en cours de tâche, tout révélé après la dernière réponse, score 6/8 et compétence visibles seulement à ce moment) — **7 de ces vérifications échouent sans le correctif** (vérifié par `git stash`) ; `scripts/chromium-temoin-technique.ts` (104) : nouveau scénario « sans correction immédiate » à 390 px et 1280 px (retours identiques après réponse fausse/juste, aucun verdict ni solution avant la fin, 2 échecs + 2 réussites + 4 solutions révélés à la fin, 0 erreur console).
+
+**Régression complète** : `tsc -b` propre ; 18 scripts de test passent ; Chromium 104/104.
+
+**Deux choix de détail à connaître** : (1) la réponse qui termine la tâche révèle immédiatement son propre champ (le reste se consulte ensuite) ; (2) un champ sans réponse verrouillé par le chrono, sous feedback coupé, ne révèle rien avant la fin de la tâche — comme les autres.
+
+**Toujours en attente avant fusion** : confirmation que `supabase/migrations/cumulatif.sql` a été exécuté avec succès sur la vraie base.

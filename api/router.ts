@@ -1,5 +1,6 @@
 import type { RequeteHttp, ReponseHttp } from "../lib/httpTypes";
 import { avecGestionErreurs } from "../lib/avecGestionErreurs";
+import { gererAssignations } from "../lib/routes/assignations";
 import { gererCatalogueGenerateurs } from "../lib/routes/catalogue-generateurs";
 import { gererClasses } from "../lib/routes/classes";
 import { gererClassesIdProfil } from "../lib/routes/classes/[id]/profil";
@@ -9,6 +10,7 @@ import { gererConfig } from "../lib/routes/config";
 import { gererConnexionEleve } from "../lib/routes/connexion-eleve";
 import { gererEleves } from "../lib/routes/eleves";
 import { gererElevesMesResultats } from "../lib/routes/eleves/mes-resultats";
+import { gererElevesTableauDeBord } from "../lib/routes/eleves/tableau-de-bord";
 import { gererExercicesIndex } from "../lib/routes/exercices/index";
 import { gererExercicesId } from "../lib/routes/exercices/[id]";
 import { gererInscriptionEleve } from "../lib/routes/inscription-eleve";
@@ -21,6 +23,8 @@ import { gererProfsResetMdpEleve } from "../lib/routes/profs/reset-mdp-eleve";
 import { gererProfsResultats } from "../lib/routes/profs/resultats";
 import { gererProfsTableauDeBord } from "../lib/routes/profs/tableau-de-bord";
 import { gererProfsTransfererEleve } from "../lib/routes/profs/transferer-eleve";
+import { gererReponses } from "../lib/routes/reponses";
+import { gererReponsesAide } from "../lib/routes/reponses-aide";
 import { gererReponsesDebutEcran } from "../lib/routes/reponses-debut-ecran";
 import { gererTaches } from "../lib/routes/taches";
 import { gererTachesId } from "../lib/routes/taches/[id]";
@@ -28,16 +32,13 @@ import { gererTachesId } from "../lib/routes/taches/[id]";
 type Gestionnaire = (req: RequeteHttp, res: ReponseHttp, params: Record<string, string>) => Promise<void>;
 
 /**
- * Repris de l'ancien pilote (`plateforme-maths-pilote/api/router.ts`), élagué pour la phase 1
- * (socle de gestion, sans générateur ni moteur d'exercice) : `TABLE_ROUTAGE` ne porte plus que les
- * entrées dont le gestionnaire est dans le périmètre de cette phase. Retirées, avec leur raison :
- * - `POST /api/assignations`, `GET /api/eleves/tableau-de-bord`, `POST /api/reponses` : consommateurs
- *   du futur contrat de générateur, reportés en phase 2 (voir RAPPORT.md).
- * - `GET /api/profs/exercices/:id`, `GET /api/reponses/grille-info` : jamais copiés (décision actée
- *   4 du prompt Phase 1 — le premier ne fonctionne que pour gen1, le second est gen5/gen6-spécifique).
- * - `POST /api/taches/apercu`, `GET /api/taches/:id/impression` : gestionnaires (`taches-apercu.ts`,
- *   `taches-impression.ts`) non copiés, tous deux dépendants de `genererLigne`/`calculerSolutionAttendue`
- *   (générateur), voir RAPPORT.md pour le détail de cet écart avec la liste de fichiers du prompt.
+ * Repris de l'ancien pilote (`plateforme-maths-pilote/api/router.ts`), élagué en phase 1 puis
+ * complété en phase 2 (contrat de générateur) : `POST /api/assignations`, `POST /api/reponses`,
+ * `POST /api/reponses/aide` et `GET /api/eleves/tableau-de-bord` sont de nouveau routés, tous
+ * adossés au registre unique de générateurs (`lib/registreGenerateurs.ts`). Toujours absents (jamais
+ * copiés, décision actée 4 du prompt Phase 1) : `GET /api/profs/exercices/:id` (gen1 seulement) et
+ * `GET /api/reponses/grille-info` (gen5/gen6). Restent différés, dépendants d'un générateur
+ * curriculaire (phase 3) : `POST /api/taches/apercu`, `GET /api/taches/:id/impression`.
  *
  * `methodes` documente ce que le fichier déplacé gère réellement lui-même (chaque handler continue
  * de faire son propre `req.method !== "X" -> 405`) — la correspondance ne filtre donc QUE sur le
@@ -57,6 +58,13 @@ interface EntreeRoutage {
 const AUCUN_PARAM = (): Record<string, string> => ({});
 
 const TABLE_ROUTAGE: EntreeRoutage[] = [
+  {
+    methodes: ["POST"],
+    chemin: "/api/assignations",
+    correspond: (s) => s.length === 1 && s[0] === "assignations",
+    extraireParams: AUCUN_PARAM,
+    gestionnaire: gererAssignations,
+  },
   {
     methodes: ["GET"],
     chemin: "/api/catalogue-generateurs",
@@ -105,6 +113,13 @@ const TABLE_ROUTAGE: EntreeRoutage[] = [
     correspond: (s) => s.length === 1 && s[0] === "connexion-eleve",
     extraireParams: AUCUN_PARAM,
     gestionnaire: gererConnexionEleve,
+  },
+  {
+    methodes: ["GET"],
+    chemin: "/api/eleves/tableau-de-bord",
+    correspond: (s) => s.length === 2 && s[0] === "eleves" && s[1] === "tableau-de-bord",
+    extraireParams: AUCUN_PARAM,
+    gestionnaire: gererElevesTableauDeBord,
   },
   {
     methodes: ["GET"],
@@ -206,10 +221,24 @@ const TABLE_ROUTAGE: EntreeRoutage[] = [
   },
   {
     methodes: ["POST"],
+    chemin: "/api/reponses/aide",
+    correspond: (s) => s.length === 2 && s[0] === "reponses" && s[1] === "aide",
+    extraireParams: AUCUN_PARAM,
+    gestionnaire: gererReponsesAide,
+  },
+  {
+    methodes: ["POST"],
     chemin: "/api/reponses/debut-ecran",
     correspond: (s) => s.length === 2 && s[0] === "reponses" && s[1] === "debut-ecran",
     extraireParams: AUCUN_PARAM,
     gestionnaire: gererReponsesDebutEcran,
+  },
+  {
+    methodes: ["POST"],
+    chemin: "/api/reponses",
+    correspond: (s) => s.length === 1 && s[0] === "reponses",
+    extraireParams: AUCUN_PARAM,
+    gestionnaire: gererReponses,
   },
   {
     methodes: ["GET", "POST"],

@@ -30,6 +30,19 @@ export function tentativesMaxDepuisReglages(tentativesSupplementaires: number): 
 }
 
 /**
+ * Nombre d'essais RÉELLEMENT accordés par une tâche (option B, revue de la phase 2) : sans correction
+ * immédiate l'élève ne sait jamais si sa réponse était juste, donc une seconde tentative n'a aucun sens
+ * (elle ne pourrait que révéler indirectement que la première était fausse) — `feedback_immediat=false`
+ * force UN SEUL essai, quelle que soit la valeur stockée de `tentatives_supplementaires` (tâche créée
+ * avant le verrou du formulaire, ou hors interface). Seul point de cette règle : tout appelant qui
+ * dérive `tentativesMax` d'une ligne `taches` passe par ici, jamais par `tentativesMaxDepuisReglages`
+ * directement.
+ */
+export function tentativesMaxEffectif(feedbackImmediat: boolean, tentativesSupplementaires: number): number {
+  return feedbackImmediat ? tentativesMaxDepuisReglages(tentativesSupplementaires) : 1;
+}
+
+/**
  * Correctif "Chrono de réponse" — un seul mode actif par tâche, jamais superposés.
  * `par_ecran` : la limite s'applique au champ courant seul (toutes tentatives cumulées).
  * `global` : la limite s'applique au temps écoulé depuis le PREMIER écran affiché de l'exercice_assigne.

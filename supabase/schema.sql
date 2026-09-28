@@ -164,8 +164,12 @@ create table exercices_assignes (
   eleve_id uuid not null references eleves(id),
   generateur_id text not null,
   variante_id text not null,
-  enonce jsonb not null,
-  solution jsonb not null,
+  -- Phase 2 : `enonce`/`solution` ne sont plus écrits (l'exercice est régénéré depuis `graine`, voir
+  -- plus bas) — nullables pour ne pas obliger à stocker un doublon du générateur ; colonnes gardées
+  -- pour les lignes historiques (cumulatif.sql : `drop not null`, idempotent). `bugs_plausibles` et
+  -- `forme_affichage` sont des vestiges de gen1/gen6, jamais écrits par le contrat de phase 2.
+  enonce jsonb,
+  solution jsonb,
   bugs_plausibles jsonb,
   -- Ajouté après l'Étape 3 initiale de gen1 : nécessaire pour reproduire côté pilote la condition
   -- exacte de saut de l'écran "isolement" (src/moteur/session.ts:30-36 du dépôt source,
@@ -181,23 +185,22 @@ create table exercices_assignes (
   -- du prompt : formeAffichage/catégorie réelle de D/N ne sont connus qu'à la génération). Nullable :
   -- les lignes déjà existantes avant ce correctif n'ont pas cette liste ; un exercice sans
   -- `champs_attendus` est traité comme jamais complet (voir lib/tableauDeBord.ts).
-  champs_attendus text[]
+  champs_attendus text[],
+  -- Phase 2 (contrat de générateur) : graine du tirage seedé (`Generateur.generer(graine)`,
+  -- lib/contratGenerateur.ts), entier 32 bits non signé (lib/prng.ts). L'exercice n'est plus figé en
+  -- base : il est RÉGÉNÉRÉ à chaque appel depuis cette graine (un seul état de vérité, jamais un
+  -- `enonce` jsonb qui pourrait diverger du générateur). Nullable : les lignes antérieures n'en ont
+  -- pas ; une ligne sans graine n'est pas exécutable par le registre (lib/registreGenerateurs.ts).
+  graine bigint
 );
 
 create table reponses (
   id uuid primary key default gen_random_uuid(),
   exercice_assigne_id uuid not null references exercices_assignes(id),
-  champ text not null,           -- gen1 : 'isolement' | 'reconnaissance' | 'champ1' | 'champ2' ;
-                                  -- gen6/facteurCommun : 'ce' | 'simplifierDenomReconnaissance' |
-                                  -- 'simplifierDenomChamp1' | 'simplifierDenomChamp2' |
-                                  -- 'simplifierDenomFactorisation' | 'simplifierNumReconnaissance' |
-                                  -- 'simplifierNumChamp1' | 'simplifierNumChamp2' |
-                                  -- 'simplifierNumFactorisation' | 'simplifierFraction' |
-                                  -- 'grille' | 'intervalle' (Priorité 1, remédiation spec-gen6 :
-                                  -- écrans manquants ajoutés en fin de séquence facteurCommun — ces
-                                  -- 2 valeurs de `champ` existaient déjà pour niveau1/2/3/4/
-                                  -- denominateurCarre/sansFacteurCommun/cubique, jamais nouvelles
-                                  -- au niveau colonne, `champ` restant un simple `text` sans enum SQL)
+  -- Phase 2 : `champ` = `EcranDeclare.champ` du générateur (lib/contratGenerateur.ts), texte libre
+  -- propre à chaque variante, sans enum SQL. Les valeurs héritées de gen1/gen6 ('isolement',
+  -- 'champ1', 'ce', 'grille'…) ne concernent plus que les lignes historiques.
+  champ text not null,
   valeur_saisie text not null,   -- valeurs de paire (racines, ou numérateur/dénominateur de
                                   -- simplifierFraction) encodées "valeur1;valeur2" — voir RAPPORT.md
   statut text not null,          -- 'correct' | 'not_equivalent' | 'parse_error'
@@ -227,6 +230,18 @@ create table debuts_ecran (
   exercice_assigne_id uuid not null references exercices_assignes(id),
   champ text not null,
   horodatage_debut timestamptz not null default now(),
+  primary key (exercice_assigne_id, champ)
+);
+
+-- Phase 2 : usage d'une aide (indice) enregistré CÔTÉ SERVEUR par `POST /api/reponses/aide`, une
+-- seule fois par (exercice_assigne_id, champ) — même patron que `debuts_ecran`. C'est la seule
+-- source de la pénalité d'aide : `reponses.indice_utilise` est dérivé de cette table à
+-- l'enregistrement d'une réponse, jamais d'un booléen envoyé par le client (falsifiable via la
+-- console développeur, même raisonnement que le chrono ci-dessus).
+create table aides_utilisees (
+  exercice_assigne_id uuid not null references exercices_assignes(id),
+  champ text not null,
+  horodatage timestamptz not null default now(),
   primary key (exercice_assigne_id, champ)
 );
 

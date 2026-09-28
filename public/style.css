@@ -33,40 +33,51 @@
  * (h2/h3/legend/summary) pour une cohérence de marque, pas seulement ce seul élément).
  */
 :root {
+  /* ── Design system (phase 2) — 31 tokens, documentés dans docs/design-system.md (le test
+     scripts/test-design-system.ts vérifie que ce bloc et ce document restent identiques). Aucune
+     valeur n'a été ajoutée ni modifiée par rapport au système visuel v3 : ce bloc n'est que
+     réorganisé par famille. Toute nouvelle règle CSS s'appuie sur ces tokens, jamais sur une valeur
+     en dur (couleur, police, espacement, rayon). ── */
+
+  /* Marque : violet (actions principales, sélection, navigation). */
   --violet: #3B1470;
   --violet-2: #5B21B6;
   --violet-vif: #7C3AED;
   --violet-clair: #F1EBFC;
-  --ambre: #E08A2E;
-  --ambre-vif: #F5A623;
-  --ambre-clair: #FDF1E2;
+
+  /* Statut : vert = réussite, danger = erreur (usage prévu des nouveaux composants d'écran). */
   --vert: #158F52;
   --vert-clair: #E4F6EC;
   --vert-vif: #16A34A;
   --danger: #B3261E;
   --danger-clair: #FBEAE8;
-  /* Ajoutés pour les icônes colorées du bloc "Réglages" (formulaire "Créer une tâche") — même
-     convention nom/nom-clair que les tokens ci-dessus, aucun token existant modifié. */
+
+  /* Accents : ambre (avertissement, aide), bleu et jaune (icônes du bloc « Réglages », chrono). */
+  --ambre: #E08A2E;
+  --ambre-vif: #F5A623;
+  --ambre-clair: #FDF1E2;
   --bleu: #2563EB;
   --bleu-clair: #E7EEFC;
-  /* Retour utilisateur réel : icônes chrono (liste des tâches + composition/réglages) passées du
-     rose au jaune — `--rose`/`--rose-clair` n'avaient plus aucun autre usage dans ce fichier
-     (vérifié par grep avant suppression), remplacés ici plutôt que laissés orphelins. */
   --jaune: #CA8A04;
   --jaune-clair: #FEF9C3;
+
+  /* Neutres : fonds, texte, filets. */
   --bg: #FAF9FC;
   --surface: #FFFFFF;
   --surface-sunken: #F6F3FB;
   --text: #1C1730;
   --text-muted: #6E6785;
   --border: #E9E4F3;
+
+  /* Rayons. */
   --radius: 20px;
   --radius-sm: 13px;
+
+  /* Typographie : Fraunces (titres, marque), Inter (corps). */
   --font-marque: "Fraunces", serif;
   --font-corps: "Inter", sans-serif;
 
-  /* Échelle d'espacement fixe (chantier "Refonte visuelle", non concernée par ce prompt-ci) —
-     jamais de valeur arbitraire ailleurs dans ce fichier. */
+  /* Échelle d'espacement fixe — jamais de valeur arbitraire ailleurs. */
   --espace-1: 4px;
   --espace-2: 8px;
   --espace-3: 16px;
@@ -1088,6 +1099,17 @@ button:disabled {
   gap: 10px;
 }
 
+/* Réglage verrouillé (ex. « Tentatives supplémentaires » sans correction immédiate) : sans grisage
+   explicite un stepper `disabled` serait visuellement identique à un stepper actif. */
+.ligne-reglage .stepper-bouton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ligne-reglage input.stepper-valeur:disabled {
+  opacity: 0.5;
+}
+
 .stepper-bouton {
   width: 24px;
   height: 24px;
@@ -1285,6 +1307,7 @@ input.stepper-valeur::-webkit-outer-spin-button {
  */
 #composition-dynamique .ligne-variante .stepper {
   gap: 6px;
+  flex-wrap: wrap; /* l'étiquette « bientôt disponible » passe à la ligne plutôt que de déborder */
 }
 
 #composition-dynamique .ligne-variante .stepper-bouton:disabled {
@@ -1294,6 +1317,24 @@ input.stepper-valeur::-webkit-outer-spin-button {
 
 #composition-dynamique .ligne-variante input.stepper-valeur:disabled {
   opacity: 0.5;
+}
+
+/*
+ * Correctif d'ergonomie (phase 2) — étiquette « bientôt disponible » à côté d'un champ « nombre
+ * d'exercices » non câblé (voir `creerChampNombreExercices`, prof.html) : le grisé `opacity: 0.5`
+ * seul était trop discret sur une capture ou sur mobile, et `cursor: not-allowed` n'apparaît qu'au
+ * survol. Étiquette de texte permanente, tokens du design system uniquement (docs/design-system.md).
+ */
+.etiquette-bientot-disponible {
+  padding: var(--espace-1) var(--espace-2);
+  font-family: var(--font-corps);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
 }
 
 /*
