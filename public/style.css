@@ -4271,6 +4271,13 @@ p[id^="statut-"]:not(:empty) {
   gap: 12px;
   margin-bottom: var(--espace-4);
 }
+/* Même piège de cascade que `.bandeau-classe-active-edition[hidden]` plus bas dans ce fichier :
+   `display: flex` (AUTEUR) l'emporterait sur `[hidden]` (UTILISATEUR-AGENT) sans cette règle
+   explicite — la carte restait visible (avatar/crayon/code vide) en même temps que "Aucune classe
+   pour l'instant" quand `rendreBandeauEtMesClasses()` mettait `bandeau.hidden = true` à 0 classe. */
+.bandeau-classe-active[hidden] {
+  display: none;
+}
 .avatar-bandeau-classe {
   width: 48px;
   height: 48px;

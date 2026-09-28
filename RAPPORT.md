@@ -384,3 +384,57 @@ fichier gardé "whole", jamais élagué).
 du clone de travail) jamais ajouté à git — confirmé non suivi (`git status --short`) et non commité
 ici. Les 18 captures d'écran et le journal console complet restent disponibles dans ce répertoire de
 travail pour consultation, mais ne font pas partie du livrable versionné.
+
+## §9 : 2 points relevés par l'utilisateur sur les captures du §8 — 1 bug réel corrigé, 1 alerte infirmée
+
+**1. Bug réel confirmé et corrigé** : `public/prof.html`, onglet Classes, état à 0 classe —
+`#bandeau-classe-active` (la carte avatar/crayon/code) restait visible en même temps que
+`#etat-vide-classes` ("Aucune classe pour l'instant"), alors que `rendreBandeauEtMesClasses()`
+(`public/prof.html:2172-2187`) met bien `bandeau.hidden = true` dans ce cas.
+
+Cause réelle (jamais supposée, vérifiée par la lecture du CSS puis confirmée empiriquement) :
+`.bandeau-classe-active { display: flex; ... }` (`public/style.css:4263`, spécificité classe seule,
+0,1,0) l'emporte sur la règle `[hidden] { display: none }` du navigateur (même spécificité, mais
+l'auteur gagne sur l'agent-utilisateur à égalité) — **exactement le même piège de cascade déjà
+documenté et déjà corrigé pour l'élément voisin `.bandeau-classe-active-edition[hidden]`**
+(`public/style.css:4372-4378`, commentaire de tête : "trouvé par la validation Chromium de la
+refonte 'Onglet Classes'"), jamais appliqué à `.bandeau-classe-active` lui-même.
+
+Vérifié empiriquement (Chromium réel, `getComputedStyle`, avant/après) : avant le correctif,
+`.bandeau-classe-active[hidden]` calculait `display: flex` (visible malgré `hidden`) ; après,
+`display: none`. `#etat-vide-classes` (aucune règle concurrente) était déjà correct dans les deux
+cas (`display: block`/`none` selon `hidden`). **Correctif** : ajout de
+`.bandeau-classe-active[hidden] { display: none; }` juste après la règle de base
+(`public/style.css:4274-4280`), même patron que le correctif voisin déjà en place.
+
+**2. Alerte infirmée après vérification directe** : le formulaire de composition de tâche, recherche
+"second degré" — les entrées 9, 55, 57, 60, 1, 2, 61 (chapitre 1/2 de "4e", non câblées dans
+`CORRESPONDANCE_JSON_VERS_PILOTE`) semblaient, sur la capture envoyée, tout aussi interactives que
+gen7 (numero 7, seul câblé). Vérification en 2 temps, jamais une relecture de code seule :
+
+1. **Logique pure** (`varianteIdActive`, `public/prof.html:1447-1453`) rejouée directement dans Node
+   avec les vraies données (`CORRESPONDANCE_JSON_VERS_PILOTE` réelle + `idsConnus` réel dérivé de
+   `CATALOGUE_GENERATEURS`, 4 entrées) : `varianteIdActive("4e", 55, 0, idsConnus)` →
+   `undefined` (et de même pour 9/57/60/1/2/61) — la fonction identifie déjà correctement ces
+   7 entrées comme non câblées.
+2. **DOM réel** (Chromium, code de `public/prof.html` extrait tel quel — lignes 1360-1847 +
+   `normaliserRecherche` —, exécuté contre le vrai `public/catalogue-generateurs-complet.json` et
+   le vrai `public/style.css`, arbre construit par le vrai `construireArbreComposition`) : pour
+   chacune des 7 entrées listées par l'utilisateur, le champ "nombre d'exercices" a
+   **`input.disabled === true` et `opacity: 0.5`** — rigoureusement identique au traitement déjà
+   appliqué à numero 9 (dont le caractère grisé n'était, lui, pas contesté), et strictement
+   différent de gen7 (`disabled === false`, `opacity: 1`).
+
+Serveur (`lib/validationCorpsTaches.ts:108-109`, `estVarianteConnue`) rejette de toute façon avec
+400 toute composition contenant un `variante_id` hors `CATALOGUE_GENERATEURS` — défense en
+profondeur déjà en place indépendamment du client.
+
+**Conclusion** : ces 7 entrées sont déjà correctement désactivées, côté client ET serveur — la
+décision actée n°3 du prompt phase 1 est déjà respectée pour elles. Ce qui a induit en erreur (moi
+d'abord, la lecture de la capture ensuite) est purement visuel : `opacity: 0.5` sur un champ déjà
+minuscule (stepper 24px) est un signal trop faible pour se distinguer d'un champ actif à la taille
+d'une capture d'écran compressée — un vrai défaut d'affordance, mais pas le bug fonctionnel
+initialement suspecté. Aucun changement de code nécessaire pour la correction fonctionnelle ; une
+amélioration de contraste visuel (ex. `opacity` plus faible, `cursor: not-allowed` déjà présent mais
+peu visible, ou un badge explicite) resterait une amélioration UX à discuter séparément, pas un
+correctif de sécurité/données.
