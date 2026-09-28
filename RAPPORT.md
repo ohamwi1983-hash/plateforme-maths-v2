@@ -262,3 +262,78 @@ Résultats, Mon compte avec avatar/mini-stats) en forçant l'état `hidden` via 
 de vraie session Supabase disponible dans ce bac à sable, CDN bloqué) — rendu visuellement intact
 sur les 8 captures : cartes, dégradés, badges, accordéons, navigation flottante, formulaires tous
 correctement stylés, aucune classe de gestion cassée par l'élagage.
+
+## §7 : Phase 1 §G — tests portés (`scripts/`)
+
+**Méthode de vérification** : ces tests couplent au VRAI handler compilé via `require()`/
+`require.resolve()` (jamais un import statique, jamais un `fetch` HTTP) — soit directement, soit via
+un petit helper local `appeler(cheminHandler, nomExport, req)`/`appelerRouteur(...)`. Portabilité
+vérifiée fichier par fichier par grep exhaustif de chaque littéral `require(...)`/
+`require.resolve(...)`/`appeler("../lib/...")`, jamais supposée depuis le seul nom du fichier.
+
+**15 fichiers portés verbatim** (aucune modification, dépendances 100% confirmées dans le périmètre
+§A/§C — `lib/`, `lib/routes/` copiés tels quels) :
+`test-categorisation-profil.ts` (`lib/categoriesCompetences`), `test-connexion-sans-code.ts`
+(`lib/routes/classes`, `lib/routes/inscription-eleve`, `lib/routes/connexion-eleve`),
+`test-explication-competences.ts` (`lib/profilCompetences`, `lib/dictionnaireCompetences`,
+`lib/explicationsCompetences`), `test-gestion-classe-etendue.ts` (`lib/routes/classes`,
+`lib/routes/eleves`, `lib/routes/profs/eleves/[id]`, `lib/routes/profs/desactiver-eleve`,
+`lib/routes/connexion-eleve`, `lib/routes/profs/transferer-eleve`), `test-inscription-prof.ts`
+(`lib/routes/inscription-prof`), `test-mes-resultats.ts` (`lib/routes/eleves/mes-resultats`),
+`test-profil-competences.ts` (`lib/routes/profs/eleves/profil`),
+`test-provisionnement-vrai-client-supabase.ts` (`lib/supabaseAdmin`, `lib/provisionnerEleve`),
+`test-refonte-onglet-classes.ts` (`lib/routes/classes`, `lib/routes/classes/renommer`,
+`lib/routes/eleves`), `test-tableau-de-bord-pagination.ts`, `test-tableau-de-bord-prof.ts`,
+`test-tableau-de-bord-temps-variante.ts`, `test-temps-par-competence.ts`,
+`test-temps-par-variante.ts` (ces 5 derniers : `lib/routes/profs/tableau-de-bord` et/ou
+`lib/routes/profs/eleves/profil`, plus `lib/classeUniqueDeEleve` pour le dernier).
+
+**`test-routeur.ts` adapté** (jamais un simple copier-coller — la table `TABLE_ROUTAGE` a été
+élaguée en §C, ce test exerçait explicitement les 19 routes de l'ancienne table) :
+- Retirés des cas de dispatch (`CAS_DISPATCH`) : `assignations`, `eleves/tableau-de-bord`,
+  `reponses`, et les 2 cas `taches/apercu` — les 4 routes correspondantes n'existent plus dans
+  `TABLE_ROUTAGE` de ce dépôt (moteur/tentatives et tableau de bord élève différés phase 2, écart
+  n°2 §3 pour `taches/apercu`/`taches-impression`).
+- Cas "méthode incorrecte sur un chemin connu -> 405 du handler" : `assignations` PUT (original,
+  route absente ici) remplacé par `classes` PUT. Ce remplacement a nécessité 2 correctifs découverts
+  en exécutant le test (jamais supposés a priori) : (1) authentification requise
+  (`injecterFauxAdmin(ADMIN_INUTILISE, true)`, pas `false`) — `gererClasses` vérifie
+  `profAuthentifie` AVANT le dispatch de méthode (`lib/routes/classes.ts:35-39`), contrairement à
+  l'ancien `assignations` qui vérifiait la méthode en premier ; sans authentification, PUT renvoyait
+  401 avant d'atteindre le 405 attendu. (2) invalidation ciblée du cache
+  (`delete require.cache[require.resolve("../lib/routes/classes")]`) — `lib/routes/classes` avait
+  déjà été chargé (et capturé le faux admin non-authentifié d'ALORS) par la boucle `CAS_DISPATCH`
+  précédente ; sans ce nettoyage, le module continuait silencieusement à utiliser l'ancien admin
+  malgré le ré-appel d'`injecterFauxAdmin`, même piège que celui déjà documenté dans le fichier
+  original pour `lib/routes/exercices/[id]`. Reste inchangé : dispatch des 16 routes restantes,
+  fusion de `classe_id`, extraction de `:id`, 404 sur chemin inconnu et sur `path` absent.
+
+**`scripts/smoke-test.ts` extrait** (432 lignes utiles sur les 2475 de l'original, reconstruit avec
+un nouvel en-tête + imports ciblés, pas une simple suppression de blocs en place) : 5 blocs de
+fonctions pures de gestion conservés, dans l'ordre — `genererCodeClasse`/`normaliserTexte`/
+`filtrerHomonymes`+`formaterAffichage`/`construireReponseHttpReponses` (lignes 467-535 de
+l'original), `exerciceEstComplet`/`tacheEstComplete`/`classifierTache` (920-965),
+`construireChampVue` (977-1044, borne de fin corrigée après une 1ère extraction qui coupait
+l'accolade fermante — détecté par une vérification programmatique de l'équilibre des accolades
+avant assemblage), `nombreTachesEnCoursDepuisAssignations`/`compterBugsDepuisReponses`/
+`resumeExercice`/`resumeTache`/`calculerSerieActuelle` (1063-1181),
+`calculerProfilCompetences`/`calculerEtatChampTentatives`/`tentativesMaxDepuisReglages`/
+`statutRecap`/`libelleStatutRecap`/`construireLigneRecap` (1245-1375). Abandonnés avec raison :
+tout `src/generateurs/`, `src/moteur/`, `src/diagnostic/` (gen1/gen6/secondDegre, hors périmètre
+phase 1 par décision actée n°1) ; le bloc `estPeriodeAssignationValide` (967-975, dépend de
+`lib/routes/assignations`, jamais copié) ; les blocs `formatQuadratique`/`formatMembreGaucheKatex`
+(1183-1243, dépendent de `lib/formatQuadratique.ts`, absent des 29 fichiers `lib/` du socle §A).
+
+**Validation** : `npx tsc -b` clean (exit 0) sur l'état final (53 fichiers `.ts` serveur + 16
+scripts). Les 16 scripts (`smoke-test.ts` + 15 tests) exécutés individuellement via `npx tsx`, 3
+fois consécutives : tous verts au 3e essai, aucun flake. `test-routeur.ts` a échoué de façon
+reproductible (3/3, jamais un flake) avant les 2 correctifs ci-dessus, confirmant qu'il s'agissait
+d'un vrai bug d'adaptation et non d'une instabilité du test.
+
+**Tests dépendant de `reponses.ts`/`assignations.ts` (moteur/tentatives), différés phase 2, jamais
+portés** : aucun des 15 fichiers portés n'en dépend (vérifié ci-dessus) ; les tests de l'ancien
+pilote qui en dépendent réellement (chrono, tentatives, verrouillage — hors des 15 candidats
+identifiés) restent dans l'ancien pilote, non inventoriés individuellement ici faute d'y avoir
+touché. **Non portés intentionnellement** (générateurs, hors décision n°1) :
+`test-taxonomie-competences-tier0-1-15.ts`, `test-saisie-signe-negatif.ts`, et tout autre test dont
+le nom référence un générateur (gen1/gen6/secondDegre/inequationRationnelle).
