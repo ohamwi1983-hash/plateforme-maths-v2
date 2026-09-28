@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pilote Phase 0</title>
+  <script>
+    // Filet de sécurité diagnostic — identique à public/prof.html/eleve.html (repris verbatim pour
+    // cohérence), particulièrement utile ici : ce prompt ("URGENT") corrige un flux jamais exercé
+    // contre le vrai projet Supabase avant ce déploiement.
+    (function () {
+      var messagesEnAttente = [];
+      var conteneur = null;
+
+      function creerConteneurSiPossible() {
+        if (conteneur || !document.body) return;
+        conteneur = document.createElement("div");
+        conteneur.id = "erreur-fatale-pilote";
+        conteneur.style.cssText =
+          "background:#b00020;color:#fff;padding:12px;margin:0;font:13px/1.4 monospace;" +
+          "white-space:pre-wrap;word-break:break-word;position:relative;z-index:2147483647;";
+        document.body.insertBefore(conteneur, document.body.firstChild);
+        messagesEnAttente.forEach(ajouterLigne);
+        messagesEnAttente = [];
+      }
+
+      function ajouterLigne(message) {
+        var ligne = document.createElement("div");
+        ligne.textContent = message;
+        ligne.style.cssText = "border-top:1px solid rgba(255,255,255,0.4);padding-top:6px;margin-top:6px;";
+        conteneur.appendChild(ligne);
+      }
+
+      window.afficherErreurFatale = function (message) {
+        creerConteneurSiPossible();
+        if (conteneur) {
+          ajouterLigne(message);
+        } else {
+          messagesEnAttente.push(message);
+        }
+      };
+
+      document.addEventListener("DOMContentLoaded", function () {
+        if (messagesEnAttente.length > 0) creerConteneurSiPossible();
+      });
+
+      window.onerror = function (message, source, lineno, colno, error) {
+        window.afficherErreurFatale(
+          "Erreur JS : " + message + " (" + source + ":" + lineno + ":" + colno + ")" + (error && error.stack ? "\n" + error.stack : ""),
+        );
+        return false;
+      };
+
+      window.addEventListener("unhandledrejection", function (event) {
+        var raison = event.reason;
+        var texte = raison && raison.stack ? raison.stack : String(raison);
+        window.afficherErreurFatale("Promesse rejetée non gérée : " + texte);
+      });
+    })();
+  </script>
+  <script
+    src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"
+    onerror="window.afficherErreurFatale('Échec du chargement du script externe https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js (CDN bloqué, CSP, ou hors ligne).')"
+  ></script>
+  <!--
+    Prompt "Connexion élève sans code + page d'accueil", Étape 4 : "habiller avec le système déjà
+    en place" — cette page était délibérément restée SANS lien vers /style.css jusqu'ici (choix du
+    chantier "Page de réinitialisation de mot de passe (URGENT)", Étape 0 : "pas de lien... hors
+    périmètre de ce correctif urgent", pour ne rien risquer pendant un blocage de production).
+    Ce prompt-ci lève explicitement cette exclusion pour cette page précise — lien ajouté.
+  -->
+  <link rel="stylesheet" href="/style.css" />
+  <!--
+    Style local scopé à la mise en page propre à cette page d'accueil (carte centrée
+    verticalement/horizontalement, absente des autres pages qui n'ont pas ce besoin) — réutilise les
+    tokens/police/`.panneau`/boutons de /style.css plutôt que de les redéfinir (Étape 4 : "système
+    déjà en place"), seule la disposition est propre à cette page.
+  -->
+  <style>
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: var(--espace-4);
+      box-sizing: border-box;
+    }
+    .accueil-carte {
+      max-width: 420px;
+      width: 100%;
+      text-align: center;
+    }
+    .accueil-titre {
+      font-family: var(--font-marque);
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--violet);
+      margin: 0 0 var(--espace-4);
+    }
+    .accueil-boutons {
+      display: flex;
+      flex-direction: column;
+      gap: var(--espace-3);
+    }
+    .accueil-boutons a.bouton-lien {
+      margin: 0;
+    }
+    /*
+      Prompt "Page de réinitialisation de mot de passe (URGENT)", Étape 0 — styles conservés tels
+      quels pour le formulaire ajouté par ce chantier antérieur, maintenant à l'intérieur de la même
+      carte (`.panneau`) que le choix habituel (Étape 4 de CE prompt-ci : "vérifier après restyle
+      que ce mécanisme fonctionne toujours — ne pas le perdre dans la réorganisation du HTML" — les
+      ids et la logique JS ci-dessous restent inchangés, seule l'imbrication visuelle change).
+    */
+    #reinitialisation-mdp label {
+      display: block;
+      margin-bottom: 12px;
+      text-align: left;
+    }
+    #reinitialisation-mdp input {
+      display: block;
+      margin-top: 4px;
+      padding: 6px 8px;
+      font-size: 1rem;
+      width: 100%;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+  <!--
+    Prompt "Page de réinitialisation de mot de passe (URGENT)", Étape 0 — vérifié, pas supposé :
+    - Cette page ne crée aujourd'hui AUCUN client Supabase et n'appelle jamais
+      `resetPasswordForEmail` nulle part dans ce dépôt (grep sur public/ et lib/, aucun résultat) —
+      la demande de récupération a donc forcément été déclenchée en dehors de cette appli (ex.
+      tableau de bord Supabase), jamais par ce code.
+    - `createClient` (ici comme dans prof.html/eleve.html) ne fixe jamais `flowType` : la valeur
+      par défaut du SDK installé est `flowType: 'implicit'` (node_modules/@supabase/auth-js/dist/
+      main/GoTrueClient.js:24) — donc un lien de récupération pour ce projet atterrit avec un
+      FRAGMENT `#access_token=...&refresh_token=...&type=recovery`, pas `?code=...` (le format
+      `?code=...` — flux PKCE — exigerait en plus un `code_verifier` déjà présent dans le
+      stockage local de CE navigateur, posé par un appel PKCE initié depuis cette même appli
+      — impossible ici puisque cet appel n'existe nulle part dans le code).
+    - Plutôt que de parser le fragment à la main (risque de mal reproduire la logique interne du
+      SDK), ce correctif s'appuie sur la détection native de `@supabase/auth-js`
+      (`_initialize()`/`_getSessionFromURL`, même fichier, lignes 379-442) : elle reconnaît QUAND
+      MÊME les 2 formats (implicite ET PKCE) automatiquement au chargement, dès que le client est
+      créé avec les options par défaut (déjà le cas ici) — et émet l'évènement `PASSWORD_RECOVERY`
+      via `onAuthStateChange`, exactement le mécanisme documenté par la lib elle-même. Couvre donc
+      aussi le cas où le format réel diffère de ce qui est déduit ci-dessus, sans avoir à deviner.
+  -->
+  <main class="panneau accueil-carte">
+    <p class="accueil-titre">Pilote Phase 0</p>
+
+    <div id="choix" class="accueil-boutons">
+      <a class="bouton-lien" href="/prof.html">Espace professeur</a>
+      <a class="bouton-lien" href="/eleve.html">Espace élève</a>
+    </div>
+
+    <p id="confirmation-reinitialisation" hidden>
+      Mot de passe mis à jour — reconnecte-toi ci-dessus avec ton nouveau mot de passe.
+    </p>
+
+    <div id="reinitialisation-mdp" hidden>
+      <h2>Nouveau mot de passe</h2>
+      <label>
+        Nouveau mot de passe (6 caractères minimum) :
+        <input id="nouveau-mdp-index" type="password" />
+      </label>
+      <button id="btn-valider-nouveau-mdp-index" type="button">Valider</button>
+      <p id="statut-reinitialisation"></p>
+    </div>
+  </main>
+
+  <script>
+    let supabaseClient = null;
+
+    async function initSupabaseClient() {
+      try {
+        const config = await fetch("/api/config").then((r) => r.json());
+        if (!config.supabaseUrl || !config.supabaseAnonKey) {
+          window.afficherErreurFatale("Configuration Supabase manquante côté serveur (SUPABASE_URL / SUPABASE_ANON_KEY).");
+          return;
+        }
+        supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
+
+        /**
+         * Étape 1 : détection du jeton de récupération. `onAuthStateChange` est enregistré ici,
+         * synchrone juste après `createClient`, AVANT tout futur `await` — nécessaire pour capter
+         * l'évènement `PASSWORD_RECOVERY` que le SDK met en file d'attente pendant sa propre
+         * initialisation interne et ne délivre qu'aux abonnés déjà enregistrés à ce moment-là
+         * (voir GoTrueClient.js:340-371, "Open the notification queue before _initialize() runs").
+         */
+        supabaseClient.auth.onAuthStateChange((event) => {
+          if (event === "PASSWORD_RECOVERY") {
+            document.getElementById("choix").hidden = true;
+            document.getElementById("confirmation-reinitialisation").hidden = true;
+            document.getElementById("reinitialisation-mdp").hidden = false;
+          }
+        });
+      } catch (e) {
+        window.afficherErreurFatale("Impossible de charger la configuration : " + e.message);
+      }
+    }
+
+    /** Étape 2 : un champ, un bouton, appel à `updateUser` — fonctionne indifféremment prof/élève, la session est déjà établie par le jeton (Étape 1), pas par ce formulaire. */
+    document.getElementById("btn-valider-nouveau-mdp-index").addEventListener("click", async () => {
+      const statut = document.getElementById("statut-reinitialisation");
+      if (!supabaseClient) {
+        statut.textContent = "Client Supabase non initialisé (configuration indisponible).";
+        return;
+      }
+      const motDePasse = document.getElementById("nouveau-mdp-index").value;
+      statut.textContent = "Enregistrement…";
+      const { error } = await supabaseClient.auth.updateUser({ password: motDePasse });
+      if (error) {
+        statut.textContent = "Erreur : " + error.message;
+        return;
+      }
+      // Étape 3 : message de confirmation, puis choix habituel — jamais de redirection automatique
+      // vers l'un ou l'autre espace, la personne se reconnecte normalement.
+      statut.textContent = "";
+      document.getElementById("reinitialisation-mdp").hidden = true;
+      document.getElementById("confirmation-reinitialisation").hidden = false;
+      document.getElementById("choix").hidden = false;
+    });
+
+    initSupabaseClient();
+  </script>
+</body>
+</html>
