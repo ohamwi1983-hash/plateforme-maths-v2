@@ -5,6 +5,7 @@ import { recupererToutesLesLignes } from "../../supabasePagination";
 import { calculerEtatExercice, chargerContexteTache, COLONNES_EXERCICE_ASSIGNE, regenererExercice, type ContexteTache, type DonneesExercice, type LigneExerciceAssigne, type LigneReponse } from "../../etatExercice";
 import { calculerSerieActuelle, classifierTache, construireChampVue, REGLAGES_FORCEES_ANTERIEURES, resumeExercice, resumeTache, tacheEstComplete, type CategorieTableauDeBord, type ResumeProgression } from "../../tableauDeBord";
 import type { LigneDebutEcran } from "../../moteurTentatives";
+import { labelPourVariante } from "../../catalogueGenerateurs";
 import type { StatutVerification } from "../../../src/moteur/statutVerification";
 
 /**
@@ -97,7 +98,7 @@ export const gererElevesTableauDeBord = avecGestionErreurs(async function handle
     const fenetre = fenetres.get(tacheId);
     if (!fenetre) continue; // exercices générés mais tâche jamais assignée à cet élève (ne devrait pas arriver)
 
-    const vuesExercices: { id: string; variante_id: string; champs: unknown[]; termine: boolean; resume: ResumeProgression }[] = [];
+    const vuesExercices: { id: string; variante_id: string; libelle: string | null; champs: unknown[]; termine: boolean; resume: ResumeProgression }[] = [];
     let contexteTache: ContexteTache | null = null;
     // La catégorie dépend de la complétion, elle-même dépendante des états : deux passes.
     const etats = [];
@@ -125,6 +126,7 @@ export const gererElevesTableauDeBord = avecGestionErreurs(async function handle
       vuesExercices.push({
         id: ligne.id,
         variante_id: ligne.variante_id,
+        libelle: labelPourVariante(ligne.variante_id),
         termine: etat.termine,
         resume: resumeExercice(regenere.ecrans.map((e) => e.champ), champsTermines),
         champs: etat.champs.map((c) => ({ ...construireChampVue(c.champ, c.derniere, regenere.generateur.solutionAttendue(regenere.exercice, c.champ), reglages, anterieure, c.etat), verrouille: c.verrouille })),

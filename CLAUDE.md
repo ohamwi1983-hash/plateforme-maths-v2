@@ -37,7 +37,53 @@ localement ailleurs.
 entier les sections précédentes avant d'ajouter la nouvelle — ajouter en fin de fichier avec
 citations exactes (fichier:ligne) de ce qui a été livré dans cette tâche.
 
-## Ancien pilote = spec en lecture seule
+## Ancien pilote = spec en lecture seule, jamais un modèle de structure
 
 `ohamwi1983-hash/plateforme-maths-pilote` est la spec de référence pour ce qui reste à porter
-(moteur d'exercice, générateurs, phase 3). Il ne reçoit jamais de push depuis ce dépôt.
+(générateurs curriculaires, phase 3) : ce qu'un écran doit vérifier, ses pièges, ses tolérances, ses
+codes de compétence. Il ne reçoit jamais de push depuis ce dépôt. **Ne jamais en reprendre la
+structure de code** (fonctions géantes, HTML/JS/vérification mélangés, branches `if` par générateur,
+noms de variables) : ce dépôt a un vrai moteur générique (voir ci-dessous).
+
+## Registre unique de générateurs (obligatoire, depuis la phase 2)
+
+`lib/registreGenerateurs.ts` est la **seule** autorité sur « quel `variante_id` correspond à quel
+générateur exécutable ». Ne jamais recréer une deuxième liste de variantes à tenir à la main en
+parallèle (assignation, réponses, tableau de bord, GET exercice passent tous par `chercherGenerateur`,
+jamais par une chaîne de tests sur `variante_id` ni par des ensembles `VARIANTES_*` codés en dur) —
+c'est le défaut trouvé en phase 1 (`MIROIR_GENERATEURS` non documenté, une entrée jamais copiée dans
+`catalogue-generateurs-complet.json`). `lib/catalogueGenerateurs.ts` reste la source du catalogue
+AFFICHÉ au professeur : les deux sont distincts (le catalogue dit ce qu'on peut composer, le registre
+sait exécuter) et leur cohérence est vérifiée au chargement du registre (échec bruyant).
+
+## Contrat de générateur et moteur (phase 2)
+
+- Un générateur (`lib/contratGenerateur.ts`) déclare des écrans (données) ; il n'écrit jamais de
+  HTML/CSS. Un nouveau type d'écran = une interface dans le contrat + un composant dans
+  `public/moteur/ecrans/` (enregistré dans `index.js`) + un écran dans le témoin technique
+  (`src/generateurs/_temoinTechnique/`, `variante_id` `_temoin_technique_v1`, permanent, jamais dans le
+  catalogue affiché) ; `npm run chromium-temoin` doit alors passer.
+- **État local d'édition ≠ réponse.** Ce que l'élève compose (texte tapé, lignes ajoutées, cases
+  cochées, choix non confirmé) ne quitte jamais le composant ; seule une réponse confirmée (« Valider »)
+  est envoyée, sous forme d'UNE chaîne `reponse_brute`. `POST /api/reponses` rejette toute clé autre que
+  `{ exercice_assigne_id, champ, reponse_brute }`. Vérification **uniquement côté serveur**, jamais de
+  marquage d'erreur en direct pendant la frappe.
+- Aléa : uniquement `creerPrng(graine)` (`lib/prng.ts`), jamais `Math.random()` dans un générateur.
+  L'exercice n'est pas stocké : il est régénéré depuis `exercices_assignes.graine`. **Toute
+  modification qui change ce que `generer` produit pour une graine donnée impose un NOUVEAU
+  `variante_id` (`_v2`…)**, sinon les exercices déjà assignés changent sous les pieds des élèves.
+- Le texte d'aide n'est jamais envoyé avec l'écran : `POST /api/reponses/aide` le sert et enregistre
+  l'usage côté serveur (`aides_utilisees`).
+- Nouveau générateur curriculaire : l'ajouter à `REGISTRE_GENERATEURS` **et** au catalogue **et** à
+  `CORRESPONDANCE_JSON_VERS_PILOTE` (discipline de câblage ci-dessus) ; ses codes de compétence
+  doivent exister dans `lib/dictionnaireCompetences.ts`.
+- Le conteneur du moteur dans `eleve.html` est `#conteneur-moteur`, pas `#exercice` : `style.css`
+  garde des règles héritées de l'ancien écran d'exercice sous `#exercice` (ex. `#exercice button
+  { width: 100% }` en mobile) qui déforment tout composant placé dessous.
+
+## Design system (phase 2)
+
+Les 31 tokens de `:root` (`public/style.css`) sont documentés dans `docs/design-system.md`
+(`scripts/test-design-system.ts` vérifie qu'ils restent identiques, et que `public/moteur/ecrans.css`
+n'utilise que des `var(--token)`). Ne jamais ajouter de valeur en dur (couleur, police, espacement,
+rayon) dans un composant d'écran ; ne jamais inventer un token sans mettre à jour le document.

@@ -438,3 +438,128 @@ initialement suspecté. Aucun changement de code nécessaire pour la correction 
 amélioration de contraste visuel (ex. `opacity` plus faible, `cursor: not-allowed` déjà présent mais
 peu visible, ou un badge explicite) resterait une amélioration UX à discuter séparément, pas un
 correctif de sécurité/données.
+
+## §10 : Phase 2 — contrat de générateur, moteur générique, design system (témoin technique)
+
+Décisions de l'utilisateur appliquées : modules ES natifs sous `public/moteur/` ; **graine stockée en
+base, exercice régénéré à chaque appel** (colonne ajoutée à `schema.sql` ET `cumulatif.sql`, même
+commit) ; règle « état local d'édition ≠ réponse » **appliquée, pas seulement convenue** ; risque
+« le témoin ne garantit pas la couverture du vrai cas gen7 » et choix de l'étiquette « bientôt
+disponible » consignés ci-dessous. Vérification préalable par lecture directe : plusieurs éléments du
+prompt ne correspondaient pas au dépôt (voir « Écarts »).
+
+### Schéma Supabase (`CLAUDE.md` — discipline de migration)
+- `supabase/schema.sql:167-194` : `exercices_assignes.enonce`/`solution` deviennent nullables (l'exercice
+  n'est plus figé) ; `graine bigint` ajoutée (nullable : lignes historiques). `supabase/schema.sql:241` :
+  table `aides_utilisees`. Commentaire legacy gen1/gen6 de `reponses.champ` remplacé (`schema.sql:200`).
+- **Équivalent idempotent dans `supabase/migrations/cumulatif.sql:150-162`, même commit** :
+  `alter table exercices_assignes add column if not exists graine bigint;`,
+  `alter … alter column enonce drop not null;`, `alter … alter column solution drop not null;`,
+  `create table if not exists aides_utilisees (…)`. **À exécuter sur la vraie base avant de déployer** :
+  sans `graine`, `POST /api/assignations` échoue.
+
+### A. Contrat — `lib/contratGenerateur.ts`, `lib/prng.ts`, `lib/reponsesEcran.ts`
+- `Generateur<TExercice>` : `lib/contratGenerateur.ts:109` ; types d'écran `:43-81` ; `ResultatVerification`
+  (union, `parse_error` porte obligatoirement `messageErreur`) `:99` ; `etatActuelSequentiel` `:140`.
+- PRNG mulberry32 seedé `lib/prng.ts:32` (`creerPrng`), graine 32 bits `:12-19`. Aucun `Math.random()` dans
+  un générateur (seul `tirerGraine`, serveur, à l'assignation).
+- **Règle « état local d'édition ≠ réponse »** : documentée en tête de `lib/contratGenerateur.ts`, imposée par
+  `lib/routes/reponses.ts:22,34` (`CLES_AUTORISEES` : toute autre clé → 400), par les signatures
+  (`verifier` reçoit une chaîne, `etatActuel` des `ReponseConfirmee`), et côté client par la conception des
+  composants (`lireReponse()` n'est appelé qu'au clic « Valider », `public/moteur/moteur.js`). Vérifiée
+  en test (`brouillon`, `etat_edition` → 400) et en Chromium (0 requête `/api/reponses` pendant frappe, ajout/
+  retrait de lignes, cases de tableau, choix de QCM).
+- Contrôle croisé des codes : au chargement du registre (`lib/registreGenerateurs.ts:35`) ET à chaque vérification
+  (`verifierAvecControle`, `:81`, lève si un code n'est pas déclaré ou si `parse_error` n'a pas de message).
+- **Écarts avec la proposition du prompt** : (1) champ `curriculaire: boolean` ajouté (le témoin n'a pas de
+  codes dans `dictionnaireCompetences.ts`, mais un générateur curriculaire doit en avoir — contrôle conditionné
+  par ce champ) ; (2) `EtatActuel = { champCourant: string | null }` seulement (la fin d'exercice est dérivée
+  des `champs_attendus`) ; (3) `ReponseConfirmee` = dernière soumission d'un champ TERMINÉ (réussi ou révélé),
+  jamais une tentative intermédiaire ; (4) `EcranDeclare.aide` n'est jamais envoyé avec l'écran (voir D).
+
+### B. Types d'écran — `public/moteur/ecrans/`
+`champExpression.js`, `qcm.js`, `listeValeurs.js`, `tableauSignes.js`, table de répartition
+`public/moteur/ecrans/index.js:20` ; `rendreTexte.js` = point unique de rendu de texte (texte brut en phase 2,
+**KaTeX à brancher là en phase 3** : non couvert ici). Format de `reponse_brute` par type : en-tête de
+`lib/contratGenerateur.ts` ; décodeurs `lib/reponsesEcran.ts:9,26`. Ajouter un type d'écran ne touche ni le contrat
+`Generateur`, ni le moteur, ni les routes.
+
+### C. Moteur client — `public/moteur/moteur.js`, `public/moteur/api.js`
+`ouvrirExercice` `moteur.js:41`, `demarrerTache` `:262` : répartition par table sur le type d'écran (jamais une
+branche par générateur), séquençage, `POST /api/reponses`, affichage du verdict serveur, tentatives restantes,
+indice, compte à rebours (affichage seul : à zéro l'état est relu au serveur). Câblage `public/eleve.html:489-527`
+(`importerMoteur`, `demarrerFluxPasAPas`, `ouvrirExercice`, import dynamique) ; le traitement du 404 du tableau de
+bord est retiré (la route existe). **Conteneur `#conteneur-moteur` (`eleve.html:312`), pas `#exercice`** : `style.css`
+garde des règles héritées de l'ancien écran sous `#exercice` (`#exercice button { width: 100% }` en mobile,
+`style.css:3756`) — trouvé en Chromium (titre de tâche écrasé en colonne d'une lettre de large à 390px).
+
+### D. Dispatcher serveur — registre unique
+- `lib/registreGenerateurs.ts:17` (`REGISTRE_GENERATEURS`), `:72` (`chercherGenerateur`). Cohérence contrôlée au
+  chargement, échec bruyant (test : doublon, curriculaire absent du catalogue, `generateur_id` divergent, code hors
+  dictionnaire, témoin présent dans le catalogue → tous détectés). `variantesCatalogueSansGenerateur()` (`:62`)
+  liste les 4 variantes gen7 cataloguées sans générateur : **toléré en phase 2, à faire tomber à 0 en phase 3**.
+- **Fichiers « réécrits » : en réalité créés** (absents depuis la phase 1) : `lib/routes/assignations.ts:66`,
+  `lib/routes/reponses.ts:44`, `lib/routes/eleves/tableau-de-bord.ts:28` ; plus `lib/routes/reponses-aide.ts:12` (non
+  demandé, voir ci-dessous) et `lib/routes/exercices/[id].ts:18` réécrite (régénération). Routés `api/router.ts:63,119,224,238`.
+  Il n'y avait aucun ensemble `VARIANTES_*_SET` à supprimer (jamais portés) : le principe est inscrit dans `CLAUDE.md`.
+- État partagé (une seule dérivation pour GET exercice, POST réponse, tableau de bord) : `lib/etatExercice.ts:182`
+  (`calculerEtatExercice`), réutilise `moteurTentatives.ts`, `construireChampVue`, `resoudreChronoDureeSecondes`.
+- Assignation : générateurs résolus par le **registre**, jamais par le catalogue ; échec 409 **avant toute écriture**
+  si une variante n'a pas de générateur ; exercices écrits avant la ligne d'assignation ; idempotente par (tâche, élève).
+  **Conséquence à connaître** : un professeur peut composer une tâche gen7 (validé au §8) mais ne peut plus l'assigner
+  tant que gen7 n'existe pas (409 « Générateur pas encore disponible »).
+- **Aide côté serveur (ajout non demandé, assumé)** : `POST /api/reponses/aide` sert le texte et enregistre l'usage
+  (`aides_utilisees`) ; `reponses.indice_utilise` est dérivé de cette table. Sans cela, le texte d'aide voyagerait avec
+  l'écran et la pénalité dépendrait d'un booléen déclaré par le client — même faille que celle corrigée pour le chrono.
+- `verrouille` (nouvelle notion, `lib/etatExercice.ts:161-182`) : un champ est verrouillé côté client s'il est terminé
+  OU si `feedback_immediat` est faux et qu'une réponse existe (sinon la 2e tentative révélerait que la 1re était fausse).
+  Le score reste dérivé du seul moteur de tentatives. **HYPOTHÈSE à arbitrer** : combiner `feedback_immediat=false` et
+  `tentatives_supplementaires>0` reste possible côté professeur, sans effet côté élève.
+
+### Correctifs de code existant trouvés en chemin (tous testés)
+- `lib/tableauDeBord.ts:150-161` (`construireChampVue`) : un champ révélé **sans réponse** (chrono écoulé avant toute
+  soumission) n'exposait ni `revele` ni solution → élève bloqué sur un écran fermé sans correction.
+- `lib/etatExercice.ts:146` : `calculerEtatChampTentatives(…, chronoExpire=true)` court-circuite l'historique ; appliqué
+  à un champ déjà réussi il transformait une bonne réponse en révélation. Le chrono n'est appliqué qu'à un champ non terminé
+  (test : champ réussi reste réussi après expiration).
+- `lib/verrouillageTache.ts:19-31` : `categorieTachePourEleve` ignorait `taches_assignations_eleves` (assignation par élève).
+- **Non corrigé, à signaler** : `lib/routes/eleves/mes-resultats.ts` considère toujours un champ « terminé » dès qu'il a une
+  ligne `reponses` (l'ancien critère, remplacé ailleurs par l'état du moteur de tentatives) — incohérent avec le tableau de
+  bord dès que `tentatives_supplementaires > 0`.
+
+### E. Design system
+`public/style.css:35-83` : les 31 tokens regroupés par famille (marque, statut, accents, neutres, rayons, typographie,
+espacement), **aucune valeur ajoutée ni modifiée**. `docs/design-system.md` (tableaux nom/valeur/rôle, règle d'usage,
+manques connus : pas de token de taille de police ni d'épaisseur). `public/moteur/ecrans.css` : uniquement des `var(--token)`.
+`scripts/test-design-system.ts` (244 vérifications) : `:root` == documentation (31/31, valeurs identiques), et `ecrans.css` sans
+couleur/police/rayon/longueur en dur (exceptions : 0, auto, 1px, 2px, em).
+**Correctif d'ergonomie (catalogue grisé)** : étiquette « bientôt disponible » **permanente** (choix validé, plutôt qu'un
+changement d'opacité : le grisé ne se voyait pas sur capture, `cursor: not-allowed` n'existe qu'au survol donc jamais sur
+mobile) — `public/prof.html:1516-1528`, `public/style.css:1317` (`.etiquette-bientot-disponible`), `flex-wrap` du stepper pour
+que l'étiquette passe à la ligne plutôt que de déborder à 390px. Verrou fonctionnel inchangé (`disabled`, pas de
+`data-variante-id`). Chromium : 4 variantes gen7 actives sans étiquette ; chaque entrée non câblée en porte une.
+**Compromis** : ~1 200 entrées du catalogue portent maintenant l'étiquette — plus lisible mais plus dense.
+
+### F. Témoin technique — `src/generateurs/_temoinTechnique/index.ts:183` (`_temoin_technique_v1`)
+Un écran par type : somme (`champ_expression`, évaluateur arithmétique sans `eval`, `parse_error` pédagogique), parité (`qcm`),
+diviseurs (`liste_valeurs`, comparaison en ensemble), signes de (x−r₁)(x−r₂) (`tableau_signes`). Deux codes de compétence
+déclarés, déclenchés par des erreurs typiques. Absent de `CATALOGUE_GENERATEURS` (contrôlé au chargement), de
+`catalogue-generateurs-complet.json`, de `GET /api/catalogue-generateurs` et de la page professeur, et **refusé** par
+`POST /api/taches` (400) — tous testés (serveur et Chromium).
+**RISQUE CONNU (consigné, accepté)** : le témoin valide le contrat, le moteur et les 4 types d'écran, **pas leur adéquation au vrai
+gen7** — rien ne garantit que ce tableau de signes couvre les besoins réels (intervalles ouverts/fermés, valeurs interdites, ligne
+« résultat »…), ni que le rendu texte suffira (KaTeX). Ces écarts ne se verront qu'en phase 3.
+
+### Validation
+- `tsc -b` propre ; les 16 scripts existants passent (aucune régression) ; nouveaux : `scripts/test-temoin-technique.ts` (115
+  vérifications : reproductibilité par graine, 4 types × correct/not_equivalent/parse_error, registre, assignation, réponses, aide,
+  chrono, réglages de correction, fenêtres de dates, tableau de bord), `scripts/test-design-system.ts` (244),
+  `scripts/chromium-temoin-technique.ts` (80, outil manuel, `playwright` requis) — 390px et 1280px, **0 erreur console/JS**,
+  zones tactiles ≥ 44px, pas de défilement horizontal de la page. Support : `scripts/support/fauxSupabase.ts` (base en mémoire),
+  `scripts/support/harnaisRouteur.ts`.
+- **Défauts trouvés par inspection visuelle des captures, corrigés** (les vérifications chiffrées ne les voyaient pas) : titre
+  écrasé à 390px (cascade `#exercice`), libellés de ligne du tableau de signes hors écran au défilement horizontal (colonne
+  collante ajoutée), radio de QCM désaligné, `champ_expression` sans écouteur `input` (bouton « Valider » jamais activé —
+  trouvé par le premier passage Chromium).
+- Non couvert : aucun test sur la vraie base Supabase (donc `cumulatif.sql` non exécuté ici), aucun vrai navigateur mobile
+  (émulation Chromium seulement), pas de test de charge sur le tableau de bord (N requêtes par tâche/variante pour les contextes).

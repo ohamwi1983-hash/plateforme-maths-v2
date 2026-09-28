@@ -1,0 +1,323 @@
+/**
+ * Styles des composants d'écran du moteur (`public/moteur/`). Design system : UNIQUEMENT les tokens de
+ * `:root` (public/style.css, docs/design-system.md) — aucune couleur, police, espacement ni rayon en
+ * dur (vérifié par scripts/test-design-system.ts). Exceptions littérales admises : 0, 1px, 2px, 100%,
+ * `line-height`/`font-weight`, unités `em`.
+ */
+
+.moteur-exercice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+  max-width: 100%;
+  margin: 0 auto;
+  padding: var(--espace-3);
+  font-family: var(--font-corps);
+  color: var(--text);
+}
+
+.moteur-entete {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-3);
+}
+
+.moteur-entete .moteur-bouton {
+  flex: none;
+}
+
+.moteur-titre {
+  margin: 0;
+  font-family: var(--font-marque);
+  font-weight: 600;
+  color: var(--violet);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.moteur-ecran {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+  padding: var(--espace-4) var(--espace-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  min-width: 0;
+}
+
+.moteur-ecran-courant {
+  border: 2px solid var(--violet-vif);
+}
+
+.moteur-ecran-termine {
+  background: var(--surface-sunken);
+}
+
+.moteur-consigne {
+  margin: 0;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+/* ── Boutons ── */
+.moteur-bouton {
+  min-height: calc(var(--espace-5) + var(--espace-1));
+  padding: var(--espace-2) var(--espace-3);
+  font-family: var(--font-corps);
+  font-size: inherit;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  margin: 0;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.moteur-bouton-principal {
+  background: var(--violet-vif);
+  border-color: var(--violet-vif);
+  color: var(--surface);
+}
+
+.moteur-bouton-secondaire {
+  background: var(--surface);
+  color: var(--violet);
+}
+
+.moteur-bouton:disabled {
+  cursor: not-allowed;
+  background: var(--surface-sunken);
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+.moteur-bouton:focus-visible,
+.moteur-champ:focus-visible,
+.moteur-case-signe:focus-visible,
+.moteur-choix input:focus-visible {
+  outline: 2px solid var(--violet-vif);
+  outline-offset: 2px;
+}
+
+.moteur-actions {
+  display: flex;
+  gap: var(--espace-2);
+  flex-wrap: wrap;
+}
+
+/* ── Champ de saisie (champ_expression, lignes de liste_valeurs) ── */
+.moteur-champ {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: calc(var(--espace-5) + var(--espace-1));
+  padding: var(--espace-2) var(--espace-3);
+  font-family: var(--font-corps);
+  font-size: inherit;
+  color: var(--text);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+/* ── QCM ── */
+.moteur-qcm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+}
+
+.moteur-choix {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-3);
+  min-height: calc(var(--espace-5) + var(--espace-1));
+  padding: var(--espace-2) var(--espace-3);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.moteur-choix input {
+  flex: none;
+  margin: 0;
+}
+
+.moteur-choix:has(input:checked) {
+  background: var(--violet-clair);
+  border-color: var(--violet-vif);
+}
+
+/* ── Liste de valeurs ── */
+.moteur-liste-valeurs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+  align-items: flex-start;
+}
+
+.moteur-liste-lignes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.moteur-liste-ligne {
+  display: flex;
+  gap: var(--espace-2);
+}
+
+.moteur-bouton-retirer {
+  flex: none;
+  min-width: calc(var(--espace-5) + var(--espace-1));
+  padding: var(--espace-2);
+}
+
+/* ── Tableau de signes ── */
+.moteur-tableau-defilement {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.moteur-table-signes {
+  border-collapse: collapse;
+  min-width: 100%;
+}
+
+.moteur-table-signes th,
+.moteur-table-signes td {
+  padding: var(--espace-2);
+  border: 1px solid var(--border);
+  text-align: center;
+  font-weight: 600;
+}
+
+.moteur-table-signes thead th {
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+}
+
+.moteur-table-signes tbody th {
+  text-align: left;
+  white-space: nowrap;
+}
+
+/* Sur mobile le tableau défile horizontalement : le libellé de chaque ligne reste collé à gauche,
+   sans quoi on ne sait plus à quel facteur correspond la ligne que l'on remplit. */
+.moteur-table-signes tbody th,
+.moteur-table-signes thead th:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+}
+
+.moteur-case-signe {
+  min-width: calc(var(--espace-5) + var(--espace-1));
+  min-height: calc(var(--espace-5) + var(--espace-1));
+  font-family: var(--font-corps);
+  font-size: inherit;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.moteur-case-signe.moteur-case-renseignee {
+  color: var(--violet);
+  background: var(--violet-clair);
+  border-color: var(--violet-vif);
+}
+
+/* ── Retour du serveur ── */
+.moteur-retour {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+}
+
+.moteur-retour:empty {
+  display: none;
+}
+
+.moteur-statut,
+.moteur-message,
+.moteur-message-syntaxe,
+.moteur-solution,
+.moteur-tentatives,
+.moteur-chrono,
+.moteur-reponse-eleve,
+.moteur-aide-texte {
+  margin: 0;
+  padding: var(--espace-2) var(--espace-3);
+  border-radius: var(--radius-sm);
+  overflow-wrap: anywhere;
+}
+
+.moteur-statut {
+  font-weight: 600;
+}
+
+.moteur-statut-correct,
+.moteur-message-succes {
+  background: var(--vert-clair);
+  color: var(--vert);
+}
+
+.moteur-statut-not_equivalent,
+.moteur-message-erreur {
+  background: var(--danger-clair);
+  color: var(--danger);
+}
+
+.moteur-statut-parse_error,
+.moteur-message-syntaxe {
+  background: var(--ambre-clair);
+  color: var(--ambre);
+}
+
+.moteur-statut-neutre,
+.moteur-tentatives,
+.moteur-chrono {
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+}
+
+.moteur-solution {
+  background: var(--violet-clair);
+  color: var(--violet);
+}
+
+.moteur-reponse-eleve {
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.moteur-etiquette {
+  color: var(--text-muted);
+}
+
+.moteur-aide {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+  align-items: flex-start;
+}
+
+.moteur-aide-texte {
+  background: var(--ambre-clair);
+  color: var(--text);
+}
+
+.moteur-fin {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+}

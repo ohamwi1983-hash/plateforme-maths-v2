@@ -14,6 +14,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/moteur/ecrans.css" />
   <script>
     // Filet de sécurité diagnostic — copie verbatim de l'ancien pilote (même mécanisme que
     // public/prof.html).
@@ -170,12 +171,9 @@
     </div>
 
     <!--
-      Phase 1 (socle de gestion) : ce panneau ne contient QUE la liste de tâches (`#tableau-de-bord`
-      ci-dessous), jamais l'écran d'exercice pas-à-pas (`#exercice` et tout son contenu dans
-      l'ancien pilote) — le moteur d'exercice et les générateurs seront reconstruits en phase 3, voir
-      CLAUDE.md et RAPPORT.md. GET /api/eleves/tableau-de-bord est différé à la phase 2 (voir
-      RAPPORT.md §C) : `chargerTableauDeBord` gère silencieusement le 404 attendu de cette route
-      (état vide, jamais de bannière d'erreur), décision validée explicitement par l'utilisateur.
+      Ce panneau ne contient que la liste de tâches (`#tableau-de-bord` ci-dessous). L'écran
+      d'exercice pas-à-pas n'est PAS dans ce fichier : `#conteneur-moteur` (plus bas) est rempli par le moteur
+      générique `public/moteur/` (phase 2), qui affiche les écrans déclarés par les générateurs.
     -->
     <div id="onglet-mes-taches" class="onglet-panneau" hidden>
       <section id="tableau-de-bord" hidden>
@@ -308,6 +306,10 @@
       </section>
     </div>
   </section>
+  <!-- Moteur d'exercice générique (public/moteur/) : rempli par ouvrirExercice/demarrerFluxPasAPas. Id volontairement
+       différent de `#exercice` : style.css garde des règles héritées de l'ancien écran d'exercice sous cet id
+       (`#exercice button { width: 100% }` en mobile…) qui déformeraient les composants du moteur. -->
+  <section id="conteneur-moteur" hidden></section>
   </main>
 
   <script>
@@ -478,16 +480,48 @@
       statut.textContent = error ? "Erreur : " + error.message : "Mot de passe modifié.";
     });
 
-    // Stubs temporaires (phase 1, socle de gestion) : le moteur d'exercice (ouverture d'un
-    // exercice, flux pas-à-pas) revient en phase 3 — voir CLAUDE.md. GET /api/eleves/tableau-de-bord
-    // étant différé (§C), les 3 catégories de tâches sont toujours vides en pratique : ces branches
-    // ne s'exécutent donc jamais réellement en phase 1. Ces stubs existent uniquement pour ne
-    // jamais lever de ReferenceError si cette hypothèse changeait avant la phase 3.
-    function demarrerFluxPasAPas(tache) {
-      console.warn("Moteur d'exercice indisponible en phase 1 (revient en phase 3).");
+    // Moteur d'exercice générique (phase 2, public/moteur/) : chargé à la demande, jamais de logique
+    // d'exercice dans ce fichier. Le moteur affiche les écrans déclarés par le serveur et n'envoie que
+    // des réponses confirmées (POST /api/reponses).
+    let detruireExerciceEnCours = () => {};
+    let apiMoteur = null;
+
+    async function importerMoteur() {
+      const [{ ouvrirExercice: ouvrir, demarrerTache }, { creerClientApi }] = await Promise.all([import("/moteur/moteur.js"), import("/moteur/api.js")]);
+      apiMoteur = apiMoteur || creerClientApi(() => session.access_token);
+      return { ouvrir, demarrerTache, api: apiMoteur };
     }
-    function ouvrirExercice(exercice, categorie) {
-      console.warn("Moteur d'exercice indisponible en phase 1 (revient en phase 3).");
+
+    function afficherExercice(afficher) {
+      document.getElementById("espace-eleve").hidden = afficher;
+      document.getElementById("conteneur-moteur").hidden = !afficher;
+      if (!afficher) {
+        detruireExerciceEnCours();
+        detruireExerciceEnCours = () => {};
+        document.getElementById("conteneur-moteur").replaceChildren();
+        chargerTableauDeBord();
+      }
+    }
+
+    async function demarrerFluxPasAPas(tache) {
+      try {
+        const { demarrerTache, api } = await importerMoteur();
+        afficherExercice(true);
+        detruireExerciceEnCours = await demarrerTache(document.getElementById("conteneur-moteur"), tache, { api, surSortie: () => afficherExercice(false) });
+      } catch (e) {
+        window.afficherErreurFatale("Impossible d'ouvrir la tâche : " + e.message);
+      }
+    }
+
+    async function ouvrirExercice(exercice, categorie) {
+      void categorie; // le serveur décide seul de la possibilité de saisie (saisie_possible)
+      try {
+        const { ouvrir, api } = await importerMoteur();
+        afficherExercice(true);
+        detruireExerciceEnCours = await ouvrir(document.getElementById("conteneur-moteur"), exercice.id, { api, surSortie: () => afficherExercice(false), surExerciceTermine: () => afficherExercice(false) });
+      } catch (e) {
+        window.afficherErreurFatale("Impossible d'ouvrir l'exercice : " + e.message);
+      }
     }
 
     let exercicesParId = {};
@@ -496,19 +530,10 @@
 
     async function chargerTableauDeBord() {
       const reponse = await fetch("/api/eleves/tableau-de-bord", { headers: enteteAuthentification() });
-      let donnees;
-      if (reponse.status === 404) {
-        // Phase 1 (socle de gestion) : cette route est différée à la phase 2 (voir RAPPORT.md §C).
-        // Gestion d'erreur silencieuse pour ce cas attendu — décidée explicitement par
-        // l'utilisateur (voir RAPPORT.md §E) : le tableau de bord reste visible avec un état vide,
-        // jamais de bannière d'erreur fatale pour un 404 de route pas encore livrée.
-        donnees = { en_cours: [], effectuees: [], anterieures: [], serieActuelle: 0 };
-      } else {
-        donnees = await reponse.json();
-        if (!reponse.ok) {
-          window.afficherErreurFatale(donnees.erreur ? formaterErreur(donnees) : "Échec de récupération du tableau de bord");
-          return;
-        }
+      const donnees = await reponse.json();
+      if (!reponse.ok) {
+        window.afficherErreurFatale(donnees.erreur ? formaterErreur(donnees) : "Échec de récupération du tableau de bord");
+        return;
       }
 
       const nEnCours = (donnees.en_cours ?? []).length;
@@ -885,8 +910,8 @@
     }
 
     function libelleCategorie(slug) {
-      // Sans blocs de générateur dans ce fichier (phase 1), aucun `.choix-btn[data-valeur]` n'existe
-      // jamais dans le DOM — retombe systématiquement sur le repli slug ci-dessous, sans erreur.
+      // Repli d'affichage (jamais utilisé quand le serveur fournit `exercice.libelle`) : aucun
+      // `.choix-btn[data-valeur]` n'existe dans ce fichier — retombe sur le slug, sans erreur.
       const bouton = document.querySelector(`.choix-btn[data-valeur="${slug}"]`);
       if (bouton) return bouton.textContent.trim();
       const sansPrefixe = slug.replace(/^(af_|fc_)/, "");
@@ -943,7 +968,7 @@
           const liExercice = document.createElement("li");
           const a = document.createElement("a");
           a.href = "#";
-          a.textContent = libelleCategorie(exercice.variante_id);
+          a.textContent = exercice.libelle ?? libelleCategorie(exercice.variante_id);
           a.addEventListener("click", (e) => {
             e.preventDefault();
             ouvrirExercice(exercice, categorie);
