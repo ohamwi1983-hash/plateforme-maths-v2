@@ -132,22 +132,34 @@ export interface EtatChamp {
 }
 
 /**
- * État d'un champ = MÊME dérivation que partout ailleurs (`calculerEtatChampTentatives`), avec le
- * chrono appliqué SEULEMENT à un champ pas encore terminé : `calculerEtatChampTentatives(…, true)`
- * court-circuite l'historique (score 0, révélé) — appliqué tel quel à un champ déjà réussi, il
+ * État de tentatives d'un champ = MÊME dérivation que partout ailleurs (`calculerEtatChampTentatives`),
+ * avec le chrono appliqué SEULEMENT à un champ pas encore terminé : `calculerEtatChampTentatives(…,
+ * true)` court-circuite l'historique (score 0, révélé) — appliqué tel quel à un champ déjà réussi, il
  * transformerait une bonne réponse en révélation une fois le chrono écoulé.
+ *
+ * Point UNIQUE de cette dérivation : réutilisé par `calculerEtatChamp` (GET exercice, POST réponse,
+ * tableau de bord) et par `GET /api/eleves/mes-resultats` (complétion d'une tâche) — jamais une
+ * seconde version de la règle « un champ est terminé quand… ».
  */
+export function etatTentativesAvecChrono(
+  champ: string,
+  statutsChronologiques: readonly StatutVerification[],
+  aideUtilisee: boolean,
+  debuts: readonly LigneDebutEcran[],
+  contexte: Pick<ContexteTache, "tentativesMax" | "aidePenalitePourcent" | "chronoMode" | "chronoDureeSecondes">,
+  maintenant: Date,
+): EtatChampTentatives {
+  const normal = calculerEtatChampTentatives(statutsChronologiques, contexte.tentativesMax, aideUtilisee, contexte.aidePenalitePourcent, false);
+  if (normal.terminee) return normal;
+  const debut = horodatageDebutPertinent(contexte.chronoMode, champ, debuts);
+  const expire = calculerChronoExpire(contexte.chronoMode, contexte.chronoDureeSecondes, debut, maintenant);
+  return expire ? calculerEtatChampTentatives(statutsChronologiques, contexte.tentativesMax, aideUtilisee, contexte.aidePenalitePourcent, true) : normal;
+}
+
 export function calculerEtatChamp(champ: string, donnees: DonneesExercice, contexte: ContexteTache, maintenant: Date): EtatChamp {
   const historique = donnees.reponsesParChamp.get(champ) ?? [];
-  const statuts = historique.map((h) => h.statut);
   const aideUtilisee = donnees.champsAvecAide.has(champ) || historique.some((h) => h.indice_utilise);
-  const normal = calculerEtatChampTentatives(statuts, contexte.tentativesMax, aideUtilisee, contexte.aidePenalitePourcent, false);
-  let etat = normal;
-  if (!normal.terminee) {
-    const debut = horodatageDebutPertinent(contexte.chronoMode, champ, donnees.debuts);
-    const expire = calculerChronoExpire(contexte.chronoMode, contexte.chronoDureeSecondes, debut, maintenant);
-    if (expire) etat = calculerEtatChampTentatives(statuts, contexte.tentativesMax, aideUtilisee, contexte.aidePenalitePourcent, true);
-  }
+  const etat = etatTentativesAvecChrono(champ, historique.map((h) => h.statut), aideUtilisee, donnees.debuts, contexte, maintenant);
   const derniereLigne = historique.length > 0 ? historique[historique.length - 1] : null;
   return {
     champ,

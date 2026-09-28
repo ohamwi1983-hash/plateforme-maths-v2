@@ -2,6 +2,9 @@ import type { RequeteHttp, ReponseHttp } from "../../httpTypes";
 import { avecGestionErreurs } from "../../avecGestionErreurs";
 import { eleveAuthentifie, supabaseAdmin } from "../../supabaseAdmin";
 import { classifierTache, tacheEstComplete, exerciceEstComplet, type CategorieOuNonCommencee } from "../../tableauDeBord";
+import { chargerContexteTache, etatTentativesAvecChrono, type ContexteTache } from "../../etatExercice";
+import { recupererToutesLesLignes } from "../../supabasePagination";
+import type { LigneDebutEcran } from "../../moteurTentatives";
 import { calculerProfilCompetences, calculerEvolutionCompetences, calculerSegmentsCompetence, type ReponsePourSegmentsCompetence } from "../../profilCompetences";
 import { calculerTendanceScore, type ScoreTache } from "../../historiqueTaches";
 import { calculerTendanceTemps, type ExerciceTempsPourTendance } from "../../tendanceTemps";
@@ -104,6 +107,22 @@ export const gererElevesMesResultats = avecGestionErreurs(async function handler
   }
   const echeanceParTache = new Map<string, string | null>((assignations ?? []).map((a) => [a.tache_id as string, a.date_echeance as string | null]));
   const debutParTache = new Map<string, string>((assignations ?? []).map((a) => [a.tache_id as string, (a.date_debut as string | undefined) ?? new Date(0).toISOString()]));
+  // Assignation par ÉLÈVE (`taches_assignations_eleves`) prise en compte au même titre que par classe
+  // (même correction que `categorieTachePourEleve`, lib/verrouillageTache.ts) : sans elle, une tâche
+  // assignée individuellement était classée avec une fenêtre de dates vide.
+  const { data: assignationsEleve, error: erreurAssignationsEleve } = await admin
+    .from("taches_assignations_eleves")
+    .select("tache_id, date_echeance, date_debut")
+    .eq("eleve_id", eleve.id)
+    .in("tache_id", tacheIds);
+  if (erreurAssignationsEleve) {
+    res.status(500).json({ erreur: "Échec de récupération des assignations individuelles", detail: erreurAssignationsEleve.message });
+    return;
+  }
+  for (const a of assignationsEleve ?? []) {
+    echeanceParTache.set(a.tache_id as string, (a.date_echeance as string | null) ?? null);
+    debutParTache.set(a.tache_id as string, (a.date_debut as string | undefined) ?? new Date(0).toISOString());
+  }
 
   // Ordre chronologique CROISSANT (ancien -> récent) — nécessaire à `calculerEvolutionCompetences`
   // (le split ancien/récent en dépend) et à la construction de `derniereHorodatageParTache`/
@@ -121,6 +140,9 @@ export const gererElevesMesResultats = avecGestionErreurs(async function handler
 
   const bugsChronologiques: (string | null)[] = [];
   const derniereStatutParCle = new Map<string, StatutVerification>();
+  // Historique chronologique des statuts par (exercice, champ) — nécessaire à l'état du moteur de
+  // tentatives (un champ n'est « terminé » que réussi ou révélé, jamais dès la 1re réponse).
+  const historiqueStatutsParCle = new Map<string, StatutVerification[]>();
   const derniereHorodatageParTache = new Map<string, string>();
   // Tâche "barre de progression segmentée" (§160/§161) : construite dans la MÊME passe (le score
   // d'un segment ne dépend plus, depuis §161, du statut FINAL d'une clé — seulement du nombre
@@ -137,6 +159,9 @@ export const gererElevesMesResultats = avecGestionErreurs(async function handler
   for (const r of reponsesBrutes ?? []) {
     bugsChronologiques.push(r.bug_detecte);
     derniereStatutParCle.set(`${r.exercice_assigne_id}:${r.champ}`, r.statut);
+    const cleHistorique = `${r.exercice_assigne_id}:${r.champ}`;
+    if (!historiqueStatutsParCle.has(cleHistorique)) historiqueStatutsParCle.set(cleHistorique, []);
+    historiqueStatutsParCle.get(cleHistorique)!.push(r.statut);
     const tacheId = tacheIdParExercice.get(r.exercice_assigne_id);
     if (tacheId) derniereHorodatageParTache.set(tacheId, r.horodatage);
     const nomTache = tacheId ? nomParTache.get(tacheId) : undefined;
@@ -146,6 +171,18 @@ export const gererElevesMesResultats = avecGestionErreurs(async function handler
     ligneTemps.push({ champ: r.champ, duree_ecoulee_secondes: r.duree_ecoulee_secondes, horodatage: r.horodatage });
     reponsesTempsParExercice.set(r.exercice_assigne_id, ligneTemps);
   }
+
+  // Débuts d'écran de l'élève (chrono) : un champ dont le chrono est écoulé est terminé (révélé) même
+  // sans réponse — même règle que le tableau de bord (`etatTentativesAvecChrono`).
+  const debutsBruts = await recupererToutesLesLignes<LigneDebutEcran & { exercice_assigne_id: string }>(() =>
+    admin.from("debuts_ecran").select("exercice_assigne_id, champ, horodatage_debut").in("exercice_assigne_id", exerciceIds),
+  );
+  const debutsParExercice = new Map<string, LigneDebutEcran[]>();
+  for (const d of debutsBruts) {
+    if (!debutsParExercice.has(d.exercice_assigne_id)) debutsParExercice.set(d.exercice_assigne_id, []);
+    debutsParExercice.get(d.exercice_assigne_id)!.push({ champ: d.champ, horodatage_debut: d.horodatage_debut });
+  }
+  const contextesParTacheVariante = new Map<string, ContexteTache | null>();
 
   const exercicesParTache = new Map<string, ExerciceBrut[]>();
   for (const ex of exercicesBruts) {
@@ -159,13 +196,24 @@ export const gererElevesMesResultats = avecGestionErreurs(async function handler
     const nomTache = nomParTache.get(tacheId);
     if (!nomTache) continue; // tâche introuvable (ne devrait pas arriver) : ignorée plutôt que de faire échouer tout l'endpoint
 
-    // Complétion : même critère que `GET /api/eleves/tableau-de-bord` (un champ_attendus manquant
-    // — ligne créée avant le correctif documenté là-bas — traité comme jamais complet, jamais
-    // vacuously complet).
+    // Complétion : un champ est terminé quand le moteur de tentatives le dit (réussi, ou révélé par
+    // épuisement des tentatives ou chrono écoulé) — PAS dès la première réponse : avec des tentatives
+    // supplémentaires, une réponse ratée laisse le champ ouvert. Même dérivation que
+    // `GET /api/eleves/tableau-de-bord` et `POST /api/reponses` (`etatTentativesAvecChrono`,
+    // lib/etatExercice.ts). Un champ_attendus manquant — ligne créée avant le correctif documenté là-bas
+    // — reste traité comme jamais complet, jamais vacuously complet.
+    // Limite connue : le verrouillage côté client sous `feedback_immediat=false` (lib/etatExercice.ts,
+    // `verrouille`) n'est PAS compté ici — décision de conception en attente (voir RAPPORT.md §11).
     const champsTermineParExercice = new Map<string, Set<string>>();
     for (const ex of exercicesDeLaTache) {
+      const cleContexte = `${tacheId}:${ex.variante_id}`;
+      if (!contextesParTacheVariante.has(cleContexte)) contextesParTacheVariante.set(cleContexte, await chargerContexteTache(admin, tacheId, ex.variante_id));
+      const contexte = contextesParTacheVariante.get(cleContexte);
+      if (!contexte) continue; // tâche introuvable : déjà écartée plus haut, défensif
       for (const champ of ex.champs_attendus ?? []) {
-        if (derniereStatutParCle.has(`${ex.id}:${champ}`)) {
+        const statuts = historiqueStatutsParCle.get(`${ex.id}:${champ}`) ?? [];
+        const etat = etatTentativesAvecChrono(champ, statuts, false, debutsParExercice.get(ex.id) ?? [], contexte, maintenant);
+        if (etat.terminee) {
           if (!champsTermineParExercice.has(ex.id)) champsTermineParExercice.set(ex.id, new Set());
           champsTermineParExercice.get(ex.id)!.add(champ);
         }
@@ -180,8 +228,9 @@ export const gererElevesMesResultats = avecGestionErreurs(async function handler
     let total = 0;
     for (const ex of exercicesDeLaTache) {
       for (const champ of ex.champs_attendus ?? []) {
+        // Tâche notée = tous ses champs terminés : un champ sans aucune réponse est alors un champ
+        // révélé par le chrono — il compte comme raté (score 0), jamais ignoré du total.
         const statut = derniereStatutParCle.get(`${ex.id}:${champ}`);
-        if (statut === undefined) continue;
         total++;
         if (statut === "correct") correct++;
       }

@@ -5,15 +5,15 @@
 //
 //   npx tsx scripts/chromium-temoin-technique.ts        # captures dans $CAPTURES_DIR (défaut : ./captures-chromium)
 //
-// Prérequis : le paquet `playwright` (résolu via `require`, sinon via $PLAYWRIGHT_NODE_MODULES, sinon
-// /opt/node22/lib/node_modules) et un Chromium installé pour lui. Le seul CDN bloqué en bac à sable
+// Prérequis : `npm ci` (le paquet `playwright` est une devDependency, version épinglée) puis, hors de ce
+// bac à sable, `npx playwright install chromium` (le navigateur n'est pas dans node_modules ; ici il est
+// déjà fourni via PLAYWRIGHT_BROWSERS_PATH). Le seul CDN bloqué en bac à sable
 // (`unpkg.com/@supabase/supabase-js`) est remplacé par un stub local de la seule API utilisée par
 // les pages (`auth.getSession/setSession/signInWithPassword/signOut/updateUser`) ; aucun réseau réel.
 
 export {}; // module
 
 import { createServer, type Server } from "node:http";
-import { createRequire } from "node:module";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
 import { appeler, creerScenario, creerTache, installerBase, type Scenario } from "./support/harnaisRouteur";
@@ -23,17 +23,8 @@ const RACINE = join(__dirname, "..");
 const CAPTURES = process.env.CAPTURES_DIR ?? join(RACINE, "captures-chromium");
 mkdirSync(CAPTURES, { recursive: true });
 
-function chargerPlaywright(): any {
-  for (const chemin of [undefined, process.env.PLAYWRIGHT_NODE_MODULES, "/opt/node22/lib/node_modules"]) {
-    try {
-      return chemin ? createRequire(join(chemin, "x.js"))("playwright") : require("playwright");
-    } catch {
-      /* essai suivant */
-    }
-  }
-  throw new Error("Paquet `playwright` introuvable (voir l'en-tête de ce fichier).");
-}
-const { chromium } = chargerPlaywright();
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { chromium } = require("playwright");
 
 const TYPES_MIME: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json", ".png": "image/png" };
 
