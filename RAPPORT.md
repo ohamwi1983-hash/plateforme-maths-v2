@@ -218,3 +218,47 @@ tags HTML (`div`/`section`/`script`/`button`/`p`) vérifiée égale. Aucune réf
 `formatEnonceKatex`/`afficherEtapeCourante`/`soumettreEtapeCourante`/`champsPourVariante`/
 `VARIANTES_*`/`katex` (vérifié par grep). La validation Chromium réelle (connexion, onglets
 Résultats/Compte, tableau de bord vide sans erreur console) est reportée au §G.
+
+## §6 : Phase 1 §F — styles `public/style.css`
+
+Copié depuis l'ancien pilote (6063 lignes) puis élagué à 4671 lignes (147 blocs de règles retirés,
+77% des lignes conservées).
+
+**Méthode** : script Python d'analyse de blocs `{...}` (commentaires neutralisés pour ne jamais
+faire correspondre un sélecteur à du texte de commentaire, seul le sélecteur réel juste avant `{`
+est testé), avec liste de motifs couvrant tout ce qui identifie un générateur par nom : `af-`/`af_`
+(gen7), `gen1` à `gen14` (numériques), `tg-`/`bloc-tg` (gen8), `cercle-trig`/`cercle-quadrant`
+(gen14), `mafs-graph` (graphe d'exercice), `niveau1-4`/`denominateurCarre`/`sansFacteurCommun`/
+`cubique`/`inequation` (gen2/gen6), `grille-signes`/`cellule-grille` (tableau de signes, les 2
+« pièges » explicitement visés), `ens-sol`/`racinesChamp`/`axeSommet`/`domaineImage`/`allure`
+(widgets de réponse par générateur), `arbre-famille` (nesting gen13), `zeros`/`grille-choix-zeros`
+(widget dédié gen1, découvert lors du 2e passage — non capturé par les motifs `gen*`/`af*` car son
+nom ne porte aucun préfixe de générateur, ajouté après un sondage complémentaire par mots-clés).
+Dans un `@media`, seules les règles internes qui correspondent sont retirées (le bloc `@media`
+entier n'est retiré que si TOUTES ses règles internes correspondent).
+
+**Conservé explicitement** (classes génériques nommées par le prompt comme « à garder en cas de
+doute », vérifiées présentes après élagage) : `.template-box`, `.pastille-tentatives`, `.stepper*`,
+ainsi que `.summary-table`/`.curseur-champ*`/`.grille-choix`/`.choix-btn` (même raisonnement —
+noms de composants génériques, non liés à un générateur par leur nom, même si actuellement
+consommés uniquement par le moteur d'exercice) et `.recap-cumulatif`/`.instruction-persistante`
+(base partagée, confirmée non retirée). Tokens `:root` (31 propriétés) intacts. Chrome de gestion
+(`.item-liste`, `.grille-stats-tdb*`, `.arbre-*` hors `.arbre-famille`, `.onglet*`, `.tdb*`,
+`@media print`) intact.
+
+**Itérations correctives** : 2 sondages complémentaires par mots-clés après le premier passage ont
+trouvé des règles manquées par les motifs initiaux — `#bloc-tg #pastille-tentatives` (motif `tg-`
+avec tiret ne capturait pas `bloc-tg` sans tiret final, corrigé) et `.gen5-session-hero`/
+`#gen5-session-table` (motif numérique initial limité à gen7-14, gen5 avait aussi des sélecteurs
+`genN-` propres, motif étendu à gen1-14). Sondage final exhaustif après corrections : 0 sélecteur
+résiduel correspondant à un des motifs ci-dessus.
+
+**Validation** : balance accolades/commentaires vérifiée égale (761/761, 201/201) sur le fichier
+élagué. Vérification Chromium réelle (pas seulement une inspection du CSS) : serveur statique local
++ stub `/api/config`, captures mobile (390px) et desktop de `eleve.html` (écran de connexion) et
+`prof.html` (écran de connexion, onglet Classes) avec le style élagué, plus captures des écrans
+`eleve.html` accessibles uniquement après connexion (Tableau de bord, Mes tâches avec accordéons,
+Résultats, Mon compte avec avatar/mini-stats) en forçant l'état `hidden` via `page.evaluate` (pas
+de vraie session Supabase disponible dans ce bac à sable, CDN bloqué) — rendu visuellement intact
+sur les 8 captures : cartes, dégradés, badges, accordéons, navigation flottante, formulaires tous
+correctement stylés, aucune classe de gestion cassée par l'élagage.

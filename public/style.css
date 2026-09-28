@@ -1,0 +1,4671 @@
+/**
+ * Habillage visuel du pilote (prompt "Habillage visuel du pilote") — purement esthétique,
+ * aucune règle ici ne change la structure d'interaction (voir prof.html/eleve.html, Étape 0 :
+ * relecture confirmée, zéro attribut `class` existant dans les deux pages avant ce prompt).
+ *
+ * Sélecteurs choisis pour ne nécessiter AUCUN ajout de `class` dans le HTML (plus conservateur
+ * que ce que l'Étape 2 du prompt autorise) : chaque groupe logique a déjà un `id` stable et
+ * unique, et tous les messages de statut/erreur des deux pages partagent la même convention de
+ * nommage `statut-*` (`[id^="statut-"]`) — vérifié par relecture exhaustive des deux fichiers
+ * avant d'écrire une seule règle ci-dessous.
+ */
+
+/**
+ * Prompt "Refonte visuelle complète" — système de conception (Étape 1), remplace l'habillage
+ * ponctuel du prompt précédent. Remplacé à son tour ci-dessous par "Système visuel partagé (v3)"
+ * — l'échelle d'espacement (--espace-1 à --espace-5) et la logique de catégorisation des boutons
+ * (3 niveaux) sont les seules parties de ce chantier qui survivent telles quelles (Étape 6 du
+ * prompt v3 : "seules les valeurs de couleur changent, la logique reste identique").
+ */
+
+/**
+ * Prompt "Système visuel partagé (v3)", Étape 2 — tokens exacts du prototype validé, copiés tels
+ * quels. Anciens tokens couleur ("Refonte visuelle") supprimés et remplacés partout dans ce
+ * fichier (vérifié par grep, aucun résidu `--action-primaire`/`--fond-page`/etc.) :
+ * --action-primaire/--action-secondaire -> --violet-vif (plein) / transparent (contour, inline,
+ * plus besoin d'un token dédié) ; --action-destructive -> --danger ; --fond-page -> --bg ;
+ * --fond-carte -> --surface ; --bordure-neutre -> --border ; --texte-principal -> --text ;
+ * --texte-secondaire -> --text-muted ; --selection-fond (#F3E8FF) -> --violet-clair (#F1EBFC,
+ * teinte violette claire équivalente la plus proche du système v3) ; --police -> --font-corps
+ * (Inter, corps de texte) / --font-marque (Fraunces, titres et marque — voir judgment call
+ * RAPPORT.md : le prompt ne nomme explicitement que la ligne de salutation élève, mais charge les
+ * 2 polices "pour un système partagé" ; l'appairage display/corps est étendu à tous les titres
+ * (h2/h3/legend/summary) pour une cohérence de marque, pas seulement ce seul élément).
+ */
+:root {
+  --violet: #3B1470;
+  --violet-2: #5B21B6;
+  --violet-vif: #7C3AED;
+  --violet-clair: #F1EBFC;
+  --ambre: #E08A2E;
+  --ambre-vif: #F5A623;
+  --ambre-clair: #FDF1E2;
+  --vert: #158F52;
+  --vert-clair: #E4F6EC;
+  --vert-vif: #16A34A;
+  --danger: #B3261E;
+  --danger-clair: #FBEAE8;
+  /* Ajoutés pour les icônes colorées du bloc "Réglages" (formulaire "Créer une tâche") — même
+     convention nom/nom-clair que les tokens ci-dessus, aucun token existant modifié. */
+  --bleu: #2563EB;
+  --bleu-clair: #E7EEFC;
+  /* Retour utilisateur réel : icônes chrono (liste des tâches + composition/réglages) passées du
+     rose au jaune — `--rose`/`--rose-clair` n'avaient plus aucun autre usage dans ce fichier
+     (vérifié par grep avant suppression), remplacés ici plutôt que laissés orphelins. */
+  --jaune: #CA8A04;
+  --jaune-clair: #FEF9C3;
+  --bg: #FAF9FC;
+  --surface: #FFFFFF;
+  --surface-sunken: #F6F3FB;
+  --text: #1C1730;
+  --text-muted: #6E6785;
+  --border: #E9E4F3;
+  --radius: 20px;
+  --radius-sm: 13px;
+  --font-marque: "Fraunces", serif;
+  --font-corps: "Inter", sans-serif;
+
+  /* Échelle d'espacement fixe (chantier "Refonte visuelle", non concernée par ce prompt-ci) —
+     jamais de valeur arbitraire ailleurs dans ce fichier. */
+  --espace-1: 4px;
+  --espace-2: 8px;
+  --espace-3: 16px;
+  --espace-4: 24px;
+  --espace-5: 40px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/*
+ * Prompt "Système visuel partagé (v3)", Étape 3 — arrière-plan texturé, valeurs exactes du
+ * prototype. `max-width`/`margin-inline` (mise en page en colonne centrée, chantier "Responsive
+ * mobile") conservés : le prompt ne les mentionne pas mais ne demande pas non plus un plein-bleed
+ * — seule la barre d'app (Étape 4, plus bas) sort de cette colonne visuellement via son propre
+ * arrondi bas, tout le reste (cartes, formulaires) reste dans la colonne à 720px comme avant.
+ * `padding-bottom: 108px` (place pour la nav flottante) remplace l'ancien padding bas fixe.
+ */
+body {
+  margin: 0;
+  max-width: 720px;
+  margin-inline: auto;
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(circle at 15% 8%, rgba(124,58,237,.10), transparent 40%),
+    radial-gradient(circle at 90% 28%, rgba(245,166,35,.10), transparent 38%),
+    radial-gradient(circle at 30% 85%, rgba(124,58,237,.07), transparent 42%),
+    radial-gradient(rgba(124,58,237,.14) 1.4px, transparent 1.4px);
+  background-size: auto, auto, auto, 22px 22px;
+  background-repeat: no-repeat, no-repeat, no-repeat, repeat;
+  font-family: var(--font-corps);
+  color: var(--text);
+  line-height: 1.5;
+  padding-bottom: 108px;
+  min-height: 100vh;
+}
+
+/*
+ * Conteneur du contenu SOUS la barre d'app (Étape 4) : reprend l'ancien padding de `body`
+ * (32px/24px, chantier "Responsive mobile") — la barre d'app, elle, reste hors de ce conteneur
+ * pour occuper toute la largeur de la colonne jusqu'à ses bords, sans le padding latéral.
+ */
+.contenu-page {
+  padding: var(--espace-4) var(--espace-3) 0;
+}
+
+@media (max-width: 600px) {
+  .contenu-page {
+    padding: var(--espace-3) 14px 0;
+  }
+}
+
+h2, h3 {
+  font-family: var(--font-marque);
+  color: var(--text);
+  font-weight: 700;
+  margin-top: 0;
+}
+
+/*
+ * Prompt "Refonte visuelle complète", Étape 1 — "entre deux sections/blocs à l'intérieur d'un
+ * onglet : --espace-5" : chaque `<h2>` démarre déjà, par convention établie, une nouvelle section
+ * logique dans les deux pages (Classe, Créer une classe, Élèves de la classe, Créer une tâche...) —
+ * lui donner cet espacement avant systématiquement couvre toutes les sections sans devoir toucher
+ * chacune individuellement. `:first-child` : le 1er `<h2>` d'une carte n'a pas besoin d'espace
+ * supplémentaire, le padding de la carte (`.panneau`) en fournit déjà.
+ */
+h2 {
+  font-size: 1.25rem;
+  margin-top: var(--espace-5);
+}
+
+h2:first-child {
+  margin-top: 0;
+}
+
+h3 {
+  font-size: 1.05rem;
+  color: var(--text-muted);
+}
+
+/*
+ * Prompt "Système visuel partagé (v3)", Étape 7 — cartes génériques. `.panneau` : chaque section
+ * de premier niveau déjà groupée logiquement dans les deux pages (ajoutée en HTML à côté des `id`
+ * existants, jamais en remplacement — les `id` restent nécessaires au JS pour le montrer/cacher).
+ * `.item-liste` : chaque ligne dynamique de `#liste-taches`/`#liste-eleves-classe` (tâche/élève)
+ * devient sa propre petite carte plutôt qu'une ligne à bordure — voir la règle dédiée plus bas
+ * pour sa disposition interne (inchangée : flex, actions alignées).
+ */
+.panneau,
+.item-liste,
+.item-eleve {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 24px -18px rgba(59,20,112,.3);
+}
+
+.panneau {
+  padding: var(--espace-4);
+  margin-bottom: var(--espace-4);
+}
+
+#tableau-de-bord {
+  display: block;
+}
+
+/*
+ * Bug réel — CAUSE RÉELLE du retour utilisateur "il ne doit pas rester sur la même page" en ouvrant
+ * une tâche, trouvé en vérifiant `getComputedStyle` (Chromium réel), pas seulement `.hidden` (l'état
+ * de l'attribut DOM, déjà vérifié à tort dans la validation Chromium de la tâche précédente — voir
+ * RAPPORT.md §155 — qui ne regardait jamais le rendu visuel réel) : `display: block` ci-dessus,
+ * feuille AUTEUR, l'emporte sur `display: none` par défaut du navigateur pour `[hidden]` (feuille
+ * UTILISATEUR-AGENT) — l'origine de la règle prime sur la spécificité, EXACTEMENT le même piège de
+ * cascade déjà documenté et corrigé ailleurs dans ce fichier pour `label[hidden]`/
+ * `.groupe-champ[hidden]`/`#exercice label[hidden]`, jamais appliqué ici. Concrètement :
+ * `document.getElementById("tableau-de-bord").hidden = true` posait bien l'attribut `hidden` dans le
+ * DOM (JS.hidden === true), mais la liste des 3 catégories de tâches restait RÉELLEMENT AFFICHÉE à
+ * l'écran, superposée à l'exercice qui s'affichait par-dessus — le défilement/la confusion
+ * "toujours sur la même page" signalés venaient bien de là, pas d'un défaut de structure de
+ * navigation. Règle explicite ci-dessous, même remède que les 3 précédents.
+ */
+#tableau-de-bord[hidden] {
+  display: none;
+}
+
+/*
+ * Retour utilisateur ("il ne doit pas rester sur la même page" en ouvrant une tâche) : au-delà du
+ * bug de masquage réel corrigé juste au-dessus, un simple bascule `hidden` instantané ne "sent" pas
+ * la navigation à lui seul. Léger fondu-glissé à l'apparition de chacun des 3 écrans de ce même
+ * onglet (liste / exercice / fin de tâche) — signal complémentaire, aucun changement de structure.
+ * `[hidden]` -> visible redéclenche l'animation nativement (display:none -> block), sans JS.
+ */
+@keyframes entree-ecran-eleve {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+#tableau-de-bord,
+#exercice,
+#exercice-termine {
+  animation: entree-ecran-eleve 0.22s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #tableau-de-bord,
+  #exercice,
+  #exercice-termine {
+    animation: none;
+  }
+}
+
+/*
+ * Prompt "Tableau de bord professeur" (2/5), Étape 2 — grille de 2 cartes (Classes actives, Tâches
+ * en cours), "légèrement superposée au bas de la barre d'application (margin-top négatif, comme
+ * sur le prototype)". Choix de jugement (le prototype cité n'est pas directement consultable ici,
+ * seule sa description textuelle l'est — voir RAPPORT.md) : le chevauchement s'applique à
+ * `.grille-stats-tdb` tout entière (2 cartes + la carte ambre juste en dessous forment un seul
+ * bloc visuel qui remonte ensemble), pas à une seule carte isolée — lecture la plus cohérente
+ * visuellement d'une grille de cartes flottant sur un en-tête coloré. `margin-top: -56px` annule
+ * le padding-top de `.contenu-page` (24px) PLUS le padding interne de `.panneau`/`#composition`
+ * (24px) et empiète encore de quelques pixels dans le bas de `.barre-app` — aucun ancêtre
+ * n'applique `overflow: hidden` entre les deux (vérifié), donc ce chevauchement s'affiche
+ * réellement, pas juste en théorie ; valeur choisie puis contrôlée par capture Chromium (Étape 3).
+ * `position: relative; z-index: 2` : au-dessus du reste du contenu de `#composition` dans l'ordre
+ * d'empilement, pour que le chevauchement se voie au lieu d'être masqué dessous.
+ */
+.grille-stats-tdb {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--espace-3);
+  margin-top: -56px;
+  margin-bottom: var(--espace-3);
+  position: relative;
+  z-index: 2;
+}
+
+.carte-stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 24px -18px rgba(59,20,112,.3);
+  padding: var(--espace-3);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.carte-stat-valeur {
+  font-family: var(--font-marque);
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.1;
+}
+
+.carte-stat-libelle {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/*
+ * [refonte-mes-taches-eleve] Bandeau de mini-stats en tête de "Mes tâches" (élève) — mêmes cartes
+ * `.carte-stat` que le tableau de bord prof, mais grille dédiée : pas de chevauchement négatif
+ * (`.grille-stats-tdb` a `margin-top: -56px`, spécifique à l'en-tête prof), 3 colonnes égales.
+ */
+.grille-stats-tdb-eleve {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--espace-3);
+  margin-bottom: var(--espace-3);
+}
+
+.carte-stat-violette {
+  background: var(--fond-violet-clair, #F1EBFC);
+  border-color: var(--violet-vif);
+}
+
+.carte-stat-violette .carte-stat-valeur,
+.carte-stat-violette .carte-stat-libelle {
+  color: var(--violet-vif);
+}
+
+/*
+ * "1 carte pleine largeur en ambre (Réponses à consulter)" — fond ambre plein (pas seulement un
+ * accent de bordure), même traitement "plein + texte blanc" que les boutons primaires
+ * (--action-primaire/--violet-vif plein, Étape 6 de "Refonte visuelle") pour marquer une
+ * information à traiter, pas une simple statistique neutre comme les 2 cartes violettes du dessus.
+ */
+.carte-stat-ambre {
+  grid-column: 1 / -1;
+  background: linear-gradient(160deg, var(--ambre) 0%, var(--ambre-vif) 100%);
+  border-color: var(--ambre);
+}
+
+.carte-stat-ambre .carte-stat-valeur {
+  color: #fff;
+}
+
+.carte-stat-ambre .carte-stat-libelle {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/*
+ * [onglets-tdb-resultats-eleve] Carte "série actuelle" mise en avant en tête du nouvel onglet
+ * "Tableau de bord" élève — même palette que `.carte-stat-violette` ci-dessus, mais seule et plus
+ * grande (pas dans une grille à 3), pour lui donner la proéminence demandée ("mise en avant") sans
+ * dupliquer la mini-carte déjà présente dans le bandeau de "Mes tâches".
+ */
+.carte-serie-tdb-eleve {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--espace-4);
+  margin-bottom: var(--espace-3);
+  text-align: center;
+  background: var(--fond-violet-clair, #F1EBFC);
+  border-color: var(--violet-vif);
+}
+
+.carte-serie-tdb-eleve-valeur {
+  font-family: var(--font-marque);
+  font-weight: 700;
+  font-size: 32px;
+  color: var(--violet-vif);
+}
+
+.carte-serie-tdb-eleve-libelle {
+  font-size: 12.5px;
+  color: var(--violet-vif);
+}
+
+/*
+ * [onglets-tdb-resultats-eleve] Sous-titre de section à l'intérieur d'un `.panneau` (ex.
+ * "Prochaines échéances" du nouvel onglet "Tableau de bord", "Compétences à travailler"/
+ * "Historique" du nouvel onglet "Résultats") — plus discret que `.zone-titre` (réservé aux titres
+ * de formulaire pleine hauteur), pensé pour s'empiler sans emphase excessive au-dessus d'une liste.
+ */
+.titre-souligne {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin: 0 0 var(--espace-2);
+  padding-bottom: var(--espace-2);
+  border-bottom: 1.5px solid var(--border);
+}
+
+/*
+ * [onglets-tdb-resultats-eleve] Onglet "Résultats" élève — verdict textuel de tendance de score
+ * ("Ta progression"), au-dessus de la courbe SVG.
+ */
+.resultats-tendance-texte {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin: 0 0 var(--espace-2);
+}
+
+/* Carte compétence non maîtrisée (onglet "Résultats" élève) — même famille que `.panneau`/`.item-liste` (fond/bordure/radius), empilées avec un espacement propre. */
+.carte-competence-resultat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--espace-3);
+  margin-bottom: var(--espace-2);
+}
+
+.entete-competence-resultat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espace-2);
+}
+
+.libelle-competence-resultat {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.explication-competence-resultat {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin: 6px 0 0;
+}
+
+.badge-tendance-competence {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  flex: none;
+  white-space: nowrap;
+}
+
+.badge-tendance-progres { background: var(--vert-clair); color: var(--vert); }
+.badge-tendance-stable { background: var(--ambre-clair); color: var(--ambre); }
+.badge-tendance-difficile { background: var(--danger-clair); color: var(--danger); }
+
+/*
+ * [ajustements-resultats] Correctif retour utilisateur ("dans le graphe, on ne comprend rien") —
+ * légende en toutes lettres sous la courbe "Ta progression", jamais seulement des info-bulles au
+ * survol (inutilisables au doigt sur mobile).
+ */
+.resultats-courbe-legende {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin: 4px 0 0;
+}
+
+/*
+ * [barres-segmentees] Correctif retour utilisateur ("Rouge = 0%, Vert = 100% [...] S'il y a eu 2
+ * tâches qui ont expérimenté la compétence visée, la barre sera en 2 couleurs dont la largeur sera
+ * égale à l'importance de la compétence visée par la tâche") : piste neutre + N segments contigus
+ * en flex (un par tâche, `afficherBarreSegmentee`/`couleurDegradeScore`, public/eleve.html), chaque
+ * segment coloré individuellement en JS (`.style.backgroundColor`) selon son propre score, jamais un
+ * dégradé de fond fixe. `overflow: hidden` sur le conteneur suffit à arrondir les 2 bords extrêmes
+ * de la piste sans arrondir chaque segment individuellement.
+ */
+.barre-progression-competence {
+  background: var(--border);
+  border-radius: 999px;
+  height: 8px;
+  overflow: hidden;
+  margin-top: 10px;
+  display: flex;
+}
+
+.barre-progression-competence-segment {
+  height: 100%;
+  transition: width 0.3s ease-out;
+}
+
+/*
+ * "Liste des classes en dessous, chaque ligne avec un avatar coloré (...) et le nombre d'élèves."
+ * Réutilise `.item-liste` (Étape 7, "Système visuel partagé (v3)") pour la carte de ligne — même
+ * traitement visuel que #liste-taches/#liste-eleves-classe, cohérent avec le reste de l'app.
+ * `cursor: pointer` : signale la tapabilité (Étape 2, "Tap sur une ligne de classe : bascule...").
+ */
+#tdb-liste-classes {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--espace-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+}
+
+#tdb-liste-classes li {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-3);
+  padding: var(--espace-3);
+  cursor: pointer;
+}
+
+#tdb-liste-classes li:hover {
+  filter: brightness(0.98);
+}
+
+/*
+ * Retour utilisateur ("plus belle, plus parlante, plus design") — Option A (barres comparatives)
+ * retenue parmi 4 maquettes proposées : remplace le texte brut de `#tdb-liste-temps-variante`
+ * (tableau de bord prof, toutes classes confondues) ET `.profil-temps-variante-liste` (profil
+ * élève complet) par UN SEUL patron partagé — même ligne label+valeur, même piste/remplissage,
+ * seule la 3e ligne optionnelle change (`.temps-variante-occurrences` compte de réponses côté
+ * tableau de bord, `.temps-variante-mediane` médiane classe côté profil élève). Couleur unique
+ * (`--violet-vif`), jamais de seuil d'alerte : la longueur de la barre est un simple repère visuel
+ * relatif au maximum affiché sur CET écran, jamais un jugement de valeur.
+ */
+.temps-variante-entete {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-3);
+  margin-bottom: 4px;
+}
+
+#profil-temps-variante-conteneur h3 { font-size: 1rem; margin: 0; color: var(--text); }
+.temps-variante-souscopie { font-size: 0.8rem; color: var(--text-muted); margin: 2px 0 0; }
+
+.temps-variante-liste {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--espace-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-4);
+}
+
+.temps-variante-ligne {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.temps-variante-ligne-haut {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--espace-3);
+}
+
+.temps-variante-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.temps-variante-valeur {
+  font-family: var(--font-marque);
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--violet-vif);
+  flex-shrink: 0;
+}
+
+.temps-variante-piste {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.temps-variante-remplissage {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--violet-2), var(--violet-vif));
+  transition: width 0.3s ease-out;
+}
+
+/* Repère de médiane classe — un simple trait, jamais une 2e couleur de barre ni un delta chiffré
+   "au-dessus/en-dessous" : la valeur en toutes lettres est portée par `.temps-variante-mediane`
+   juste en dessous, jamais seulement ce trait ou un survol (inutilisable au doigt sur mobile). */
+.temps-variante-marqueur {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--text-muted);
+  border-radius: 2px;
+  transform: translateX(-50%);
+}
+
+.temps-variante-mediane,
+.temps-variante-occurrences {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* Chevron de fin de ligne (signale la tapabilité) — même classe que le prototype "Aperçu en direct" approuvé. */
+.chevron-droite {
+  margin-left: auto;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.avatar-classe {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: #fff;
+  font-family: var(--font-marque);
+  font-weight: 700;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+.tdb-classe-infos {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tdb-classe-nom {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.tdb-classe-effectif {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/*
+ * Sous-groupes existants (<details>/<fieldset>) : traitement plus léger qu'une carte pleine, pour
+ * rester visuellement subordonnés à la carte qui les contient — `--surface-sunken` (fond légèrement
+ * enfoncé, jamais `--violet-clair`, pour ne pas se confondre avec le fond des messages de
+ * statut/erreur qu'ils peuvent contenir — même défaut déjà repéré et évité au chantier "Habillage
+ * visuel").
+ */
+details {
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  margin: 16px 0;
+}
+
+details[open] {
+  padding-bottom: 16px;
+}
+
+summary {
+  font-family: var(--font-marque);
+  font-weight: 600;
+  color: var(--violet-vif);
+  cursor: pointer;
+}
+
+fieldset {
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  margin: 0 0 16px;
+}
+
+legend {
+  font-family: var(--font-marque);
+  font-weight: 600;
+  color: var(--text);
+  padding: 0 6px;
+}
+
+label {
+  display: block;
+  color: var(--text-muted);
+  font-family: var(--font-corps);
+  font-size: 0.95rem;
+  /* Prompt "Refonte visuelle complète", Étape 1 : "entre deux groupes de champs distincts :
+     --espace-4" — un label autonome (pas dans .groupe-champ, qui gère lui-même son propre espacement
+     interne) délimite un groupe de champ à lui seul. */
+  margin-bottom: var(--espace-4);
+}
+
+/*
+ * Bug réel trouvé pendant la validation Chromium de "Navigation par onglets" (Étape 3) : `display:
+ * block` ci-dessus, venant de la feuille de style AUTEUR, l'emporte sur le `display: none` par
+ * défaut du navigateur pour `[hidden]` (feuille UTILISATEUR-AGENT) — l'origine de la règle prime
+ * sur la spécificité dans la cascade, peu importe qu'`[hidden]` soit plus spécifique que `label`
+ * seul. Concrètement : `#label-resultats-classe`/`#label-resultats-tache` (prompt "Écran résultats
+ * (professeur)") restaient visibles à l'écran malgré `element.hidden = true`, bien que l'attribut
+ * `hidden` soit bien présent dans le DOM — écart entre l'attribut et le rendu réel, jamais détecté
+ * jusqu'ici car la validation précédente ne vérifiait que la présence de l'attribut, pas la
+ * visibilité effective. Règle explicite ci-dessous pour ne plus jamais dépendre de cette
+ * priorité d'origine implicite.
+ */
+label[hidden] {
+  display: none;
+}
+
+/* Libellés de champs de saisie sur écran d'exercice (eleve.html) : plusieurs par ligne, pas de saut systématique — garde le flux existant (inline), seulement la couleur/police. */
+#exercice label {
+  display: inline;
+  margin-bottom: 0;
+}
+
+/*
+ * Bug réel trouvé (report utilisateur, écran "simplifier" gen4 volet léger — deux_fractions_lineaires
+ * à 1 seule fraction réductible) et reproduit en Chromium réel : `#exercice label { display: inline }`
+ * ci-dessus (spécificité ID+élément, (1,0,1)) l'emporte sur `label[hidden] { display: none }` plus
+ * haut dans ce fichier (spécificité élément+attribut, (0,1,1)) — même piège de cascade que
+ * `label[hidden]`/`.groupe-champ[hidden]`/`#exercice button[hidden]` documentés ailleurs dans ce
+ * fichier (l'origine du rappel ne s'applique qu'AU SEIN d'une même spécificité ; ici c'est bien la
+ * spécificité elle-même, ID > attribut, qui tranche). Concrètement :
+ * `#gen4-simplifier-label-num2`/`#gen4-simplifier-label-denom2` (public/eleve.html,
+ * `afficherFractionsGen4Simplifier`) recevaient bien `.hidden = true` en JS (attribut DOM présent,
+ * confirmé) quand une seule des 2 fractions est réductible, mais restaient rendus en
+ * `display: inline` (visibles) car ce sont des `<label>` descendants de `#exercice` — l'élève voyait
+ * donc "Numérateur simplifié"/"Dénominateur simplifié" (2e ligne, vides) sous une question pourtant
+ * au singulier. Règle explicite ci-dessous (spécificité ID+élément+attribut, (1,1,1), bat les 2
+ * variantes `#exercice label` ci-dessus ET dans le bloc `@media` plus bas, quelle que soit la
+ * largeur d'écran).
+ */
+#exercice label[hidden] {
+  display: none;
+}
+
+/* Cases à cocher : alignées proprement avec leur libellé (Étape 3), portée strictement limitée
+   aux labels qui en contiennent une — jamais les labels de champ texte/nombre. */
+label:has(input[type="checkbox"]) {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-2);
+  width: fit-content;
+  /* Prompt "Responsive mobile", Étape 2 : zone tactile confortable autour de la case, sans
+     agrandir la case elle-même (accent-color/16px déjà réglés ci-dessous). */
+  min-height: 44px;
+}
+
+input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--violet-vif);
+}
+
+select,
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="datetime-local"] {
+  font-family: var(--font-corps);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: 0.95rem;
+  /* Prompt "Refonte visuelle complète", Étape 1 : "entre un label et son champ : --espace-1" —
+     s'applique quand le libellé passe au-dessus de son champ (ex. `#exercice label` empilé sur
+     mobile, voir media query plus bas) ; sans effet visuel quand label/champ restent sur la même
+     ligne (convention `<label>Texte : <input></label>` de ce pilote, déjà séparés par le texte). */
+  margin-top: var(--espace-1);
+  /* Prompt "Responsive mobile", Étape 2 : même hauteur minimale tactile que les boutons. */
+  min-height: 44px;
+  /* Prompt "Responsive mobile", Étape 1 : sans ceci, un <select> se dimensionne par défaut sur
+     son option la plus longue ("Cas général (formule du discriminant)") et déborde un écran
+     étroit — trouvé par la validation Chromium (Étape 4) à 360px, pas supposé. */
+  max-width: 100%;
+}
+
+select:focus,
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="number"]:focus,
+input[type="datetime-local"]:focus {
+  outline: none;
+  border-color: var(--violet-vif);
+}
+
+/* Champs numériques appariés (racines, CE...) : rester compacts plutôt que pleine largeur. */
+input[type="number"] {
+  width: 7em;
+}
+
+/*
+ * Prompt "Refonte visuelle complète", Étape 1 — hiérarchie stricte à 3 niveaux, jamais un bouton
+ * non catégorisé par défaut en primaire (Étape 2 : chaque bouton des 2 pages a été revu et classé
+ * explicitement — voir RAPPORT.md). `button` seul = PRIMAIRE (plein) : l'action par défaut d'une
+ * section tant qu'elle n'est pas explicitement rétrogradée. Prompt "Système visuel partagé (v3)",
+ * Étape 6 : même logique de catégorisation, seules les couleurs changent — primaire prend
+ * désormais `--violet-vif` "avec ombre" (nouveau, absent du chantier précédent).
+ */
+/*
+ * `a.bouton-lien` (prompt "Connexion élève sans code + page d'accueil", Étape 4) : "Espace
+ * professeur"/"Espace élève" deviennent de vrais boutons plutôt que des liens soulignés — un `<a>`
+ * de navigation, pas une action de formulaire, donc pas un `<button>`, mais avec l'apparence
+ * PRIMAIRE partagée ci-dessous (mêmes règles, jamais dupliquées) plus les propriétés propres à un
+ * lien (`display`/`text-decoration`/`text-align`, un `<a>` n'ayant pas le rendu natif d'un bouton).
+ */
+button,
+a.bouton-lien {
+  font-family: var(--font-corps);
+  font-weight: 600;
+  font-size: 0.95rem;
+  background: var(--violet-vif);
+  color: #FFFFFF;
+  border: 2px solid var(--violet-vif);
+  border-radius: var(--radius-sm);
+  padding: 9px 18px;
+  cursor: pointer;
+  box-shadow: 0 8px 16px -6px rgba(124,58,237,.45);
+  /* Prompt "Responsive mobile", Étape 2 : hauteur minimale confortable au doigt (~44px). Marge par
+     défaut (droite/bas) pour des boutons consécutifs jamais collés même hors `.groupe-champ` (ex.
+     "Modifier"/"Transférer"/"Désactiver" sur une ligne de #liste-eleves-classe) — `.groupe-champ`
+     la neutralise pour ses propres enfants et gère l'espacement via son `gap` à la place. */
+  min-height: 44px;
+  margin: 0 var(--espace-2) var(--espace-2) 0;
+}
+
+a.bouton-lien {
+  display: inline-block;
+  text-decoration: none;
+  text-align: center;
+}
+
+button:hover:not(:disabled),
+a.bouton-lien:hover {
+  filter: brightness(1.08);
+}
+
+/* SECONDAIRE (contour) : une action valide, mais pas la priorité de la section — ex. Modifier, Transférer, Régénérer le code. */
+.bouton-secondaire {
+  background: transparent;
+  color: var(--violet-vif);
+  box-shadow: none;
+}
+
+.bouton-secondaire:hover:not(:disabled) {
+  filter: none;
+  background: var(--violet-clair);
+}
+
+/* DESTRUCTIVE — jamais la couleur primaire (Étape 1) : Supprimer, Désactiver. Visuellement distincte pour qu'on ne clique pas dessus par réflexe en cherchant le bouton principal. */
+.bouton-destructif {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #FFFFFF;
+  box-shadow: none;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/*
+ * Prompt "Nouveau design (Aperçu en direct)" — Étape 1/plusieurs : carte de formulaire "aperçu en
+ * direct" (créer une classe / un élève / une tâche), remplace `.groupe-champ` + `<details>` pour
+ * ces 3 formulaires précis (les autres usages de `.groupe-champ` — régénérer le code, réinitialiser
+ * le mot de passe, assigner une tâche, résultats — restent inchangés, cette classe n'est PAS
+ * retirée du fichier). Reprend telles quelles les valeurs du prototype approuvé par l'utilisateur
+ * (Artifact "piste2-apercu.html") : `.carte-formulaire` correspond à son `.carte` (renommée pour
+ * éviter tout nom trop générique dans un fichier de cette taille), le reste des noms de classes est
+ * repris à l'identique pour garder une correspondance directe et traçable avec le prototype validé.
+ * `overflow: hidden` : la zone d'aperçu (fond teinté, voir `.zone-apercu` plus bas) doit border sur
+ * les coins arrondis de la carte, jamais les déborder.
+ */
+.carte-formulaire {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 24px -18px rgba(59, 20, 112, 0.3);
+  overflow: hidden;
+  margin-bottom: var(--espace-4);
+}
+
+.zone-edition {
+  padding: var(--espace-4);
+}
+
+.zone-titre {
+  font-family: var(--font-marque);
+  font-weight: 700;
+  font-size: 18px;
+  margin: 0 0 18px;
+}
+
+/* Défauts neutres — la teinte réelle (violet/vert/ambre selon le formulaire) est posée inline par carte, comme dans le prototype. */
+.zone-apercu {
+  padding: 20px var(--espace-4);
+  border-top: 1.5px dashed var(--border);
+}
+
+.zone-apercu-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.item-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 16px;
+}
+
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  color: #fff;
+  font-family: var(--font-marque);
+  font-weight: 700;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.zone-pied {
+  padding: 16px var(--espace-4) var(--espace-4);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/*
+ * Correctif : `.zone-pied` de connexion/inscription (eleve.html) place un lien à gauche via
+ * `justify-content: space-between` (inline) — sans ceci, le bouton se compresse et son libellé
+ * ("Se connecter"/"S'inscrire") repasse à la ligne. `flex-shrink: 0` garde sa taille naturelle,
+ * `white-space: nowrap` empêche le retour à la ligne même si l'espace venait à manquer.
+ */
+.zone-pied button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.champ-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 5px;
+}
+
+/* Les propriétés partagées (police/couleur/bordure/rayon/remplissage) viennent déjà de la règle générique `input[type="text"]`/etc. plus bas dans ce fichier — seule la largeur diffère ici (pleine largeur dans une carte, contre largeur intrinsèque ailleurs). */
+.champ-input {
+  width: 100%;
+}
+
+.zone-edition .grille-2col,
+.zone-edition-eleve .grille-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.zone-edition .grille-2col + .grille-2col {
+  margin-top: 14px;
+}
+
+.zone-edition-sous-titre {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 18px 0 10px;
+}
+
+/*
+ * Étape "Créer une tâche" — réglages restylés en lignes toggle/stepper, mais SANS toucher au
+ * comportement établi (voir `reponse-visible`, commentaire d'origine "n'a d'effet que si
+ * feedback_immediat" — "jamais grisée pour autant" : principe déjà en vigueur dans ce fichier,
+ * repris ici pour `aide-penalite-pourcent`, jamais `disabled` malgré l'indentation visuelle du
+ * prototype qui, elle, grisait ce champ — écart volontaire par rapport au prototype, pour rester
+ * cohérent avec une décision déjà actée ailleurs dans ce même formulaire).
+ */
+.ligne-reglage {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.ligne-reglage:last-child {
+  border-bottom: none;
+}
+
+.ligne-reglage-indent {
+  padding-left: 18px;
+  border-left: 2px solid var(--border);
+  margin-left: 2px;
+}
+
+.ligne-reglage > span:first-child {
+  font-size: 14px;
+}
+
+/*
+ * Icônes colorées devant chaque libellé de réglage (retour utilisateur réel) — `.libelle-reglage`
+ * est le nouveau premier enfant de `.ligne-reglage` (remplace le `<span>` texte nu), donc la règle
+ * `font-size: 14px` ci-dessus s'applique encore telle quelle. `.icone-reglage` est un badge carré à
+ * coins arrondis, fond teinté clair + icône `stroke="currentColor"` dans la teinte vive
+ * correspondante (paire `*-claire` pour les réglages indentés, cohérente avec la relation
+ * parent/enfant déjà marquée par l'indentation de `.ligne-reglage-indent`).
+ */
+.libelle-reglage {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.icone-reglage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  flex-shrink: 0;
+}
+
+.icone-reglage-verte { background: var(--vert-clair); color: var(--vert); }
+.icone-reglage-verte-claire { background: var(--vert-clair); color: var(--vert-vif); opacity: 0.75; }
+.icone-reglage-ambre { background: var(--ambre-clair); color: var(--ambre); }
+.icone-reglage-violette { background: var(--violet-clair); color: var(--violet-vif); }
+.icone-reglage-violette-claire { background: var(--violet-clair); color: var(--violet-vif); opacity: 0.75; }
+.icone-reglage-bleue { background: var(--bleu-clair); color: var(--bleu); }
+.icone-reglage-jaune { background: var(--jaune-clair); color: var(--jaune); }
+.icone-reglage-jaune-claire { background: var(--jaune-clair); color: var(--jaune); opacity: 0.75; }
+
+/*
+ * Case à cocher native stylée en interrupteur (technique `appearance: none` + `::before` positionné) —
+ * le `<input type="checkbox">` reste un vrai `<input>` natif (même id, même `.checked` lu par le JS
+ * de soumission, aucun changement de comportement) : seule l'apparence change.
+ */
+.toggle-natif {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 38px;
+  height: 21px;
+  border-radius: 999px;
+  background: var(--border);
+  position: relative;
+  flex-shrink: 0;
+  cursor: pointer;
+  margin: 0;
+  transition: background 0.15s;
+}
+
+.toggle-natif::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: left 0.15s;
+}
+
+.toggle-natif:checked {
+  background: var(--violet-vif);
+}
+
+.toggle-natif:checked::before {
+  left: 19px;
+}
+
+/*
+ * Correctif (retour utilisateur réel) : `reponse-visible`/`aide-penalite-pourcent` sont désormais
+ * `disabled` quand leur case parente est décochée (`appliquerVerrouReglages`, prof.html) — grisage
+ * visuel explicite, sinon un interrupteur/champ `disabled` resterait visuellement identique à un
+ * actif (perte du seul repère "verrouillé" que l'utilisateur peut voir).
+ */
+.toggle-natif:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#aide-penalite-pourcent:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/*
+ * Stepper (tentatives supplémentaires) — l'`<input type="number">` reste l'unique source de vérité
+ * (même id `tentatives-supplementaires`, même `.value` lu à la soumission) : les 2 boutons −/+
+ * (JS, voir plus bas dans prof.html) ne font qu'incrémenter/décrémenter sa valeur et déclenchent un
+ * évènement `input` pour rester cohérents avec tout listener déjà branché dessus.
+ */
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stepper-bouton {
+  width: 24px;
+  height: 24px;
+  /* Correctif du même bug que `input.stepper-valeur` ci-dessous : `height: 24px` seul ne suffit pas
+     à contrer `button { min-height: 44px; }` (plus haut) — `min-height`/`height` sont 2 propriétés
+     distinctes, `min-height` l'emporte quand il dépasse `height`, quelle que soit la spécificité. */
+  min-height: 24px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  box-shadow: none;
+  margin: 0;
+}
+
+/*
+ * Bug signalé par l'utilisateur ("+" absent sur mobile étroit) — cause réelle trouvée par lecture
+ * du CSS, pas supposée : `input[type="number"] { width: 7em; }` (plus haut dans ce fichier, pour les
+ * champs numériques appariés racines/CE) a pour sélecteur `input[type="number"]`, spécificité
+ * (0,1,1) — un attribut ET un type d'élément — STRICTEMENT supérieure à la classe seule
+ * `.stepper-valeur` (0,1,0), quel que soit l'ordre des règles dans le fichier. Le champ du stepper
+ * héritait donc de `width: 7em` (~106px) au lieu de `28px`, poussant le bouton "+" bien au-delà de
+ * la largeur prévue de la ligne — invisible/inatteignable sur un écran étroit. Correctif : le
+ * sélecteur devient `input.stepper-valeur` (élément + classe = (0,1,1), à spécificité égale avec
+ * `input[type="number"]`, donc départagé par l'ordre du fichier — cette règle-ci vient après, elle
+ * gagne enfin comme prévu) plutôt qu'un `!important` (aucun autre `!important` dans ce fichier).
+ */
+input.stepper-valeur {
+  width: 28px;
+  text-align: center;
+  border: none;
+  background: transparent;
+  font-family: var(--font-corps);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  padding: 0;
+  min-height: 0;
+  margin-top: 0;
+  -moz-appearance: textfield;
+}
+
+input.stepper-valeur::-webkit-inner-spin-button,
+input.stepper-valeur::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/*
+ * Emoji devant le libellé d'un bouton plein (même principe que `.nav-icone` de la nav flottante) —
+ * jamais de rond/fond ajouté autour, l'emoji est déjà coloré. Correctif signalé par l'utilisateur :
+ * le "+" de "Créer" (les 3 boutons de création) est un caractère TEXTE (U+002B), pas un emoji
+ * multicolore (`➕`/U+2795 rendait en gris foncé fixe sur le fond violet plein — invisible/illisible,
+ * un symbole Unicode dont la présentation par défaut ne garantit pas d'hériter de `color`) — il suit
+ * donc `color:#fff` du bouton comme tout autre caractère. `font-weight` renforcé pour rester bien
+ * visible malgré `font-size` réduit par rapport aux vrais emoji multicolores (🎯🔑✅ etc., inchangés,
+ * eux affichent déjà leurs propres couleurs quel que soit le fond).
+ */
+.emoji-inline {
+  font-size: 1.05em;
+  line-height: 1;
+  font-weight: 800;
+}
+
+/*
+ * Prompt "Refonte visuelle complète", Étape 1 — "Regroupement visuel" : un champ et le bouton qui
+ * agit dessus immédiatement doivent être visuellement reconnaissables comme un groupe. Alignés sur
+ * une ligne avec un espacement cohérent (`gap: --espace-3`, le minimum demandé "entre un champ et
+ * le bouton qui le valide") sur écran large ; sur mobile (media query plus bas), un conteneur
+ * commun (léger fond + bordure) rend le groupe visible même une fois empilé verticalement.
+ * `> *` neutralise les marges individuelles (label/bouton) : seul le `gap` du conteneur espace les
+ * enfants, jamais les deux cumulés.
+ */
+.groupe-champ {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--espace-3);
+  margin-bottom: var(--espace-4);
+}
+
+/*
+ * Même bug d'origine de cascade que `label[hidden]` plus haut (trouvé par la validation Chromium
+ * de "Refonte visuelle complète", pas supposé) : `display: flex` ci-dessus (AUTEUR) l'emporte sur
+ * `display: none` par défaut du navigateur pour `[hidden]` (UTILISATEUR-AGENT), quelle que soit la
+ * spécificité. Règle explicite ci-dessous, même remède.
+ */
+.groupe-champ[hidden] {
+  display: none;
+}
+
+.groupe-champ > * {
+  margin: 0;
+}
+
+/*
+ * Prompt "Corrections + composants visuels" — retour utilisateur après livraison (RAPPORT.md §42) :
+ * "Créer un élève manuellement"/"Créer une tâche" rejoignent `.groupe-champ` (prof.html) pour
+ * bénéficier de sa carte mobile (media query plus bas). `#composition-dynamique` (conteneur des
+ * champs de composition injectés en JS par `chargerCatalogue`) passe en `display: contents` : sa
+ * boîte disparaît de la mise en page, ses `<label>` enfants deviennent des items flex directs de
+ * `.groupe-champ` — sans ça, ils resteraient un sous-groupe imbriqué non affecté par le `gap`/
+ * `flex-wrap` du parent. `display: contents` ne change PAS la sélection `.groupe-champ > *`
+ * (combinateur DOM, pas boîte de rendu) : les `<label>` de `#composition-dynamique` restent
+ * `.groupe-champ > #composition-dynamique > label`, donc hors de portée de cette règle — marge
+ * neutralisée séparément ci-dessous, même valeur (0).
+ */
+/*
+ * Prompt "Sélecteur hiérarchique de composition" (1/3) : `#composition-dynamique` contenait jusque
+ * là une liste plate de `<label>` (`display: contents` ci-dessus, comptés comme items flex directs
+ * de `.groupe-champ`). Il contient désormais un arbre à 3 niveaux de `<details>` imbriqués (niveau
+ * → chapitre/thème → générateur) — un contenu de bloc qui n'a plus de sens comme item flex inline :
+ * prend toute la largeur de la ligne comme un sous-groupe à part entière (`flex-basis: 100%`),
+ * pousse le reste du formulaire (cases à cocher, boutons) sur les lignes suivantes du `flex-wrap`
+ * déjà en place sur `.groupe-champ`, sans rien y changer.
+ */
+#composition-dynamique {
+  display: block;
+  flex-basis: 100%;
+  width: 100%;
+}
+
+/*
+ * Nesting à 3 (désormais 4 avec `.arbre-famille`, gen13 : niveau = sous-famille de la famille — voir
+ * `construireGroupeVariantes`) niveaux de `<details>` : les règles génériques `details`/`summary`
+ * (plus haut dans ce fichier) donnent déjà le fond `--surface-sunken`/la police Fraunces — répétées
+ * telles quelles à cette profondeur, elles deviendraient visuellement lourdes (marge/padding pleins
+ * à chaque palier). Marge/padding réduits progressivement avec la profondeur ci-dessous, mêmes
+ * tokens de couleur/rayon partout (jamais une palette parallèle à celle du reste du système).
+ */
+#composition-dynamique .arbre-niveau {
+  margin: 0 0 var(--espace-2);
+}
+
+#composition-dynamique .arbre-chapitre {
+  margin: 10px 0;
+  padding: 10px 14px;
+  background: var(--surface);
+}
+
+#composition-dynamique .arbre-generateur {
+  margin: 8px 0;
+  padding: 8px 12px;
+}
+
+#composition-dynamique .arbre-chapitre summary,
+#composition-dynamique .arbre-generateur summary {
+  font-size: 0.95rem;
+}
+
+/* Étape 2 : niveau grisé ("5e math 6h"/"6e math 4h", 0 générateur dans ce dépôt) — visible, jamais masqué, juste atténué. */
+#composition-dynamique .arbre-niveau-vide {
+  opacity: 0.65;
+}
+
+#composition-dynamique .arbre-niveau-vide summary {
+  color: var(--text-muted);
+}
+
+#composition-dynamique .arbre-message-vide {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin: 4px 0 0;
+}
+
+/*
+ * Ligne "nombre d'exercices" (une variante, ou un générateur "aucune" — Étape 1.1 — directement) :
+ * un `<label>` simple, pas un `<details>`. `margin: 0` neutralise le `margin-bottom: --espace-4`
+ * (24px) de la règle `label` générique (plus haut) — beaucoup trop pour une liste dense de lignes,
+ * même raisonnement que `#composition-dynamique > label { margin: 0; }` avant ce prompt.
+ */
+#composition-dynamique .ligne-variante {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 5px 0;
+  font-size: 0.9rem;
+}
+
+/*
+ * Correctif (retour utilisateur réel, capture d'écran) : ce champ était un `<input type="number">`
+ * brut — le spinner natif du navigateur (discret sur Chromium, mais rendu par d'autres navigateurs
+ * comme 2 gros boutons non stylés) restait visible, sans aucun rapport avec le design montré.
+ * `creerChampNombreExercices` (prof.html) enveloppe désormais chaque champ dans le composant
+ * `.stepper`/`.stepper-bouton`/`.stepper-valeur` déjà existant pour "Tentatives supplémentaires"
+ * (déjà traité contre ce même bug, `-moz-appearance: textfield` + masquage des spin-buttons
+ * webkit, plus haut dans ce fichier) — jamais une 2e implémentation. `gap` réduit à 6px (au lieu des
+ * 10px de `.stepper` seul) pour rester compact dans une liste dense de lignes.
+ */
+#composition-dynamique .ligne-variante .stepper {
+  gap: 6px;
+}
+
+#composition-dynamique .ligne-variante .stepper-bouton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#composition-dynamique .ligne-variante input.stepper-valeur:disabled {
+  opacity: 0.5;
+}
+
+/*
+ * Correctif "Chrono par variante" — champ optionnel "durée (secondes)" par ligne de composition
+ * (`creerChampDureeVariante`, prof.html). Étroit et discret (comme `#chrono-duree-secondes` au
+ * niveau tâche, style.css inline dans prof.html) — n'alourdit pas une liste déjà dense de lignes de
+ * composition.
+ *
+ * Correctif (retour utilisateur réel) : ce champ doit apparaître SOUS la ligne "nombre
+ * d'exercices" plutôt que sur la même ligne, avec une icône chrono à gauche et le libellé
+ * "secondes" à droite. `.ligne-duree-variante` (le wrapper créé par `creerChampDureeVariante`)
+ * prend `flex-basis: 100%` pour forcer un retour à la ligne dans `.ligne-variante`
+ * (`display: flex; flex-wrap: wrap`, plus haut) — même technique déjà en place pour
+ * `.explication-competence` juste en dessous dans ce fichier. `hidden` (masqué sauf en
+ * `chrono_mode="par_ecran"`) porte désormais sur ce WRAPPER — `display: flex` en AUTEUR l'emporte
+ * sur `[hidden]` (UTILISATEUR-AGENT) sans la règle `[hidden]{display:none}` explicite ci-dessous,
+ * même piège de cascade que `.ligne-variante[hidden]` plus haut dans ce fichier.
+ */
+#composition-dynamique .ligne-duree-variante {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-basis: 100%;
+  margin-left: 2px;
+}
+
+#composition-dynamique .ligne-duree-variante[hidden] {
+  display: none;
+}
+
+#composition-dynamique .icone-duree-variante {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  background: var(--jaune-clair);
+  color: var(--jaune);
+}
+
+#composition-dynamique .ligne-duree-variante input.champ-chrono-variante {
+  width: 58px;
+  text-align: center;
+  font-size: 0.85rem;
+}
+
+#composition-dynamique .ligne-duree-variante input.champ-chrono-variante:disabled {
+  opacity: 0.5;
+}
+
+#composition-dynamique .libelle-duree-variante {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* Étape 1.3 : icône de remarque, discrète, jamais bloquante pour la sélection — info-bulle native via l'attribut `title`. */
+#composition-dynamique .icone-note {
+  cursor: help;
+  color: var(--ambre);
+}
+
+/*
+ * Prompt "Recherche + Sélection dans l'arbre de composition" — `.ligne-variante` (plus haut dans ce
+ * fichier) déclare `display: flex` en AUTEUR : même piège de cascade que `.groupe-champ[hidden]`/
+ * `label[hidden]` documentés ailleurs dans ce fichier — sans cette règle explicite, masquer un
+ * générateur/une variante non trouvé(e) par la recherche (`filtrerArbreComposition`, prof.html)
+ * resterait visible malgré l'attribut `hidden` posé par JS. `.arbre-chapitre`/`.arbre-niveau`
+ * (aucun `display` déclaré en AUTEUR) n'ont pas besoin de cette règle : le `[hidden]` natif du
+ * navigateur (UTILISATEUR-AGENT) y agit déjà sans concurrence.
+ */
+#composition-dynamique .ligne-variante[hidden] {
+  display: none;
+}
+
+/* Bouton "?" d'exemple par générateur/variante : réutilise tel quel `.btn-explication-competence`/
+   `.explication-competence`/`.explication-competence-exemple` (voir prof.html, construireBoutonExemple)
+   — mêmes classes que le profil élève, jamais une 2e paire de règles CSS quasi identiques. Seul ajout
+   nécessaire ici : forcer le panneau sur toute la largeur de la ligne flex qui le contient
+   (`.ligne-variante`, `flex-wrap: wrap` déjà en place plus haut dans ce fichier), pour qu'il
+   s'affiche sous la ligne plutôt que compressé à côté du champ "nombre d'exercices". */
+#composition-dynamique .ligne-variante .explication-competence {
+  flex-basis: 100%;
+}
+
+/*
+ * Onglets "Parcourir"/"Sélection" au-dessus de l'arbre — même pilule que `.chip-categorie` (tokens
+ * de couleur), jamais une nouvelle palette : `--violet-vif` actif, `--surface-sunken` inactif.
+ */
+.onglets-composition {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  background: var(--surface-sunken);
+  padding: 4px;
+  border-radius: 999px;
+}
+.onglet-composition {
+  flex: 1;
+  text-align: center;
+  font-family: var(--font-corps);
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 7px 8px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.onglet-composition[aria-pressed="true"] {
+  background: var(--violet-vif);
+  color: #fff;
+}
+
+/*
+ * Correctif urgent (retour utilisateur réel : l'onglet "Sélection" changeait bien d'apparence
+ * — pressé/violet — mais n'affichait jamais son contenu, l'arbre "Parcourir" restant visible en
+ * dessous) : ce bloc déclarait `display: block` en AUTEUR juste après un commentaire affirmant le
+ * contraire — exactement le piège de cascade documenté ailleurs dans ce fichier
+ * (`.groupe-champ[hidden]`/`label[hidden]`/`.ligne-variante[hidden]` plus haut) : le `[hidden]`
+ * natif du navigateur (UTILISATEUR-AGENT, `display: none`) perd contre TOUT `display` déclaré en
+ * AUTEUR, quelle que soit la spécificité — les 2 vues restaient donc simultanément visibles,
+ * empilées, quel que soit l'onglet actif. `.vue-composition` n'a besoin d'AUCUN `display` déclaré
+ * (un `<div>` est déjà `block` par défaut) : supprimé plutôt que remplacé par un `[hidden]`
+ * explicite, pour que ce bloc ne redevienne jamais un piège identique à l'avenir.
+ */
+
+.recherche-composition {
+  position: relative;
+  margin-bottom: 10px;
+}
+.recherche-composition input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px 10px 34px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-corps);
+  font-size: 13.5px;
+  color: var(--text);
+  background: var(--surface-sunken);
+}
+.recherche-composition input:focus-visible {
+  outline: 2px solid var(--violet-vif);
+  outline-offset: 1px;
+  border-color: var(--violet-vif);
+  background: var(--surface);
+}
+.recherche-composition::before {
+  content: "🔍";
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 13px;
+  opacity: 0.6;
+}
+
+.chips-composition {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.chip-niveau-composition {
+  font-family: var(--font-corps);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.chip-niveau-composition[aria-pressed="true"] {
+  background: var(--violet);
+  border-color: var(--violet);
+  color: #fff;
+}
+.chip-niveau-vide {
+  opacity: 0.6;
+}
+
+.compte-resultats-composition {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: -4px 0 10px;
+}
+
+/* Badge par chapitre, dans le `<summary>` de `.arbre-chapitre` — même pilule violette que
+   `.badge-flottant-composition`/`.badge-compte` du profil élève (compte des exercices déjà réglés
+   pour ce chapitre, recalculé par `rafraichirBadgesChapitres`, prof.html). */
+#composition-dynamique .badge-compte {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--violet-vif);
+  background: var(--violet-clair);
+  border-radius: 999px;
+  padding: 2px 8px;
+  margin-left: 6px;
+}
+
+/* Onglet "Sélection" : liste groupée par chapitre de ce qui a été choisi, avec un bouton "×" pour
+   retirer — même famille visuelle que `.groupe-selection-b`/`.item-selection-b` des propositions de
+   design initiales, adaptée aux classes déjà en place ici. */
+.groupe-selection-composition h4 {
+  font-family: var(--font-corps);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin: 14px 0 6px;
+}
+.groupe-selection-composition:first-child h4 {
+  margin-top: 0;
+}
+.item-selection-composition {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
+  padding: 9px 10px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+.retirer-selection-composition {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 6px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.retirer-selection-composition:hover {
+  color: var(--danger);
+}
+.vide-selection-composition {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 30px 10px;
+}
+
+/*
+ * Étape 3 : badge flottant, toujours visible même en défilant — `position: fixed`, indépendant du
+ * défilement de `<main>`. Placé sous `.barre-app` (qui n'est PAS fixe : `position: relative`, elle
+ * défile avec la page, contrairement à ce badge) pour ne jamais chevaucher le menu de compte en
+ * haut de page, et nettement au-dessus de `.nav-flottante` (fixe en bas, z-index 20) pour ne jamais
+ * s'y superposer non plus.
+ */
+/*
+ * `display: inline-block`, pas `inline-flex` : bug réel trouvé par la capture Chromium de ce
+ * prompt (Étape 5) — en `inline-flex`, le `<span>` du total et le texte qui le suit (" exercice(s)
+ * sélectionné(s)") deviennent 2 items flex anonymes séparés, chacun sa propre boîte de type bloc,
+ * qui tronque l'espace au début/à la fin de sa propre ligne — l'espace entre les deux disparaissait
+ * ("6exercice(s)"), jamais voulu. `inline-block` (pas de flex ici, un simple texte n'en a pas besoin)
+ * traite tout le contenu comme un seul flux inline normal, espace inclus.
+ */
+.badge-flottant-composition {
+  position: fixed;
+  top: 100px;
+  right: 16px;
+  z-index: 15;
+  display: inline-block;
+  padding: 8px 16px;
+  background: var(--violet-vif);
+  color: #fff;
+  font-family: var(--font-corps);
+  font-weight: 700;
+  font-size: 0.85rem;
+  border-radius: 999px;
+  box-shadow: 0 8px 20px -6px rgba(59,20,112,.45);
+}
+
+/* Même piège de cascade que `.groupe-champ[hidden]`/`.badge-serie[hidden]` (plus haut/bas dans ce fichier) : `display: inline-block` (AUTEUR) l'emporterait sur `[hidden]` (UTILISATEUR-AGENT) sans cette règle explicite. */
+.badge-flottant-composition[hidden] {
+  display: none;
+}
+
+/*
+ * Lignes d'action (une entrée + ses boutons, ex. une tâche ou un élève) : chaque ligne est
+ * désormais sa propre carte (`.item-liste`, Étape 7 — règle de fond/bordure/radius/ombre partagée
+ * avec `.panneau` plus haut), espacées par un `gap` de conteneur plutôt qu'une bordure de
+ * séparation (obsolète depuis que chaque ligne a sa propre bordure de carte).
+ */
+#liste-taches,
+#liste-eleves-classe {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--espace-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+}
+
+/*
+ * Refonte "Onglet Classes" (Option C) : `#liste-eleves-classe li` passe de "row" (une seule ligne,
+ * quand `.ligne-eleve` PORTAIT le chrome de carte elle-même) à "column" — le chrome de carte migre
+ * sur `.item-eleve` (voir `.panneau, .item-liste, .item-eleve` plus haut), `.ligne-eleve` ne
+ * décrit plus que la 1re ligne interne (avatar/nom/actions), `.stats-ligne-eleve` la 2e (nb
+ * réponses + dernière activité). Règle par sélecteur `#id li` conservée telle quelle pour l'état
+ * `.item-liste` (formulaires inline édition/transfert, 1 seul enfant `.groupe-champ` — la direction
+ * column ne change rien à son rendu).
+ */
+#liste-eleves-classe li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--espace-3);
+}
+
+/*
+ * Demande utilisateur (maquette fournie) : bouton "+ Ajouter un élève" en pied de la liste
+ * `#liste-eleves-classe`, pilule pleine largeur — bascule `#carte-ajouter-eleve` (le formulaire
+ * "Ajouter un élève", `hidden` par défaut désormais, voir JS `btn-toggle-ajouter-eleve`) plutôt que
+ * de le laisser en permanence déplié comme avant. Reprend `button` (violet plein, déjà PRIMAIRE) —
+ * seules la largeur/le rayon/le padding diffèrent ici, aucune couleur redéfinie.
+ */
+.bouton-ajouter-eleve {
+  width: 100%;
+  border-radius: 999px;
+  padding: 14px 20px;
+  font-size: 1rem;
+  margin: 0 0 var(--espace-4);
+}
+
+/*
+ * Prompt "Corrections + composants visuels", Étape 3 : contenu de `#liste-taches` restructuré
+ * (titre/méta sur 2 lignes/badge/actions) plutôt qu'une seule ligne de texte concaténé — la carte
+ * `.item-liste` elle-même (fond/bordure/radius/ombre, plus haut dans ce fichier) reste inchangée,
+ * seule sa disposition interne passe de `row` (une ligne) à `column` pour empiler ce nouveau
+ * contenu. Pas de CSS fournie pour `.titre-item`/`.meta-item`/`.badge`/`.actions-item` par le
+ * prompt (seul le gabarit HTML l'est) : ajout minimal cohérent avec les tokens déjà existants
+ * (mêmes `--vert`/`--vert-clair` que `.retour-correct`, `--text-muted` déjà utilisé partout ailleurs
+ * pour du texte secondaire) — voir RAPPORT.md.
+ */
+#liste-taches li {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--espace-2);
+  padding: var(--espace-3);
+}
+
+.titre-item { font-weight: 700; font-size: 1rem; color: var(--text); }
+.meta-item { font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; }
+
+.badge { display: inline-flex; align-items: center; font-size: 0.75rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
+.badge-succes { background: var(--vert-clair); color: var(--vert); }
+
+.actions-item { display: flex; flex-wrap: wrap; gap: var(--espace-2); }
+/* Neutralise la marge par défaut de `button` (voir plus haut) : `.actions-item` espace déjà ses
+   enfants via son propre `gap`, même raison que `.groupe-champ > *`/`.actions-compte > *`. */
+.actions-item > * {
+  margin: 0;
+}
+
+/*
+ * "Liste des tâches" (remplace `#liste-taches`/`.item-liste` ci-dessus pour les tâches
+ * spécifiquement — les autres listes qui partagent encore `.item-liste` ne sont pas concernées) :
+ * vraie table triable/filtrable, validée au préalable dans un aperçu interactif avant d'être
+ * appliquée ici (voir RAPPORT.md). Toujours un vrai `<table>` — jamais reformaté en cartes, même
+ * en dessous de 600px (seul le JEU DE COLONNES visibles change, via `appliquerRegimeTaches()`,
+ * pas la structure).
+ */
+.sous-titre-liste-taches {
+  margin: 0 0 var(--espace-3);
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+/*
+ * Retour utilisateur : les 4 tuiles `.stat-tache` (grille 2×2, gros chiffres) "prenaient de la
+ * place pour rien" — remplacées par une rangée de puces compactes réutilisant `.badge-statut-tache`
+ * (même composant que la colonne Statut de la table, voir plus bas) : mêmes couleurs, taille
+ * cohérente, encombrement minimal. `.stat-tache` retirée (plus aucun usage dans ce fichier).
+ */
+.stats-taches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: var(--espace-3);
+}
+
+.barre-outils-taches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: var(--espace-2);
+}
+.recherche-taches {
+  position: relative;
+  flex: 1 1 220px;
+}
+.recherche-taches svg {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.recherche-taches input {
+  width: 100%;
+  font-family: var(--font-corps);
+  font-size: 14px;
+  padding: 10px 12px 10px 34px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+  box-sizing: border-box;
+}
+.recherche-taches input:focus {
+  outline: 2px solid var(--violet-vif);
+  outline-offset: 1px;
+}
+
+.puces-statut-taches {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.puce-statut-tache {
+  font-family: var(--font-corps);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.puce-statut-tache:hover { border-color: var(--violet-vif); color: var(--violet-vif); }
+.puce-statut-tache.actif {
+  background: var(--violet-vif);
+  border-color: var(--violet-vif);
+  color: #fff;
+}
+
+.compte-resultats-taches {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin: 0 0 10px;
+}
+
+.table-scroll-taches {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--espace-2);
+}
+.table-scroll-taches table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.table-scroll-taches thead th {
+  background: var(--surface-sunken);
+  text-align: left;
+  padding: 0;
+  border-bottom: 1.5px solid var(--border);
+}
+.table-scroll-taches th button.entete-tri-tache {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 10px 12px;
+  font-family: var(--font-corps);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  cursor: pointer;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+.table-scroll-taches th button.entete-tri-tache:hover { color: var(--violet-vif); }
+.table-scroll-taches th button.entete-tri-tache:focus-visible { outline: 2px solid var(--violet-vif); outline-offset: -2px; border-radius: 4px; }
+.table-scroll-taches th button.entete-tri-tache.tri-actif { color: var(--violet-vif); }
+.table-scroll-taches th.col-actions-taches .entete-tri-tache { cursor: default; }
+.table-scroll-taches th.col-actions-taches .entete-tri-tache:hover { color: var(--text-muted); }
+
+.icone-tri-tache { display: flex; flex-direction: column; line-height: 0; flex-shrink: 0; }
+.icone-tri-tache svg { display: block; }
+.icone-tri-tache svg:first-child { margin-bottom: 1px; }
+.fleche-tri-inactive { color: var(--border); }
+.fleche-tri-active { color: var(--violet-vif); }
+
+.table-scroll-taches tbody tr { border-bottom: 1px solid var(--border); }
+.table-scroll-taches tbody tr:last-child { border-bottom: none; }
+.table-scroll-taches tbody tr:hover { background: var(--surface-sunken); }
+.table-scroll-taches td {
+  padding: 11px 12px;
+  vertical-align: middle;
+  color: var(--text);
+}
+
+.cel-intitule-tache {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 220px;
+}
+.nom-tache-cel { font-weight: 600; }
+
+/*
+ * Retour utilisateur réel : icône chrono devant l'intitulé, "Liste des tâches", pour toute tâche
+ * dont `chrono_mode` n'est pas "aucun" (`construireLignesTache`, prof.html — `iconeChronoTache`).
+ * Même teinte jaune que "Chrono"/"Durée" ailleurs dans ce fichier (`--jaune`/`--jaune-clair`,
+ * `.icone-reglage-jaune*`/`.icone-duree-variante`) — cohérence de code couleur pour tout ce qui
+ * touche au chrono dans l'application, jamais une teinte isolée pour ce seul badge.
+ */
+.icone-chrono-tache {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  flex-shrink: 0;
+  background: var(--jaune-clair);
+  color: var(--jaune);
+}
+
+.cel-nombre-tache { font-variant-numeric: tabular-nums; font-weight: 600; }
+
+.badge-statut-tache {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 4px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.badge-statut-tache::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.statut-tache-non-assignee { background: var(--surface-sunken); color: var(--text-muted); border: 1px solid var(--border); }
+.statut-tache-a-venir { background: var(--ambre-clair); color: var(--ambre); }
+.statut-tache-en-cours { background: var(--vert-clair); color: var(--vert); }
+.statut-tache-terminee { background: var(--violet-clair); color: var(--violet-2); }
+/* Puce "total" des stats "Liste des tâches" (pas un statut réel : jamais le petit point de
+   `.badge-statut-tache::before`, qui n'aurait aucune couleur à porter). */
+.statut-tache-total { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+.statut-tache-total::before { display: none; }
+
+.cel-date-tache { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cel-date-tache .vide-date-tache { color: var(--text-muted); }
+.puce-classes-tache {
+  display: inline-block;
+  margin-left: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--violet-vif);
+  background: var(--violet-clair);
+  border-radius: 999px;
+  padding: 1px 6px;
+  vertical-align: middle;
+  cursor: help;
+}
+
+.cel-cree-tache {
+  color: var(--text-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.col-actions-taches { text-align: right; }
+.conteneur-menu-tache { position: relative; display: inline-block; }
+.bouton-menu-tache {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.bouton-menu-tache:hover { background: var(--surface-sunken); color: var(--text); }
+.menu-deroulant-tache {
+  position: absolute;
+  right: 0;
+  top: 32px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px -12px rgba(59, 20, 112, .4);
+  min-width: 190px;
+  padding: 6px;
+  z-index: 5;
+}
+
+/* Retour utilisateur réel : "Modifier"/"Assigner"/"Dupliquer"/"Imprimer"/"Supprimer" (menu ⋯) sont
+   tous des boutons icône-seule regroupés dans une seule rangée `.menu-icones-tache` — `.destructif-
+   icone` (Supprimer) en rouge, même paire de couleurs que `.bouton-detail-icone.danger` (détail
+   dépliable mobile), jamais un 2e style pour la même sémantique destructive. */
+.menu-icones-tache {
+  display: flex;
+  gap: 4px;
+}
+.menu-deroulant-tache button.bouton-icone-menu-tache {
+  all: unset;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 32px;
+  border-radius: 8px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.menu-deroulant-tache button.bouton-icone-menu-tache:hover { background: var(--surface-sunken); color: var(--text); }
+.menu-deroulant-tache button.bouton-icone-menu-tache.destructif-icone { color: var(--danger); }
+.menu-deroulant-tache button.bouton-icone-menu-tache.destructif-icone:hover { background: var(--danger-clair); color: var(--danger); }
+
+.ligne-vide-taches td {
+  text-align: center;
+  padding: 34px 12px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+/*
+ * En dessous de 600px (même seuil que le reste du fichier) : bascule vers un jeu de colonnes
+ * réduit (chevron + crayon+intitulé + statut + dates compactées) avec détail dépliable par ligne
+ * (nb d'exercices, créé le, et — si la tâche n'est pas assignée — Supprimer). Toujours un
+ * `<table>`/`<tr>`/`<td>` réel, jamais reformaté en cartes empilées — validé avec l'utilisateur
+ * (voir RAPPORT.md, "Option B"), l'alternative "colonne fixe + défilement horizontal" (Option A)
+ * ayant été écartée à son profit.
+ */
+.col-large-taches { display: table-cell; }
+.col-compacte-taches { display: none; }
+.ligne-detail-taches { display: none; }
+.ligne-detail-taches.ouverte { display: table-row; }
+@media (max-width: 600px) {
+  .col-large-taches { display: none; }
+  .col-compacte-taches { display: table-cell; }
+  .table-scroll-taches table { font-size: 13px; }
+  /* En-têtes de colonnes masqués en compact (même parti pris que l'aperçu validé, "Option B") :
+     chaque ligne compacte porte déjà son statut/ses dates en clair, un en-tête n'y ajoute rien. */
+  .table-scroll-taches thead { display: none; }
+}
+
+.cel-chevron-tache { width: 22px; }
+.bouton-chevron-tache {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+@media (prefers-reduced-motion: reduce) { .bouton-chevron-tache { transition: none; } }
+.bouton-chevron-tache.ouvert { transform: rotate(90deg); color: var(--violet-vif); }
+
+.cel-date-compacte-tache {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  text-align: right;
+}
+
+/* La cellule "Intitulé" (chrono + nom) est PARTAGÉE entre les 2 vues (jamais dupliquée) — seule sa
+   taille change en compact, pour laisser de la place au statut/aux dates sur la même ligne. */
+@media (max-width: 600px) {
+  .cel-intitule-tache { min-width: 0; flex: 1 1 auto; }
+  .nom-tache-cel {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+}
+
+/*
+ * Correctif (retour utilisateur réel, capture d'écran mobile) : en vue compacte (≤600px), les
+ * en-têtes triables ET le menu "⋯" (tous deux `.col-large-taches`) étaient masqués SANS jamais
+ * recevoir d'équivalent — seul "Supprimer" restait accessible (dans ce détail dépliable), pas
+ * "Assigner à une classe"/"Dupliquer", et aucun moyen de trier. Corrigé par : un sélecteur "Trier
+ * par" dédié à la vue compacte (`#tri-mobile-taches`, sous 1590), et les 3 actions désormais toutes
+ * les 3 dans ce détail dépliable (`.detail-taches-actions`), pas seulement Supprimer.
+ */
+.detail-taches-contenu {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.detail-taches-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Retour utilisateur réel : "Modifier"/"Assigner"/"Dupliquer"/"Imprimer"/"Supprimer" (détail
+   dépliable mobile) sont tous des boutons icône-seule — pastille violette par défaut, `.danger`
+   (Supprimer) en rouge, même paire de couleurs que `.destructif-icone` (menu ⋯ desktop). */
+.bouton-detail-icone {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  color: var(--violet-vif);
+  background: var(--violet-clair);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.bouton-detail-icone:hover { background: var(--violet-vif); color: #fff; }
+.bouton-detail-icone:focus-visible { outline: 2px solid var(--violet-vif); outline-offset: 2px; }
+.bouton-detail-icone.danger { color: var(--danger); background: var(--danger-clair); }
+.bouton-detail-icone.danger:hover { background: var(--danger); color: #fff; }
+
+/* Tri en vue compacte — les en-têtes de colonnes sont masqués (thead display:none, plus haut),
+   donc un sélecteur dédié plutôt que des `<th>` cliquables invisibles. Masqué au-dessus de 600px
+   (les en-têtes cliquables suffisent déjà). */
+.tri-mobile-taches {
+  display: none;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: var(--espace-2);
+}
+@media (max-width: 600px) {
+  .tri-mobile-taches { display: flex; }
+}
+.tri-mobile-taches select {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-corps);
+  font-size: 13px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+}
+.bouton-direction-tri-tache {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 14px;
+}
+.bouton-direction-tri-tache:hover { border-color: var(--violet-vif); color: var(--violet-vif); }
+
+/*
+ * Prompt "Corrections + composants visuels", Étape 5 : "réutiliser exactement le motif de
+ * l'Étape 2 (icône dans un rond coloré, à gauche du texte)" sur les boutons Modifier/Transférer/
+ * Désactiver/Régénérer le code — ces boutons restent des `.bouton-secondaire`/`.bouton-destructif`
+ * compacts (padding 9px/18px, voir plus haut), pas des `.btn-compte` pleine largeur : un rond de
+ * 36px (taille de `.icone-rond`, Étape 2) y serait disproportionné. Le MOTIF (icône dans un rond
+ * coloré, à gauche du texte) est repris à l'identique, à une taille réduite cohérente avec ces
+ * boutons — voir RAPPORT.md pour ce choix de valeur, non fourni par le prompt. `.rond-danger` :
+ * variante "fond rouge clair" demandée explicitement pour Désactiver, mêmes tokens que
+ * `.retour-incorrect`/`.tag-bug` n'utilise pas mais `--danger-clair` est déjà établi ailleurs pour
+ * ce rôle (fond) avec `--danger` pour le glyphe.
+ */
+.icone-rond-inline {
+  width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-right: 6px; font-size: 11px;
+  background: var(--violet-clair); color: var(--violet-vif);
+}
+.icone-rond-inline.rond-danger {
+  background: var(--danger-clair); color: var(--danger);
+}
+
+/*
+ * Prompt "Liste d'élèves compacte + déconnexion redessinée", Étape 1 — CSS exacte fournie,
+ * reproduite telle quelle (remplace les 3 gros boutons texte empilés de `construireLigneEleve` par
+ * une ligne compacte à icônes seules). `.icone-action` est un bouton `<button>` natif générique
+ * (voir `button { ... }` plus haut) : `border: none` n'est PAS repris (le prompt en donne un,
+ * `1.5px solid var(--border)`, qui prime déjà par spécificité de classe sur la règle élément —
+ * aucun ajout nécessaire), mais la marge/le `box-shadow`/le `background: var(--violet-vif)` par
+ * défaut de `button` doivent être neutralisés explicitement pour ce bouton icône-seule (voir
+ * `.icone-action` ci-dessous, propriétés non listées dans le bloc fourni mais nécessaires à un
+ * rendu correct — voir RAPPORT.md).
+ */
+/*
+ * Refonte "Onglet Classes" (Option C, tri Nom/Réponses/Dernière activité) : `.ligne-eleve` ne porte
+ * plus le chrome de carte (fond/bordure/radius/ombre/margin) — déplacé sur `.item-eleve` (le `<li>`
+ * lui-même, voir `.panneau, .item-liste, .item-eleve` plus haut et `#liste-eleves-classe li`
+ * plus bas) pour que la carte englobe aussi `.stats-ligne-eleve` (2e ligne, nb réponses + dernière
+ * activité) juste en dessous — sinon la carte n'aurait entouré que la 1re ligne.
+ */
+.ligne-eleve { display: flex; align-items: center; gap: 10px; }
+.avatar-mini-liste { width: 34px; height: 34px; border-radius: 50%; background: var(--violet-clair); color: var(--violet-vif);
+  display: flex; align-items: center; justify-content: center; font-family: var(--font-marque); font-weight: 700; font-size: 12.5px; flex-shrink: 0; }
+.nom-eleve-liste { flex: 1; font-weight: 700; font-size: 14.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.actions-eleve-compact { display: flex; gap: 6px; flex-shrink: 0; }
+.stats-ligne-eleve { padding-left: 44px; font-size: 11.5px; color: var(--text-muted); }
+.icone-action { width: 34px; height: 34px; border-radius: 10px; border: 1.5px solid var(--border);
+  background: var(--surface-sunken); display: flex; align-items: center; justify-content: center; color: var(--violet-vif);
+  /* Neutralise le style `button` par défaut (background plein/box-shadow/marge droite-bas, voir plus
+     haut) : ce bouton icône-seule n'est ni PRIMAIRE ni un `.bouton-secondaire`/`.bouton-destructif`
+     existant, ces overrides sont donc nécessaires ici et non ailleurs. */
+  box-shadow: none; margin: 0; padding: 0; font-size: 15px; min-height: 0; }
+.icone-action.danger { color: var(--danger); border-color: #F3D4D0; background: var(--danger-clair); }
+
+/*
+ * Prompt "Liste d'élèves compacte + déconnexion redessinée", Étape 2 — CSS exacte fournie,
+ * reproduite telle quelle (`#btn-deconnexion-prof`, menu compte prof). Même neutralisation
+ * `button`-par-défaut que `.icone-action` ci-dessus (`background: var(--violet-vif)` par défaut
+ * écraserait le `background: var(--violet-clair)` demandé sans une spécificité supérieure — déjà
+ * le cas ici, classe vs élément — mais `box-shadow`/`margin` restent à neutraliser explicitement).
+ * **Violet, jamais `--danger`** (consigne explicite du prompt, pas une action destructrice).
+ */
+.btn-deco { display: flex; align-items: center; gap: 10px; width: 100%; background: var(--violet-clair); color: var(--violet);
+  border: none; border-radius: var(--radius-sm); padding: 12px 14px; font-weight: 700; font-size: 14px;
+  box-shadow: none; margin: 0; }
+.btn-deco .icone-rond { width: 30px; height: 30px; border-radius: 8px; background: rgba(124,58,237,.15);
+  display: flex; align-items: center; justify-content: center; }
+
+/*
+ * Prompt "Tableau de bord élève" (3/5), Étape 2 — cartes de tâche avec anneau de progression,
+ * remplace l'ancienne liste de texte brut. `#ul-en-cours`/`#ul-effectuees`/`#ul-anterieures`
+ * (ids inchangés depuis le chantier "Tableau de bord élève" initial) : même traitement "liste de
+ * cartes espacées par un gap" que #liste-taches/#liste-eleves-classe plus haut.
+ */
+#ul-en-cours,
+#ul-effectuees,
+#ul-anterieures {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+}
+
+.carte-tache {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-3);
+  padding: var(--espace-3);
+}
+
+.anneau-progression {
+  flex-shrink: 0;
+}
+
+.anneau-fond {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 4;
+}
+
+/* violet (en_cours) / vert (effectuees, toujours plein) — jamais pour "anterieures", qui n'a pas de cercle d'avancement du tout (voir JS, choix de jugement documenté). */
+.anneau-avancement {
+  fill: none;
+  stroke-width: 4;
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+}
+
+.anneau-en_cours .anneau-avancement {
+  stroke: var(--violet-vif);
+}
+
+.anneau-effectuees .anneau-avancement {
+  stroke: var(--vert-vif);
+}
+
+.anneau-texte {
+  font-family: var(--font-corps);
+  font-size: 9px;
+  font-weight: 700;
+  fill: var(--text);
+}
+
+.anneau-anterieures .anneau-texte {
+  fill: var(--text-muted);
+}
+
+.carte-tache-corps {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Retour utilisateur réel : icône chrono (`.icone-chrono-tache`, déjà définie plus haut pour
+   "Liste des tâches" côté prof — réutilisée telle quelle) devant l'intitulé pour toute tâche
+   chronométrée. `.carte-tache-nom-ligne` remplace `.carte-tache-nom` comme premier enfant de
+   `.carte-tache-corps` (flex column) : ligne flex horizontale (icône + nom), aucun changement de
+   mise en page si l'icône est absente (tâche non chronométrée — `.carte-tache-nom` seul enfant). */
+.carte-tache-nom-ligne {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.carte-tache-nom {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.carte-tache-sous-titre {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.carte-tache-exercices {
+  list-style: none;
+  padding: 0;
+  margin: var(--espace-1) 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-3);
+}
+
+.carte-tache-exercices a {
+  font-size: 0.85rem;
+  color: var(--violet-vif);
+  font-weight: 600;
+}
+
+.carte-tache-chevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+/* Prompt "Écran d'exercice pas-à-pas" (4/5) : la carte entière d'une tâche "en cours" démarre le flux au clic (remplace les liens par exercice de cette seule catégorie — voir construireCarteTache). */
+.carte-tache-cliquable {
+  cursor: pointer;
+}
+
+.carte-tache-cliquable:hover {
+  filter: brightness(0.98);
+}
+
+/*
+ * Prompt "Correctif visuel de l'écran d'exercice + formatage des coefficients", Étape 1 — CSS EXACT
+ * du prototype validé, reproduit tel quel (remplace l'interprétation approximative du chantier
+ * "Écran d'exercice pas-à-pas" (4/5), jamais transmise en code jusqu'ici, seulement décrite en
+ * prose). `.titre-section` seule exception : citée par la structure HTML de l'Étape 2 du même
+ * prompt mais absente du bloc CSS fourni (supposée déjà définie dans la feuille complète du
+ * prototype, non transmise) — ajoutée ici minimalement, réutilisant `h2`/`--font-marque` déjà
+ * établis (voir plus haut dans ce fichier), seul un espacement propre à son nouvel emplacement HORS
+ * de `.panneau` (Étape 2 : "un titre au-dessus de la carte") lui est propre.
+ */
+.titre-section {
+  margin: 0 0 var(--espace-3);
+}
+
+.barre-progres { padding: 18px 20px 0; }
+.barre-progres .label-progres { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); font-weight: 700; margin-bottom: 8px; }
+.piste-progres { height: 8px; background: var(--violet-clair); border-radius: 999px; overflow: hidden; display: flex; gap: 3px; }
+.piste-progres .segment { flex: 1; background: var(--border); border-radius: 999px; }
+
+/*
+ * RAPPORT.md §212 — retour utilisateur réel ("propose moi de bien meilleurs rendus pour ce titre et
+ * pour le bouton retour aux tâches"), maquette approuvée. `#titre-question-pas-a-pas` : eyebrow
+ * "Exercice X sur Y" (petit, discret) au-dessus d'un vrai titre "Question A sur B" (serif), au lieu
+ * d'une seule ligne longue sans hiérarchie — jamais `.titre-section` (classe partagée par "Tableau
+ * de bord"/"Résultats", non touchée ici). `#btn-retour-exercice-vers-taches` : puce ronde violet
+ * clair pour la flèche + libellé court "Mes tâches" en violet plein, au lieu du gros contour pilule
+ * — override CIBLÉ par id (spécificité ID > `.bouton-secondaire`, qui reste inchangée pour tous les
+ * autres boutons secondaires de l'app — Modifier/Transférer/Régénérer le code, etc.).
+ */
+.titre-question-pas-a-pas {
+  margin: 0 0 var(--espace-3);
+}
+.titre-eyebrow {
+  font-family: var(--font-corps);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 3px;
+}
+.titre-eyebrow:empty {
+  display: none;
+}
+#titre-question-pas-a-pas-principal {
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+#btn-retour-exercice-vers-taches {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-weight: 700;
+  font-size: 14px;
+}
+/*
+ * RAPPORT.md §214 — bug réel retour utilisateur (capture, "ce bouton persiste dans l'onglet mes
+ * tâches") : même piège de cascade documenté à de nombreuses reprises ailleurs dans ce fichier
+ * (`label[hidden]`/`.groupe-champ[hidden]`/etc.) — `display: inline-flex` ci-dessus (feuille AUTEUR)
+ * l'emporte sur `display: none` par défaut du navigateur pour `[hidden]` (feuille UTILISATEUR-AGENT),
+ * quelle que soit la spécificité : sans cette règle explicite, `retournerAuTableauDeBord` avait beau
+ * poser `hidden = true` sur ce bouton (lib/eleve.html), il restait visuellement affiché sous la
+ * liste des tâches. Jamais remarqué avant ce retour utilisateur car les captures de validation
+ * précédentes (§211/§212/§213) ne vérifiaient que l'écran d'ARRIVÉE (#tableau-de-bord visible),
+ * jamais l'absence visuelle du bouton lui-même sous cette liste.
+ */
+#btn-retour-exercice-vers-taches[hidden] {
+  display: none;
+}
+#btn-retour-exercice-vers-taches:hover:not(:disabled) {
+  background: transparent;
+  filter: none;
+  text-decoration: underline;
+}
+#btn-retour-exercice-vers-taches .btn-retour-icone {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: var(--violet-clair);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+/*
+ * RAPPORT.md §207 — recoloration 2 tons (maquette "Option A", spec discutée §206) : segments
+ * complétés en vert (au lieu du violet précédent), segment courant en violet (au lieu de l'ambre
+ * précédent). `#progression-etapes`/`.piste-progres`/`.segment` sont un composant PARTAGÉ par tous
+ * les générateurs à flux pas-à-pas (`actualiserProgression`, public/eleve.html) — ce changement de
+ * couleur les affecte donc tous, pas seulement gen7 (changement de teinte pur, aucune structure/
+ * logique modifiée — voir RAPPORT.md pour la portée exacte, confirmée explicitement).
+ */
+.piste-progres .segment.fait { background: var(--vert-vif); }
+.piste-progres .segment.actif { background: var(--violet-vif); }
+
+/* Correctif "Chrono de réponse" : compte à rebours visible, posé/masqué par demarrerChronoEcran/arreterChronoEcran (eleve.html). */
+.chrono-reponse {
+  margin: 12px 20px 0;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--ambre-clair);
+  color: var(--ambre-vif);
+  font-weight: 700;
+  font-size: 14px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.chrono-reponse.chrono-urgent { background: var(--danger-clair); color: var(--danger); }
+
+.enonce-bloc { margin: 20px 20px 6px; background: var(--violet-clair); border-radius: var(--radius-sm); padding: 26px 16px; text-align: center; }
+/*
+ * Prompt "Rendu LaTeX du bloc énoncé (1/3)", Étape 2/3 : `font-family`/`font-weight` ne s'appliquent
+ * plus au contenu mathématique lui-même une fois rendu par KaTeX (katex.min.css impose ses propres
+ * polices, scopées à `.katex`), seule `color`/`font-size` continuent d'agir (KaTeX dimensionne son
+ * rendu en `em` relatifs à la taille de police du conteneur) — comportement inchangé pour la taille/
+ * couleur, attendu et sans conséquence pour la police (jamais visible dans un rendu KaTeX de toute
+ * façon). `overflow-x: auto` remplace le découpage manuel `.bloc-fitter` (`decouperExpressionLongue`,
+ * public/eleve.html) pour ce bloc précis : ce dernier reste utilisé ailleurs (statuts/messages de
+ * correction, texte brut, hors périmètre de ce prompt) mais ne s'applique plus au bloc énoncé, qui
+ * n'est plus du texte brut segmentable — un défilement horizontal sur une équation KaTeX
+ * exceptionnellement longue est la pratique standard (jamais de retour à la ligne au milieu d'un
+ * rendu MathML déjà structuré).
+ */
+/*
+ * Correctif (retour utilisateur réel, capture mobile : "x² - 10√7x + 175 = 0" cassé sur 2 lignes) :
+ * même bug, même cause, déjà trouvé et corrigé pour `#etat-actuel-panel` (voir son commentaire plus
+ * bas, "faute de white-space: nowrap") mais jamais reporté ici — sans `white-space: nowrap`, le
+ * navigateur répartit le rendu KaTeX sur plusieurs lignes AVANT que `scrollWidth` ne dépasse
+ * `clientWidth` (un retour à la ligne évite le débordement horizontal, il ne le cause jamais) :
+ * `ajusterTailleEnonce` (public/eleve.html), qui ne mesure QUE ce dépassement horizontal pour
+ * décider de réduire la police, ne se déclenchait donc jamais sur une équation assez large pour
+ * casser sur 2 lignes avant de déborder — exactement le symptôme rapporté.
+ */
+.enonce-bloc .maths { font-size: 27px; color: var(--violet); overflow-x: auto; white-space: nowrap; }
+
+.question-bloc { padding: 18px 20px 24px; }
+.question-bloc .question { font-size: 16px; font-weight: 700; margin-bottom: 14px; }
+.champ-reponse { width: 100%; font-family: var(--font-corps); font-size: 18px; text-align: center; font-weight: 700;
+  background: var(--surface-sunken); border: 2px solid var(--border); border-radius: var(--radius-sm); padding: 15px; margin-bottom: 16px; }
+.champ-reponse:focus { outline: none; border-color: var(--violet-vif); }
+/*
+ * Prompt "Priorité 3 (2) — libellés simplifierFraction" : label DISTINCT au-dessus de chaque champ
+ * d'un même bloc à plusieurs champs (ex. "Numérateur simplifié"/"Dénominateur simplifié") — même
+ * échelle typographique que `.question-bloc .question` mais plus discrète (14px, pas 16px, pour ne
+ * pas rivaliser visuellement avec la vraie question du bloc juste au-dessus).
+ */
+/*
+ * Correctif Priorité 2 (captures réelles gen6, ex. "NUMÉRATEUR SIMPLIFIÉ"/"DÉNOMINATEUR SIMPLIFIÉ",
+ * "ÉTAT ACTUEL") : petites capitales, comme la référence — ce pilote affichait jusqu'ici ces mêmes
+ * libellés en casse normale ("Numérateur simplifié :"). `text-transform: uppercase` est purement
+ * visuel (aucun texte JS ne dépend de la casse affichée), s'applique donc sans risque aux 7 usages
+ * existants de cette classe (simplifierFraction, "Numérateur" des écrans "combiner" niveau2/3/4/
+ * denominateurCarre/sansFacteurCommun) en plus du nouvel en-tête "ÉTAT ACTUEL" ci-dessous.
+ */
+.sous-champ-label { display: block; font-family: var(--font-corps); font-size: 14px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.03em; }
+.sous-champ-label .champ-reponse { margin-top: 4px; }
+
+/*
+ * Prompt "Corrections + composants visuels", Étape 1 — CSS exacte fournie, reproduite telle
+ * quelle (remplace le `<select>` "Reconnaissance", voir eleve.html). `margin-bottom` du groupe
+ * hérite de `.champ-reponse` retiré (le `<select>` disparaît) : `.grille-choix` reprend le même
+ * `margin-bottom: 16px` pour ne pas resserrer l'espacement avec le bouton "Valider" qui suit.
+ */
+.grille-choix { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+.choix-btn {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; text-align: left; font-family: var(--font-corps); font-size: 15px; font-weight: 600;
+  background: var(--surface-sunken); border: 2px solid var(--border); border-radius: var(--radius-sm);
+  padding: 14px 16px; color: var(--text); cursor: pointer;
+  /*
+   * Prompt "Verrouillage, reprise de progression, champs multiples" (URGENT), Étape 4 : cause exacte
+   * trouvée (RAPPORT.md), pas le `<select>`/`<input>` résiduel envisagé au départ — l'audit HTML ne
+   * trouve qu'un `<input type="hidden">` (jamais focusable ni rendu, par spécification), confirmé en
+   * Chromium : `document.activeElement` pointe bien le `<button class="choix-btn">` lui-même après
+   * clic, jamais l'input caché. Le VRAI curseur clignotant vu en capture vient du bouton lui-même :
+   * `getComputedStyle(.choix-btn).userSelect` valait `"auto"` (jamais défini nulle part dans ce
+   * fichier) — son texte reste donc nativement sélectionnable, et un clic pile sur le texte y place
+   * un curseur de sélection natif, rendu PAR-DESSUS le bouton visuel (capture d'écran reproduite :
+   * "Mise en évidence (c=0)|"). `.choix-btn` est un contrôle cliquable, jamais du texte à sélectionner
+   * — neutralisé explicitement.
+   */
+  user-select: none; -webkit-user-select: none;
+}
+.choix-btn .rond-radio { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--border); flex-shrink: 0; }
+.choix-btn.selectionne { background: var(--violet-clair); border-color: var(--violet-vif); color: var(--violet); }
+.choix-btn.selectionne .rond-radio { border-color: var(--violet-vif); background: var(--violet-vif); box-shadow: inset 0 0 0 3px #fff; }
+
+/**
+ * Prompt "gen6/niveau1 (1/7 variantes restantes)" — grille de signes (bouton à bascule par
+ * cellule, même esprit que `.choix-btn` : un contrôle cliquable, jamais un `<select>`) et
+ * ensemble-solution par morceaux (crochets à bascule + bornes en texte libre). Aucun composant
+ * existant ne couvrait ces 2 formes de saisie (grille/intervalle) avant ce prompt.
+ */
+/*
+ * Bug trouvé le 14/09 (retour utilisateur) : aucune ligne/colonne dessinée dans ce tableau — la
+ * référence (`.grille-signes th, .grille-signes td { border-bottom: 1px solid ... }`, `App.css`)
+ * trace une ligne sous chaque rangée, fusionnées par `border-collapse: collapse` en lignes
+ * continues sur toute la largeur du tableau. Reproduit ici avec les couleurs déjà établies de ce
+ * pilote (`--border`), jamais celles de la référence.
+ */
+/*
+ * Bug trouvé le 15/09 (retour utilisateur réel, capture mobile) : ce tableau n'avait AUCUN
+ * conteneur de défilement — sur un écran étroit, une grille à 9+ colonnes déborde purement et
+ * simplement hors de `.panneau` sans la moindre façon de voir les colonnes manquantes (ni scroll de
+ * page horizontal fiable au doigt sur des `<button>` interactifs, ni indice visuel qu'il y aurait
+ * quoi que ce soit à faire défiler). `.grille-scroll` (nouveau, wrapper direct du `<table>`, les 6
+ * variantes gen1/gen6 — voir chaque bloc HTML) rend le tableau lui-même défilable horizontalement
+ * SANS faire défiler toute la page — la table garde son `width: 100%` normal (donc pas de scroll
+ * quand tout tient déjà) mais peut légitimement s'étendre au-delà dès que la somme des largeurs
+ * minimales de colonnes l'exige (layout `auto` par défaut, jamais changé ici). Ombre latérale légère
+ * (dégradé, jamais un simple `overflow-x: auto` nu) : seule façon fiable de signaler visuellement
+ * "il y a plus à voir" sans dépendre d'une scrollbar visible (masquée par défaut sur mobile) — même
+ * intention que la référence utilisateur (capture #9 : la grille ne doit "jamais juste clipper sans
+ * indication").
+ */
+.grille-scroll {
+  overflow-x: auto;
+  margin: 0 -4px 4px;
+  padding: 0 4px;
+  background:
+    linear-gradient(to right, var(--surface) 40%, rgba(255, 255, 255, 0)),
+    linear-gradient(to right, rgba(255, 255, 255, 0), var(--surface) 60%) right,
+    linear-gradient(to right, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0)),
+    linear-gradient(to left, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0)) right;
+  background-repeat: no-repeat;
+  background-size: 24px 100%, 24px 100%, 8px 100%, 8px 100%;
+  background-attachment: local, local, scroll, scroll;
+}
+
+/*
+ * Bug trouvé le 14/09 (retour utilisateur) : "les résultats validés des écrans précédents" —
+ * `RecapitulatifPanel` (référence, `App.css` classes `.recap-list`/`.recap-item`) manquait
+ * entièrement. Design propre du pilote (jamais le CSS de la référence), même information (libellé +
+ * valeur confirmée de chaque étape déjà close de CET exercice).
+ */
+.recap-panel { list-style: none; padding: 12px 16px; margin: 0 0 16px; background: var(--surface-sunken); border-radius: var(--radius-sm); border: 1px solid var(--border); }
+.recap-panel[hidden] { display: none; }
+.recap-panel li { font-size: 13px; color: var(--text-muted); padding: 3px 0; }
+.recap-panel li .recap-libelle { font-weight: 700; color: var(--text); }
+
+/*
+ * RAPPORT.md §207 — gen7/gen8 (spec discutée §206, maquette "Option A + panneau cumulatif") :
+ * pastille "Tentative X/N", visuelle uniquement — jamais un avertissement fort (pas de rouge/ambre,
+ * seule une révélation réelle de réponse, déjà stylée ailleurs, doit alerter).
+ */
+.pastille-tentatives {
+  display: inline-block;
+  margin: 12px 20px 0;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--violet-clair);
+  color: var(--violet-2);
+  font-size: 12px;
+  font-weight: 700;
+}
+.pastille-tentatives[hidden] { display: none; }
+
+/*
+ * RAPPORT.md §207 (corrigé — retour utilisateur réel, capture) : "consigne persistante" doit être du
+ * texte SIMPLE, sans carte/fond/bordure — jamais un 2e bloc violet visuellement identique aux cartes
+ * de l'ancien habillage (`.enonce-bloc`, `.etat-actuel-panel`...). Aucun `background`/`border` ici,
+ * volontairement, contrairement à tous les autres panneaux de cette feuille de style.
+ */
+.instruction-persistante {
+  margin: 16px 20px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+.instruction-persistante[hidden] { display: none; }
+.instruction-persistante-texte { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); }
+.instruction-persistante .maths { font-size: 20px; }
+
+/*
+ * RAPPORT.md §207 (corrigé) : chip "Besoin d'aide ?" avec l'icône ampoule de la maquette, jamais un
+ * `.bouton-secondaire` à contour violet indiscernable des autres actions secondaires de l'écran —
+ * teinte ambre distincte, réservée à l'aide, cohérente avec `.pastille-tentatives` (jamais la couleur
+ * primaire violette de "Valider").
+ */
+.bouton-aide-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-color: var(--ambre-vif);
+  background: var(--ambre-clair);
+  color: var(--ambre);
+  box-shadow: none;
+}
+.bouton-aide-chip:hover:not(:disabled) { background: var(--ambre-clair); filter: brightness(0.97); }
+.bouton-aide-chip svg { flex: none; }
+
+/*
+ * RAPPORT.md §207 — gen7 : panneau cumulatif "Ce qu'on sait déjà" (remplace `#recap-etape` pour ce
+ * générateur précis, voir son commentaire HTML/JS) — même fond "en creux" que `.recap-panel`
+ * (`--surface-sunken`), mais structure sémantiquement différente (icône ✓ verte ou rond-numéro
+ * violet par ligne, jamais un simple libellé/valeur en texte plat).
+ */
+.recap-cumulatif { margin: 12px 20px 16px; padding: 14px 16px; background: var(--surface-sunken); border-radius: var(--radius-sm); border: 1px solid var(--border); }
+.recap-cumulatif[hidden] { display: none; }
+.recap-titre { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin-bottom: 10px; }
+.recap-cumulatif ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.recap-ligne-fait, .recap-ligne-courant { display: flex; align-items: center; gap: 10px; }
+.rond-check {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--vert-vif);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.recap-ligne-fait .recap-libelle { font-size: 13px; font-weight: 700; color: var(--text); }
+.resultat-fait { font-family: var(--font-marque); font-size: 14px; color: var(--text); margin-left: 2px; }
+.rond-numero {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--violet-vif);
+  color: var(--violet-vif);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.label-courant { font-size: 13px; font-style: italic; color: var(--text-muted); }
+
+/*
+ * Prompt "Remédiation spec-gen6 (fidélité littérale)" — équivalent partiel de l'`EtatActuelPanel`
+ * de la référence (spec-gen6.md §4.10/§9 point 7, voir le commentaire HTML de `#etat-actuel-panel`).
+ * Habillage légèrement plus marqué que `.recap-panel` (fond violet clair, comme `.enonce-bloc`, mais
+ * moins massif) : ce bloc porte une expression mathématique TOUJOURS pertinente pour l'écran en
+ * cours (contrairement au recap, un historique d'étapes déjà passées), mérite donc une saillance
+ * intermédiaire entre `.enonce-bloc` et `.recap-panel`.
+ */
+.etat-actuel-panel { margin: 0 20px 16px; padding: 10px 16px; background: var(--violet-clair); border-radius: var(--radius-sm); font-size: 15px; font-weight: 700; color: var(--violet); text-align: center; }
+.etat-actuel-panel[hidden] { display: none; }
+/*
+ * Correctif Priorité 2 (capture réelle gen6, facteurCommun) : en-tête "ÉTAT ACTUEL" au-dessus de
+ * `#etat-actuel-panel` — `#etat-actuel-panel` n'est jamais imbriqué dans un `.question-bloc`
+ * (marges horizontales déjà auto-portées, voir son commentaire ci-dessus), donc cet en-tête a besoin
+ * de sa propre marge horizontale plutôt que de compter sur un parent `.question-bloc` comme les
+ * autres usages de `.sous-champ-label`.
+ */
+#etat-actuel-heading { margin: 0 20px 8px; }
+#etat-actuel-heading[hidden] { display: none; }
+/*
+ * Correctif (retour utilisateur réel, capture mobile — screenshot #1) : "D(x) = 3x² − 18x + 24"
+ * débordait sur 2 lignes ("D(x) =" puis le reste en dessous) faute de `white-space: nowrap` —
+ * même traitement "tient sur une seule ligne, jamais de retour à la ligne" déjà appliqué au bloc
+ * énoncé (`.enonce-bloc .maths`, `overflow-x: auto` + réduction de `font-size` en JS,
+ * `ajusterTailleElementUneLigne` dans public/eleve.html, généralisée depuis `ajusterTailleEnonce`)
+ * — `overflow-x: auto` ici aussi comme filet de sécurité si la réduction de police JS atteint sa
+ * taille plancher avant de suffire (texte exceptionnellement long).
+ */
+.etat-actuel-panel { white-space: nowrap; overflow-x: auto; }
+/*
+ * `afficherParties` (public/eleve.html) enveloppe une `{ expression }` dans `.bloc-fitter` (un
+ * conteneur `display: flex; flex-wrap: wrap`, voir son commentaire de tête plus bas dans ce
+ * fichier) — le mécanisme de retour à la ligne "sûr" déjà utilisé ailleurs pour les messages de
+ * statut/erreur. `white-space: nowrap` sur `.etat-actuel-panel` seul ne l'empêche PAS : un
+ * conteneur flex gère le passage à la ligne de ses ITEMS indépendamment de `white-space` (propriété
+ * qui ne régit que le texte, jamais le wrapping flex) — sans ce correctif, `#etat-actuel-panel`
+ * continuait donc à afficher "D(x) =" sur une ligne puis le reste en dessous (screenshot #1) malgré
+ * la règle ci-dessus. `flex-wrap: nowrap` ICI (scopé à `#etat-actuel-panel .bloc-fitter`, jamais le
+ * `.bloc-fitter` générique utilisé ailleurs — un message de statut peut légitimement continuer à
+ * s'étaler sur plusieurs lignes) force les fragments à rester sur une seule ligne ; `overflow-x:
+ * visible`/`max-width: none` retirent le propre filet de sécurité scrollable de `.bloc-fitter`
+ * (sinon son `overflow-x: auto` interne absorbait le débordement AVANT qu'il n'atteigne
+ * `#etat-actuel-panel`, empêchant `scrollWidth > clientWidth` de jamais être vrai sur le panneau
+ * lui-même — la boucle de réduction de police, mesurée sur `#etat-actuel-panel`, ne se déclenchait
+ * alors jamais) : le SEUL filet de sécurité qui subsiste est celui du panneau, déjà posé ci-dessus.
+ *
+ * `display: inline-flex` (au lieu du `display: flex` — BLOC — hérité de `.bloc-fitter` générique) :
+ * un `display: flex` reste un élément de niveau BLOC (comme une `<div>`), qui force un retour à la
+ * ligne AVANT lui quel que soit `white-space` sur son parent — c'est cela, et non le passage à la
+ * ligne interne déjà corrigé ci-dessus, qui faisait effectivement atterrir "D(x) =" (texte simple,
+ * en ligne) sur sa propre ligne et l'expression (le `.bloc-fitter`, un bloc) juste en dessous —
+ * exactement le rendu du screenshot #1, confirmé par mesure directe (`getBoundingClientRect`) avant
+ * ce correctif. `inline-flex` reste un conteneur flex (flex-wrap: nowrap ci-dessus s'applique
+ * toujours à SES enfants) mais se comporte comme un élément EN LIGNE pour son propre positionnement,
+ * s'enchaînant donc avec le texte "D(x) = "/"N(x) = " qui le précède sur la même ligne.
+ */
+#etat-actuel-panel .bloc-fitter { display: inline-flex; flex-wrap: nowrap; overflow-x: visible; max-width: none; }
+/* Cellule vide bornant la grille interactive sous "-∞"/"+∞" (jamais de bouton, l'en-tête a 2 colonnes de plus que la grille — voir eleve.html). */
+.cellule-bordure { min-width: 18px; }
+.aide-recap-grille[hidden] { display: none; }
+.aide-recap-grille { margin-bottom: 14px; }
+.aide-recap-grille table { width: 100%; border-collapse: collapse; text-align: center; }
+.aide-recap-grille caption { text-align: left; font-size: 13px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px; }
+.aide-recap-grille th, .aide-recap-grille td { padding: 6px 4px; font-family: var(--font-corps); font-size: 13px; }
+/*
+ * Correctif (retour utilisateur réel, "où est l'encadrement vert des valeurs de x ??") :
+ * `surlignerRecapIntervalle` (public/eleve.html) pose bien `.colonne-aide` sur les cellules d'en-tête
+ * ("valeurs de x", -∞/racines/+∞) — mais ce sont des `<th>` (`construireRecapIntervalle` les crée
+ * ainsi), jamais des `<td>` : cette règle, écrite seulement pour `td.colonne-aide`, ne s'appliquait
+ * donc qu'à la ligne "Signe du quotient" (des `<td>`), jamais à l'en-tête — le surlignage posé par le
+ * JS restait invisible. Même bug de sélecteur que celui déjà corrigé pour la grille interactive
+ * elle-même (`.grille-signes-niveau1 th.colonne-aide` juste au-dessus, qui elle inclut bien `th`).
+ */
+.aide-recap-grille td.colonne-aide, .aide-recap-grille th.colonne-aide { background: var(--vert-clair); color: var(--vert); font-weight: 700; border-radius: var(--radius-sm); }
+/*
+ * Item E (référence #11, capture utilisateur) : "crochet" vert sous chaque groupe de colonnes
+ * satisfaisantes de l'Aide (`dessinerCrochetsAideIntervalle`, public/eleve.html) — montants gauche/
+ * droite + bordure basse, jamais un simple soulignement plat (le but est de lire "cette PLAGE de
+ * colonnes est concernée", pas juste "ces cellules-ci"). Ligne fine (peu de hauteur) : reste un
+ * indice secondaire sous le fond déjà surligné (`.colonne-aide` ci-dessus), jamais l'élément visuel
+ * dominant de ce tableau de rappel.
+ */
+.ligne-crochets-aide td { border: none; padding: 0; height: 8px; }
+.ligne-crochets-aide .segment-crochet-aide {
+  border-left: 2px solid var(--vert);
+  border-right: 2px solid var(--vert);
+  border-bottom: 2px solid var(--vert);
+  border-radius: 0 0 3px 3px;
+  margin: 0 1px;
+}
+
+/*
+ * Item D (retour utilisateur réel, capture mobile) : la "réponse attendue" d'un champ "grille" est
+ * désormais un vrai `<table>` (`construireTableGrilleAttendue`, public/eleve.html) plutôt qu'une
+ * ligne de texte concaténée — gridlines VISIBLES exigées explicitement (référence utilisateur,
+ * capture "table avec bordures dessinées"), contrairement à `.aide-recap-grille table` ci-dessus
+ * (elle, sans bordures, un tableau plus léger pour un simple rappel). `overflow-x: auto` sur le
+ * conteneur du statut (`.retour-correct`/`.retour-incorrect`, ou son parent `.question-bloc`) n'a
+ * pas besoin d'être ajouté séparément ici : ce tableau, bien plus étroit que la grille interactive
+ * elle-même (pas de bouton, texte compact), n'a pas montré de débordement en validation — à
+ * revisiter si un cas plus large apparaissait.
+ */
+.table-grille-attendue { border-collapse: collapse; margin: 6px 0; font-family: var(--font-corps); font-size: 12.5px; }
+.table-grille-attendue th, .table-grille-attendue td {
+  border: 1px solid var(--border); padding: 3px 6px; text-align: center; font-weight: 600;
+}
+.table-grille-attendue th { color: var(--text-muted); font-weight: 700; background: var(--surface-sunken); text-align: left; }
+
+/*
+ * Prompt "Corrections + composants visuels", Étape 2 — CSS exacte fournie, reproduite telle
+ * quelle (écran "Mon compte", eleve.html). `.icone-rond` n'a pas de couleur de fond spécifiée dans
+ * le bloc fourni (seulement forme/taille) : ajout minimal nécessaire, réutilisant le même violet
+ * d'accent que `.mini-stat .valeur`/`.rond-radio.selectionne` (cohérent avec le reste du système,
+ * pas une nouvelle couleur inventée) — voir RAPPORT.md.
+ */
+.carte-profil { text-align: center; padding: 30px 20px 24px; }
+.avatar-grand { width: 76px; height: 76px; border-radius: 50%; margin: 0 auto 14px;
+  background: linear-gradient(160deg, var(--violet-2), var(--violet-vif)); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-family: var(--font-marque); font-weight: 700; font-size: 28px;
+  box-shadow: 0 12px 24px -10px rgba(124,58,237,.5); }
+.nom-profil { font-family: var(--font-marque); font-weight: 700; font-size: 19px; }
+.sous-nom-profil { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+.mini-stats { display: flex; justify-content: center; gap: 22px; margin: 20px 0 6px; }
+.mini-stat .valeur { font-family: var(--font-marque); font-weight: 700; font-size: 20px; color: var(--violet-vif); }
+.mini-stat .label { font-size: 11px; color: var(--text-muted); font-weight: 600; }
+.actions-compte { padding: 4px 20px 24px; display: flex; flex-direction: column; gap: 10px; }
+.btn-compte {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+  padding: 14px 16px; font-family: var(--font-corps); font-weight: 700; font-size: 14.5px; color: var(--text); cursor: pointer;
+}
+.btn-compte .icone-rond { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  background: var(--violet-clair); color: var(--violet-vif); font-size: 16px; }
+.btn-compte .chevron { margin-left: auto; color: var(--text-muted); }
+/* Même neutralisation de marge que `.groupe-champ > *` (juste au-dessus dans ce fichier) : la
+   marge par défaut de `button` (right/bottom, voir plus haut) cumulée à `width: 100%` ferait
+   déborder `.btn-compte` de `.actions-compte`, qui espace déjà ses enfants via son propre `gap`. */
+.actions-compte > * {
+  margin: 0;
+}
+
+.retour-correct { display: flex; align-items: center; gap: 11px; background: var(--vert-clair); color: var(--vert);
+  border-radius: var(--radius-sm); padding: 14px 16px; font-weight: 700; font-size: 14.5px; margin-top: 16px; }
+.retour-correct .rond { width: 28px; height: 28px; border-radius: 50%; background: var(--vert-vif); color: #fff;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+
+/* État incorrect — jamais maquetté jusqu'ici, même langage visuel que le correct, en rouge */
+.retour-incorrect { display: flex; align-items: center; gap: 11px; background: var(--danger-clair); color: var(--danger);
+  border-radius: var(--radius-sm); padding: 14px 16px; font-weight: 700; font-size: 14.5px; margin-top: 16px; }
+.retour-incorrect .rond { width: 28px; height: 28px; border-radius: 50%; background: var(--danger); color: #fff;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+
+/*
+ * Retour utilisateur réel (capture mobile, gen3/denomReconnaissance, "Tentatives épuisées —
+ * réponse attendue : Aucune méthode rapide (formule générale)") : le message débordait de son
+ * conteneur. Cause identique, MÊME MÉCANISME que le bug déjà corrigé pour
+ * `#bloc-inequation-racines .enonce-bloc` (RAPPORT.md §92) : `.retour-correct`/`.retour-incorrect`
+ * sont des enfants DIRECTS de `.groupe-champ` (`display: flex`, ci-dessus) — en tant qu'items flex
+ * SANS `min-width` explicite (`min-width: auto` par défaut), ils refusent de rétrécir sous la
+ * largeur de leur propre contenu non enveloppé, ce qui pousse toute la page en débordement
+ * horizontal dès qu'un message (texte simple OU `.bloc-fitter`, voir `afficherParties`) est assez
+ * long. Reproduit et confirmé par mesure DOM directe (Playwright, `afficherParties` réellement
+ * appelée avec une expression longue) : AVANT — `docScrollWidth: 1104` > `docClientWidth: 390`
+ * (page en débordement de plus de 700px) ; APRÈS ce correctif — `docScrollWidth` = `docClientWidth`
+ * (aucun débordement), le message s'enroule normalement sur plusieurs lignes.
+ *
+ * Correctif GÉNÉRIQUE (jamais scopé à un seul générateur, contrairement à `.enonce-bloc` ci-dessus
+ * dont la classe est réutilisée dans des contextes de mise en page différents ailleurs dans ce
+ * dépôt) : `.retour-correct`/`.retour-incorrect` ne servent QUE ce seul rôle (statut de champ,
+ * toujours enfants de `.groupe-champ`), partout dans ce pilote — le même correctif s'applique donc
+ * sans risque à TOUS les générateurs (gen1/gen2/gen3/gen6) qui les utilisent déjà tous par ce même
+ * chemin de rendu partagé (`appliquerStyleRetour`/`afficherParties`, public/eleve.html).
+ */
+.retour-correct, .retour-incorrect {
+  min-width: 0;
+}
+
+.carte-resultat-eleve { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 14px; margin-bottom: 12px; box-shadow: 0 10px 22px -18px rgba(59,20,112,.3); }
+.entete-eleve { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.avatar-mini { width: 30px; height: 30px; border-radius: 50%; background: var(--violet-clair); color: var(--violet-vif);
+  display: flex; align-items: center; justify-content: center; font-family: var(--font-marque); font-weight: 700; font-size: 12px; }
+/*
+ * Retour utilisateur — remplace l'ancien détail champ-par-champ (`.bloc-exercice-resultat`/
+ * `.ligne-champ-resultat`/`.icone-statut`/`.tag-bug`, désormais réservé au profil complet et à la
+ * vue "Par compétence") : une ligne compacte par tâche (mode classe) ou par exercice (mode tâche),
+ * nom à gauche + badge de note à droite (`.badge`, déjà défini plus haut).
+ */
+.ligne-tache-resultat, .ligne-exercice-resultat { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 9px 0; border-bottom: 1px solid var(--border); }
+.ligne-tache-resultat:last-of-type, .ligne-exercice-resultat:last-of-type { border-bottom: none; }
+.nom-tache-resultat, .nom-exercice-resultat { font-size: 13.5px; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/*
+ * Retour utilisateur — nom réel + détail dépliable au clic sur une tâche (mode "Par classe") ou un
+ * exercice (mode "Par tâche") : fil d'Ariane année/chapitre/variante + compétences vert/rouge.
+ * `.bloc-tache-resultat-repli`/`.bloc-exercice-resultat-repli` sont de simples enveloppes (ligne +
+ * panneau) — noms délibérément distincts de l'ancien `.bloc-exercice-resultat` (retiré, voir
+ * commentaire ci-dessus) pour ne jamais laisser croire à une résurrection de l'ancien détail
+ * champ-par-champ, qui n'est pas ce que ce panneau affiche.
+ */
+.bloc-tache-resultat-repli:last-of-type .ligne-tache-resultat,
+.bloc-exercice-resultat-repli:last-of-type .ligne-exercice-resultat { border-bottom: none; }
+.ligne-repliable-resultat { cursor: pointer; }
+.ligne-repliable-resultat:hover .nom-tache-resultat, .ligne-repliable-resultat:hover .nom-exercice-resultat { color: var(--violet-vif); }
+.panneau-detail-tache-resultat, .panneau-detail-exercice-resultat { background: var(--surface-sunken); border-radius: var(--radius-sm);
+  padding: 10px 12px; margin: 0 0 10px; display: flex; flex-direction: column; gap: 4px; }
+/* Même piège de cascade que `.groupe-champ[hidden]`/`label[hidden]` (plus haut dans ce fichier) :
+   `display: flex` (AUTEUR) l'emporterait sur `display: none` (UTILISATEUR-AGENT) pour `[hidden]`,
+   quelle que soit la spécificité — sans cette règle explicite, le clic sur une ligne
+   exercice/tâche ne repliait/dépliait visuellement RIEN (confirmé : `hidden` togglait bien
+   l'attribut DOM, mais `display` restait `flex` en continu, retour utilisateur réel). */
+.panneau-detail-tache-resultat[hidden], .panneau-detail-exercice-resultat[hidden] { display: none; }
+.panneau-detail-tache-resultat .ligne-exercice-resultat { padding: 6px 0; border-bottom: 1px solid var(--border); }
+.panneau-detail-tache-resultat .ligne-exercice-resultat:last-of-type { border-bottom: none; }
+.fil-ariane-resultat { font-size: 0.75rem; color: var(--text-muted); margin: 0 0 6px; }
+.chips-competences-resultat { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px; margin-top: 4px; }
+.chip-competence-resultat { display: inline-flex; align-items: center; gap: 4px; font-size: 0.72rem; padding: 3px 6px 3px 9px; border-radius: 999px; font-weight: 600; }
+.chip-competence-non-maitrisee { background: var(--danger-clair); color: var(--danger); cursor: help; }
+.chip-competence-observation { background: var(--ambre-clair); color: var(--ambre); cursor: help; }
+.texte-neutre-resultat { font-size: 0.78rem; color: var(--text-muted); margin: 0; }
+
+/* Retour utilisateur ("afficher le temps global de chaque exercice") — même ligne que le badge de
+   score (`.ligne-tache-resultat`/`.ligne-exercice-resultat`, `justify-content: space-between`
+   déjà défini plus haut), un simple fait chiffré de plus, jamais coloré/mis en évidence (même
+   sobriété que `.occurrences-competence`/le temps moyen par compétence). */
+.temps-exercice-resultat { font-size: 0.72rem; color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0; }
+
+/* Retour utilisateur ("aussi... pour toute la tâche") — même sobriété que `.temps-exercice-resultat`
+   (aucune couleur d'alerte), affichée UNE FOIS pour toute la tâche (mode "Par tâche", en tête de la
+   carte élève dépliée), réutilise `.temps-exercice-resultat` pour la valeur elle-même. */
+.temps-tache-resultat { font-size: 0.82rem; color: var(--text-muted); margin: 4px 0 0; font-weight: 600; }
+.temps-tache-resultat .temps-exercice-resultat { font-weight: 700; }
+
+/*
+ * Retour utilisateur ("un '?' à côté des compétences ... qui explique en quoi consiste cette
+ * compétence") — `.btn-explication-competence` réutilisé tel quel (`construireExplicationCompetence`)
+ * mais réduit ici (`-mini`) pour tenir dans la puce compacte `.chip-competence-resultat` sans la
+ * faire grossir démesurément. `.explication-competence` (déjà sans `display` déclaré, voir son
+ * propre commentaire plus bas dans ce fichier — aucun piège `[hidden]` ici) force un retour à la
+ * ligne dans le conteneur `flex-wrap` du panneau (`flex-basis: 100%`) plutôt que de rester coincé
+ * dans la largeur de la puce qui l'a ouvert.
+ */
+.btn-explication-competence-mini { width: 15px; height: 15px; font-size: 9px; border-color: currentColor; opacity: 0.65; }
+.btn-explication-competence-mini:hover:not(:disabled) { opacity: 1; background: var(--surface); }
+.chips-competences-resultat .explication-competence { flex-basis: 100%; margin-top: 0; }
+
+/*
+ * Prompt "Refonte Résultats (Option C)" — reproduit la maquette approuvée
+ * (https://claude.ai/artifact/9FAZUGkFnHc8vQdc9qMzfD, Option C) : bascule à 2 niveaux (mode tâche/
+ * classe en `.segmente`, vue élève/compétence en `.onglets-vue-resultats`), cartes repliables et
+ * matrice de compétences. `.segmente` est un nouveau composant générique (pas encore utilisé
+ * ailleurs dans ce dépôt), valeurs reprises telles quelles de la maquette.
+ */
+.barre-outils-resultats { display: flex; flex-direction: column; gap: 8px; margin-bottom: var(--espace-3); }
+/*
+ * Bug réel trouvé (validation Chromium, clic bloqué sur `#btn-resultats-vue-competence`) : réutiliser
+ * `.grille-stats-tdb` telle quelle ici aurait hérité de son `margin-top: -56px; position: relative;
+ * z-index: 2` — pensé pour chevaucher le bandeau violet `.barre-app` juste au-dessus (Tableau de
+ * bord, seul contexte où ce chevauchement volontaire a un sens). Dans "Résultats", ce bloc de stats
+ * n'est PAS collé sous `.barre-app` (h2/barre d'outils/onglets de vue s'intercalent avant) : la
+ * marge négative héritée remontait les cartes par-dessus `.onglets-vue-resultats`, bloquant tout
+ * clic sur ses boutons (`elementFromPoint` confirmé : `.carte-stat` intercepte le pointeur). Même
+ * grille (`display: grid; grid-template-columns: 1fr 1fr; gap`) que `.grille-stats-tdb`, sans le
+ * chevauchement — classe dédiée plutôt qu'un correctif au cas par cas sur la classe partagée
+ * (`.grille-stats-tdb` reste inchangée pour son usage d'origine, Tableau de bord).
+ */
+.grille-stats-resultats { display: grid; grid-template-columns: 1fr 1fr; gap: var(--espace-3); margin-bottom: var(--espace-3); }
+.segmente { display: flex; background: var(--surface-sunken); border-radius: 999px; padding: 3px; gap: 2px; }
+.segmente button { flex: 1; background: none; border: none; color: var(--text-muted); font-size: 0.8rem; font-weight: 700;
+  padding: 8px 6px; border-radius: 999px; box-shadow: none; cursor: pointer; }
+.segmente button.actif { background: var(--violet-vif); color: #fff; box-shadow: 0 6px 14px -6px rgba(124,58,237,.5); }
+
+.onglets-vue-resultats { display: flex; gap: 8px; margin-bottom: var(--espace-3); }
+.onglets-vue-resultats button { flex: 1; background: var(--surface); color: var(--text-muted); border: 1px solid var(--border);
+  box-shadow: none; font-size: 0.85rem; font-weight: 600; padding: 9px 6px; border-radius: var(--radius-sm); cursor: pointer; }
+.onglets-vue-resultats button.actif { background: var(--violet-vif); color: #fff; border-color: var(--violet-vif); }
+
+/* `.badge-succes` déjà défini plus haut (statuts de tâche) — `.badge-alerte`/`.badge-neutre`
+   complètent la même échelle à 3 tons pour le badge de score des cartes résultats. */
+.badge-alerte { background: var(--danger-clair); color: var(--danger); }
+.badge-neutre { background: var(--surface-sunken); color: var(--text-muted); }
+
+/*
+ * Cartes repliables "Par élève" — même chrome que `.carte-resultat-eleve`/`.entete-eleve` déjà
+ * définis plus haut, complétés d'un chevron de repli EN TÊTE de ligne (jamais `.chevron-droite`,
+ * qui porte `margin-left: auto` pensé pour un chevron en fin de ligne).
+ */
+.entete-resultat-repliable { cursor: pointer; }
+.entete-resultat-repliable:hover { filter: brightness(0.98); }
+.chevron-repli-resultat { flex-shrink: 0; color: var(--text-muted); transition: transform 0.15s; }
+.carte-resultat-eleve.ouvert .chevron-repli-resultat { transform: rotate(90deg); }
+.corps-entete-resultat { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.nom-resultat-eleve { font-weight: 600; font-size: 0.9rem; color: var(--text); }
+.meta-resultat-eleve { font-size: 0.75rem; color: var(--text-muted); }
+.corps-eleve-resultat { margin-top: 10px; }
+.lien-profil-resultat { display: inline-block; margin-top: 8px; background: none; border: none; box-shadow: none;
+  color: var(--violet-vif); font-weight: 700; font-size: 0.8rem; padding: 0; cursor: pointer; }
+
+/* ---------- Vue "Par compétence" : matrice élèves (lignes) × compétences (colonnes) ----------
+   Retour utilisateur (correction du math : autant de compétences que d'élèves possible) — matrice
+   TRANSPOSÉE : élèves en lignes (scroll vertical naturel, pas d'axe qui grandit horizontalement
+   avec l'effectif) via 1re colonne collante (nom+avatar), compétences en colonnes compactes
+   plafonnées par défaut (#btn-toggle-competences-matrice, voir JS PLAFOND_COLONNES_MATRICE). */
+.fiche-resultats-competence { display: flex; align-items: center; gap: 10px; background: var(--violet-clair);
+  border-radius: var(--radius-sm); padding: 10px 12px; margin: 0 0 var(--espace-3); font-size: 0.82rem; color: var(--violet); }
+.matrice-scroll { overflow: auto; max-height: 520px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+table.matrice-competences { border-collapse: separate; border-spacing: 0; font-size: 0.75rem; min-width: 100%; }
+table.matrice-competences th, table.matrice-competences td { padding: 7px; text-align: center; border-bottom: 1px solid var(--border); }
+table.matrice-competences thead th { position: sticky; top: 0; background: var(--surface); z-index: 2; }
+table.matrice-competences th.nom-competence-col { font-weight: 600; color: var(--text); max-width: 90px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.7rem; cursor: help; }
+table.matrice-competences th.nom-eleve-matrice, table.matrice-competences td.nom-eleve-matrice {
+  position: sticky; left: 0; z-index: 1; background: var(--surface); text-align: left; font-weight: 600;
+  color: var(--text); white-space: nowrap; vertical-align: middle; cursor: pointer; }
+table.matrice-competences thead th.nom-eleve-matrice { z-index: 3; }
+table.matrice-competences tbody th.nom-eleve-matrice:hover { color: var(--violet-vif); }
+.nom-eleve-matrice-texte { display: inline-block; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; }
+table.matrice-competences td.competence-col { width: 60px; }
+.avatar-mini-matrice { width: 24px; height: 24px; border-radius: 50%; background: var(--violet-clair); color: var(--violet-vif);
+  font-family: var(--font-marque); font-weight: 700; font-size: 9px; display: inline-flex; align-items: center; justify-content: center;
+  vertical-align: middle; margin-right: 8px; flex-shrink: 0; }
+.pastille { display: block; width: 16px; height: 16px; border-radius: 50%; margin: 0 auto; cursor: pointer; }
+.pastille-maitrisee { background: var(--vert-vif); }
+.pastille-observation { background: var(--ambre-vif); }
+.pastille-non-maitrisee { background: var(--danger); }
+.pastille-non-testee { background: var(--border); }
+/*
+ * Retour utilisateur (§204d, "lorsqu'on clique sur une des boules (verte/rouge), on devrait avoir
+ * le nom et l'info de cette compétence") — panneau affiché au clic sur une pastille de la matrice
+ * "Par compétence" (`afficherDetailCelluleMatrice`, public/prof.html). Fond/bordure par statut,
+ * même paire de couleurs que `.pastille-*`/`.feuille-arbre-competence.*` ci-dessus et plus haut dans
+ * ce fichier — jamais une 3e palette pour le même statut.
+ */
+.detail-cellule-matrice { padding: 10px 12px; border-radius: 10px; margin: 8px 0; border: 1px solid var(--border); background: var(--surface-sunken); }
+.detail-cellule-matrice-non-maitrisee { background: var(--danger-clair); border-color: var(--danger); }
+.detail-cellule-matrice-observation { background: var(--ambre-clair); border-color: var(--ambre); }
+.detail-cellule-matrice-titre { font-weight: 700; color: var(--text); margin: 0; font-size: 0.85rem; }
+.detail-cellule-matrice-competence { margin: 2px 0 0; font-size: 0.85rem; color: var(--text); }
+.detail-cellule-matrice-statut { margin: 4px 0 0; font-size: 0.8rem; color: var(--text-muted); }
+.detail-cellule-matrice.detail-cellule-matrice-non-maitrisee .detail-cellule-matrice-statut { color: var(--danger); }
+.detail-cellule-matrice.detail-cellule-matrice-observation .detail-cellule-matrice-statut { color: var(--ambre); }
+#btn-toggle-competences-matrice { margin-top: 10px; font-size: 0.78rem; padding: 6px 14px; }
+.legende-matrice { display: flex; flex-wrap: wrap; gap: 10px; font-size: 0.72rem; color: var(--text-muted); margin-top: 10px; }
+.legende-matrice span { display: inline-flex; align-items: center; gap: 5px; }
+.puce-legende { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.puce-legende-maitrisee { background: var(--vert-vif); }
+.puce-legende-observation { background: var(--ambre-vif); }
+.puce-legende-non-maitrisee { background: var(--danger); }
+.puce-legende-non-testee { background: var(--border); }
+
+/*
+ * Prompt "Profil de compétences élève", Étape 4 : "taper sur le nom d'un élève ouvre son profil" —
+ * `.entete-eleve` (juste au-dessus) devient une zone tapable, même motif déjà établi que
+ * `.carte-tache-cliquable` (eleve.html) : curseur pointeur + léger assombrissement au survol.
+ */
+.entete-eleve-cliquable {
+  cursor: pointer;
+}
+.entete-eleve-cliquable:hover {
+  filter: brightness(0.98);
+}
+
+/*
+ * Retour utilisateur ("je remplacerai le profil de compétences complet de l'élève par l'arbre à
+ * indentation repliable") — remplace les anciennes `.carte-competence`/`.bande-categories`/
+ * `.chip-categorie`/`.titre-groupe-competences`/`.repere-sous-categorie` (listes plates non
+ * maîtrisée/en observation, retirées de public/prof.html). `.libelle-competence`/
+ * `.description-competence`/`.occurrences-competence` restent réutilisées telles quelles par la
+ * nouvelle feuille d'arbre (`.feuille-arbre-competence`), inchangées ci-dessous.
+ *
+ * **Correctif (retour utilisateur : "je ne vois que du gris et du rouge, pas de jaune")** : la
+ * palette d'origine ci-dessus ("jamais l'ambre... déjà réservé à `.tag-bug`/`.badge-serie`") était
+ * une fausse piste — vérifiée à nouveau, cette réserve ne concerne QUE l'écran élève "récapitulatif
+ * de fin de tâche" (`.ligne-recap-orange`, où l'ambre signifie "correct avec aide", un 3e statut
+ * sans rapport). Le VRAI précédent déjà établi côté prof pour "en observation" est `--ambre-vif`
+ * (`.pastille-observation`/`.puce-legende-observation`, matrice "Par compétence" juste au-dessus
+ * dans ce fichier) — jamais suivi jusqu'ici pour l'arbre/la vue radiale, corrigé ci-dessous pour
+ * rester cohérent avec cette légende déjà visible au prof sur ce même écran de résultats.
+ */
+.libelle-competence { font-weight: 700; font-size: 14.5px; color: var(--text); }
+.description-competence { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+.occurrences-competence { font-size: 12px; font-weight: 700; color: var(--text-muted); margin-top: 6px; }
+
+/* ---------- Option A : arbre à indentation repliable ---------- */
+.noeud-arbre-competences { border-radius: 10px; }
+.ligne-noeud-arbre-competences {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 4px;
+  cursor: pointer;
+  border-radius: 10px;
+  user-select: none;
+}
+.ligne-noeud-arbre-competences:hover { background: var(--surface-sunken); }
+.chevron-arbre-competences { width: 13px; height: 13px; flex: none; color: var(--text-muted); transition: transform .15s; }
+.noeud-arbre-competences.ouvert > .ligne-noeud-arbre-competences > .chevron-arbre-competences { transform: rotate(90deg); }
+.nom-noeud-arbre-competences { font-weight: 700; font-size: 13.5px; color: var(--text); flex: 1; }
+.puces-compte-arbre-competences { display: flex; gap: 6px; flex: none; }
+.puce-compte-arbre-competences { font-size: 11px; font-weight: 700; border-radius: 999px; padding: 2px 8px; }
+.puce-compte-arbre-competences.non-maitrisee { background: var(--danger-clair); color: var(--danger); }
+.puce-compte-arbre-competences.en-observation { background: var(--ambre-clair); color: var(--ambre); }
+.enfants-arbre-competences { display: none; margin-left: 19px; border-left: 1px solid var(--border); padding-left: 6px; }
+.noeud-arbre-competences.ouvert > .enfants-arbre-competences { display: block; }
+/*
+ * Retour utilisateur ("j'aimais bien lorsque tu mettais les blocs en couleurs dans le profil
+ * complet des compétences") — fonds pleins réintroduits sur la feuille elle-même (même principe que
+ * l'ancienne `.carte-competence.non-maitrisee`/`.en-observation`, retirée au profit d'une puce seule
+ * lors du passage à l'arbre — la puce reste, mais le fond coloré de la carte manquait).
+ */
+.feuille-arbre-competence { display: flex; align-items: flex-start; gap: 9px; padding: 8px 8px 8px 4px; border-radius: 10px; margin-bottom: 4px; }
+.feuille-arbre-competence:hover { filter: brightness(0.98); }
+.feuille-arbre-competence.non-maitrisee { background: var(--danger-clair); border: 1px solid var(--danger); }
+.feuille-arbre-competence.en-observation { background: var(--ambre-clair); border: 1px solid var(--ambre); }
+.feuille-arbre-competence.non-maitrisee .libelle-competence { color: var(--danger); }
+.feuille-arbre-competence.en-observation .libelle-competence { color: var(--ambre); }
+.puce-statut-arbre-competence { width: 9px; height: 9px; border-radius: 50%; flex: none; margin-top: 6px; }
+.puce-statut-arbre-competence.non-maitrisee { background: var(--danger); }
+.puce-statut-arbre-competence.en-observation { background: var(--ambre-vif); }
+.corps-feuille-arbre-competence { flex: 1; min-width: 0; }
+.corps-feuille-arbre-competence .libelle-competence { font-size: 13.5px; }
+
+/* ---------- Option C : vue radiale ---------- */
+.vue-radiale-conteneur { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; justify-content: center; }
+.vue-radiale-svg-wrap { position: relative; flex: none; }
+.vue-radiale-centre {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  pointer-events: none;
+  padding: 0 40px;
+}
+.vue-radiale-chiffre { font-family: var(--font-marque); font-size: 1.6rem; font-weight: 700; color: var(--text); line-height: 1; }
+.vue-radiale-libelle { font-size: 0.68rem; color: var(--text-muted); margin-top: 2px; }
+.arc-radial-competence { cursor: pointer; stroke: var(--surface); stroke-width: 1.5px; transition: opacity .15s, filter .15s, transform .15s; }
+.arc-radial-competence:hover { filter: brightness(1.08); }
+.arc-radial-competence.arc-estompe { opacity: 0.3; }
+.arc-radial-competence.arc-selectionne { filter: brightness(1.12); stroke: var(--text); stroke-width: 2.5px; }
+/*
+ * Retour utilisateur ("je voudrais aussi mettre en évidence le sous secteur sélectionné au sein du
+ * secteur déjà mis en évidence") — posée UNIQUEMENT sur la feuille précisément cliquée (jamais sur
+ * les autres feuilles de la même catégorie, qui restent seulement `.arc-selectionne` sans cette
+ * emphase — voir `selectionnerArcRadialCompetence`, public/prof.html) : liseré blanc + ombre portée,
+ * distincte du simple contour sombre de `.arc-selectionne` ci-dessus pour rester visible même sur
+ * un fond déjà sombre (catégorie `#3B1470`).
+ */
+.arc-radial-competence.arc-sous-selectionne { stroke: #fff; stroke-width: 3.5px; filter: brightness(1.12) drop-shadow(0 0 3px rgba(0, 0, 0, 0.45)); }
+.vue-radiale-detail { flex: 1 1 200px; min-width: 200px; font-size: 0.85rem; }
+.vue-radiale-detail h3 { font-size: 1rem; margin: 0 0 6px; color: var(--text); }
+.vue-radiale-resume { color: var(--text-muted); line-height: 1.5; margin: 0; }
+.vue-radiale-placeholder { color: var(--text-muted); font-style: italic; font-size: 0.85rem; margin: 0; }
+
+.lien-profil-classe-resultat { display: block; margin-bottom: 12px; }
+
+/* ---------- Temps de réponse par type d'exercice (profil élève) ---------- */
+/* Règles déplacées et fusionnées avec la version tableau de bord — voir `.temps-variante-*`
+   (Option A, barres comparatives) plus haut dans ce fichier. */
+#profil-temps-variante-conteneur { margin-bottom: 20px; }
+
+/*
+ * Prompt "Bouton d'explication pédagogique par compétence" — `.ligne-libelle-competence` place le
+ * libellé et le bouton "?" sur la même ligne (`justify-content: space-between`, jamais besoin de
+ * `margin-left: auto` ici puisqu'il n'y a que 2 enfants). Bouton absent (jamais juste désactivé) si
+ * `c.explication` est `undefined` (voir `afficherCompetences`, public/prof.html) — un code sans
+ * entrée dans `lib/explicationsCompetences.ts` ne montre donc simplement rien de plus, comportement
+ * par défaut sobre demandé explicitement par le prompt.
+ */
+.ligne-libelle-competence {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.btn-explication-competence {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-weight: 700;
+  font-size: 12px;
+  font-family: var(--font-corps);
+  cursor: pointer;
+  box-shadow: none;
+  min-height: 0;
+  margin: 0;
+}
+.btn-explication-competence:hover:not(:disabled) {
+  filter: none;
+  background: var(--surface-sunken);
+}
+
+/*
+ * Panneau déplié au clic sur "?" — jamais de `display` déclaré ici : le comportement `block` par
+ * défaut d'un `<div>` suffit, ce qui laisse `[hidden]` (règle du navigateur) agir sans concurrence
+ * d'une règle AUTEUR de même origine — le même piège de cascade documenté ailleurs dans ce fichier
+ * (`.groupe-champ[hidden]`, etc.) n'a donc structurellement aucune prise ici.
+ */
+.explication-competence {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text);
+}
+.explication-competence p {
+  margin: 0 0 6px;
+}
+.explication-competence p:last-child {
+  margin-bottom: 0;
+}
+.explication-competence-exemple {
+  color: var(--text-muted);
+}
+
+/* Étape 1.5 — écran de fin, "Tâche terminée !" centré, seule action = retour au tableau de bord (PRIMAIRE, style bouton par défaut, aucune classe requise). */
+#exercice-termine {
+  text-align: center;
+  padding: var(--espace-5) var(--espace-3);
+}
+
+.ecran-fin-titre {
+  font-family: var(--font-marque);
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 var(--espace-4);
+}
+
+/*
+ * Prompt "Tentatives, aide, récapitulatif" (3/3), Étape 4 — récapitulatif de fin de tâche : 3
+ * statuts, mêmes paires de tokens couleur déjà établies ailleurs pour la même sémantique (jamais
+ * une palette parallèle) — verte : `--vert`/`--vert-clair` (`.retour-correct`) ; orange :
+ * `--ambre`/`--ambre-clair` (`.tag-bug`) ; rouge : `--danger`/`--danger-clair`
+ * (`.retour-incorrect`/`.carte-competence.non-maitrisee`).
+ */
+#recapitulatif-tache {
+  text-align: left;
+  max-width: 420px;
+  margin: 0 auto var(--espace-4);
+}
+
+#recapitulatif-tache h3 {
+  font-family: var(--font-marque);
+  font-size: 1.05rem;
+  margin: 0 0 var(--espace-2);
+}
+
+#liste-recapitulatif {
+  list-style: none;
+  margin: 0 0 var(--espace-3);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ligne-recap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+}
+
+.puce-recap {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ligne-recap-verte { background: var(--vert-clair); color: var(--vert); }
+.ligne-recap-verte .puce-recap { background: var(--vert-vif); }
+.ligne-recap-orange { background: var(--ambre-clair); color: var(--ambre); }
+.ligne-recap-orange .puce-recap { background: var(--ambre-vif); }
+.ligne-recap-rouge { background: var(--danger-clair); color: var(--danger); }
+.ligne-recap-rouge .puce-recap { background: var(--danger); }
+
+/* gen7 (spec-gen7.md) — 3 statuts vert/orange/rouge du panneau "Résultat de l'exercice" (LigneRecap),
+   contrairement au binaire is-good/is-bad de gen5 ci-dessus. */
+.score-ligne.is-aide { background: var(--orange-clair, #fff4e6); color: var(--orange, #d9770c); }
+
+.score-list {
+  list-style: none;
+  margin: 0 0 var(--espace-3);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.score-ligne {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+}
+
+.score-ligne.is-good { background: var(--vert-clair); color: var(--vert); }
+.score-ligne.is-bad { background: var(--danger-clair); color: var(--danger); }
+
+.answer-reveal {
+  background: var(--danger-clair);
+  color: var(--danger);
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  margin: -2px 0 4px;
+  font-size: 13px;
+}
+
+/*
+ * Prompt "Tentatives, aide, récapitulatif" (3/3), Étape 3 — bouton "Aide" partagé (jamais dupliqué
+ * par bloc de champ) : `.bouton-secondaire` déjà réutilisé tel quel pour le style du bouton ;
+ * `#texte-aide` reprend l'habillage déjà établi pour un message informatif discret (mêmes tokens
+ * que `.bloc-exercice-resultat`, jamais une nouvelle palette).
+ */
+#texte-aide {
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 13.5px;
+  color: var(--text-muted);
+  margin: var(--espace-2) 0;
+}
+
+/*
+ * Messages de statut/erreur (formaterErreur et les statuts de succès partagent les mêmes
+ * éléments, jamais séparés par une classe dédiée dans le HTML existant — voir Étape 0) : un
+ * conteneur légèrement teinté, visible seulement quand un texte y est réellement présent
+ * (`:empty`, en pur CSS — ne change jamais QUAND le texte apparaît, seulement son habillage).
+ */
+[id^="statut-"]:not(:empty) {
+  display: inline-block;
+  background: var(--violet-clair);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px 10px;
+  margin-top: 6px;
+  font-size: 0.9rem;
+}
+
+p[id^="statut-"]:not(:empty) {
+  display: block;
+}
+
+/*
+ * Prompt "Responsive mobile", Étape 3 — convention "bloc fitter" reprise de `plateforme-maths`
+ * (src/ui5e/blocFitterEquation.ts + .equation-box-termes de src/App.css), adaptée au texte brut de
+ * ce pilote (pas de LaTeX/Katex — voir RAPPORT.md §4). `decouperExpressionLongue`
+ * (public/eleve.html) découpe une expression en fragments jamais coupés à l'intérieur d'une
+ * parenthèse ; chaque fragment est rendu ici en `nowrap` (jamais cassé en son milieu), le
+ * conteneur les enchaîne en `flex-wrap` (case autant de fragments que la largeur le permet, saute
+ * de ligne UNIQUEMENT entre deux fragments). `overflow-x: auto` : filet de sécurité si un seul
+ * fragment reste malgré tout plus large que l'écran (même principe que `.equation-box` du dépôt
+ * source), jamais une coupure forcée à l'intérieur.
+ */
+.bloc-fitter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  /*
+   * Bug réel trouvé par relecture (session de remédiation spec-gen6, RAPPORT.md) : un `gap`
+   * uniforme insère un espace visible ENTRE CHAQUE FRAGMENT même quand ils s'enchaînent sur la
+   * même ligne — hors, la frontière "parenthèses adjacentes" de `decouperExpressionLongue`
+   * (ci-dessus) est un point de coupure AUTORISÉ pour le retour à la ligne, jamais un vrai
+   * séparateur mathématique (ex. "4(x-(-3))(x-(1))" ne doit jamais afficher d'espace entre les 2
+   * facteurs). `column-gap: 0` : aucun espace ajouté entre 2 fragments sur la même ligne (les
+   * caractères des fragments eux-mêmes, opérateur inclus pour les frontières +/-//, suffisent).
+   * `row-gap` conserve la respiration verticale UNIQUEMENT quand un fragment passe effectivement
+   * à la ligne suivante (`flex-wrap: wrap`).
+   */
+  row-gap: 0.3em;
+  column-gap: 0;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.bloc-fitter-fragment {
+  white-space: nowrap;
+}
+
+/*
+ * Prompt "Système visuel partagé (v3)", Étape 4 — barre d'application en tête de page, remplace le
+ * `<h1>` des deux pages. Pleine largeur de la colonne (hors `.contenu-page`, donc hors son
+ * padding latéral) — arrondi seulement en bas (`border-radius: 0 0 26px 26px`), motif de courbe
+ * SVG en filigrane.
+ *
+ * Bug réel trouvé par la validation Chromium de cette même tâche (pas supposé) : `overflow:
+ * hidden` directement sur `.barre-app` (nécessaire pour que le motif SVG reste dans les coins
+ * arrondis) coupait aussi `#menu-compte-prof` (Étape 4, prof.html) — un popup `position: absolute`
+ * censé déborder SOUS la barre, mais son ancêtre `.barre-app` en overflow:hidden le rognait avant
+ * qu'il n'atteigne ce point, quelle que soit sa propre position. Corrigé en isolant le clipping :
+ * `.barre-app-fond` (nouveau, overflow:hidden + `border-radius: inherit`, ne contient QUE le SVG)
+ * plutôt que `.barre-app` lui-même — `.barre-app-contenu` (marque, avatar, menu) n'est plus un
+ * descendant d'un ancêtre en overflow:hidden, son popup peut déborder librement en dessous.
+ */
+.barre-app {
+  position: relative;
+  background: linear-gradient(160deg, var(--violet) 0%, var(--violet-2) 100%);
+  color: #fff;
+  padding: 20px 20px 24px;
+  border-radius: 0 0 26px 26px;
+}
+
+.barre-app-fond {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.motif-courbe {
+  position: absolute;
+  right: -20px;
+  top: 10px;
+  width: 220px;
+  height: 140px;
+  opacity: .3;
+}
+
+/*
+ * Bug réel trouvé (prompt "Corrections + composants visuels", Étape 0, bug 4) — vérifié par
+ * exécution réelle en Chromium (`elementFromPoint` sur le menu compte prof affiché depuis l'onglet
+ * "Tableau de bord"), pas supposé : `z-index: 1` ici est INFÉRIEUR au `z-index: 2` de
+ * `.grille-stats-tdb` (plus bas dans ce fichier). Le `z-index: 10` de `.menu-compte` (plus bas) ne
+ * change rien à ce piège classique de la cascade CSS — un z-index n'est comparé qu'À L'INTÉRIEUR du
+ * contexte d'empilement de son ancêtre le plus proche qui EN CRÉE un ; ce contexte-ci
+ * (`.barre-app-contenu`) est lui-même plus bas que `.grille-stats-tdb` au niveau supérieur, donc
+ * tout son contenu (menu inclus) reste peint EN DESSOUS quel que soit le z-index interne du menu.
+ * Relevé à 3 (au-dessus de `.grille-stats-tdb`, encore nettement en dessous de `.nav-flottante`,
+ * z-index: 20, la seule superposition volontaire de ce système).
+ */
+.barre-app-contenu {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espace-3);
+}
+
+/* prof.html : marque + icône à gauche (Étape 4). */
+.marque {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-2);
+  font-family: var(--font-marque);
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.marque-icone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.18);
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+/* eleve.html : "Salut, {prénom}" + ligne dynamique (Étape 4), pas de marque/icône ici. */
+.salutation {
+  font-family: var(--font-marque);
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.salutation-ligne {
+  margin: 4px 0 0;
+  font-family: var(--font-corps);
+  font-size: 0.9rem;
+  color: rgba(255,255,255,.85);
+}
+
+/* Prompt "Badge de série" (5/5), Étape 3 : pill ambre sur le fond violet de .barre-app, affiché uniquement si serieActuelle >= 3 (voir eleve.html). */
+.badge-serie {
+  display: inline-flex;
+  align-items: center;
+  margin: 8px 0 0;
+  padding: 6px 14px;
+  background: var(--ambre-vif);
+  color: var(--text);
+  font-family: var(--font-corps);
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-radius: 999px;
+  width: fit-content;
+}
+
+/*
+ * Bug réel trouvé pendant la validation Chromium de "Corrections eleve.html + bascule
+ * connexion/inscription" (Étape 3) — même défaut de cascade que `label[hidden]` et
+ * `.groupe-champ[hidden]` plus haut dans ce fichier : `display: inline-flex` ci-dessus (spécificité
+ * de classe, feuille AUTEUR) l'emporte sur le `display: none` par défaut du navigateur pour
+ * `[hidden]` (feuille UTILISATEUR-AGENT, même spécificité mais origine antérieure) — le badge
+ * restait visible (pill ambre vide) malgré `#badge-serie.hidden === true`, jamais détecté jusqu'ici
+ * car la validation Chromium du prompt "Badge de série" ne vérifiait que la propriété `hidden` en
+ * JS, pas la visibilité effective à l'écran.
+ */
+.badge-serie[hidden] {
+  display: none;
+}
+
+/*
+ * prof.html : rond avec l'initiale de l'email à droite, tap ouvre un petit menu (email complet +
+ * bouton "Se déconnecter") — remplace l'ancienne ligne connectée toujours affichée en permanence
+ * (chantier "Refonte visuelle"). `hidden` par défaut (avant connexion, comme l'ancienne
+ * `#ligne-connectee`) — peuplé/affiché par le même point du code (handler de connexion).
+ */
+.compte-avatar {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.avatar-bouton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.22);
+  border: 2px solid rgba(255,255,255,.5);
+  color: #fff;
+  font-family: var(--font-marque);
+  font-weight: 700;
+  font-size: 1rem;
+  padding: 0;
+  margin: 0;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.avatar-bouton:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.menu-compte {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 10;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 10px 24px -12px rgba(59,20,112,.4);
+  padding: var(--espace-3);
+  min-width: 220px;
+  color: var(--text);
+}
+
+.menu-compte p {
+  margin: 0 0 var(--espace-2);
+  font-size: 0.9rem;
+  word-break: break-all;
+}
+
+.menu-compte button {
+  margin: 0;
+  width: 100%;
+}
+
+/*
+ * Prompt "Système visuel partagé (v3)", Étape 5 — navigation flottante, valeurs exactes du
+ * prototype. Remplace `#onglets-nav`/`.onglet-bouton` (barre d'onglets fixée en haut de page,
+ * chantier "Navigation par onglets") : même JS de bascule (montrer/cacher un panneau, classe
+ * `onglet-actif`), seuls le nom des classes CSS ciblées et leur position changent — voir
+ * RAPPORT.md pour la confirmation qu'aucune ligne de JS n'a dû changer.
+ */
+/* Retour utilisateur réel : masquée en mode aperçu (`initModeApercu`, public/eleve.html) via
+   `#onglets-nav.hidden = true` — même piège de cascade que `.groupe-champ[hidden]`/`label[hidden]`
+   documentés ailleurs dans ce fichier : `display: flex` (AUTEUR, ci-dessous) l'emporterait sur
+   `display: none` de `[hidden]` (UTILISATEUR-AGENT) sans cette règle explicite. */
+.nav-flottante[hidden] { display: none; }
+
+.nav-flottante {
+  position: fixed;
+  bottom: 16px;
+  left: 16px;
+  right: 16px;
+  max-width: 400px;
+  margin: 0 auto;
+  background: rgba(255,255,255,.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(233,228,243,.9);
+  border-radius: 22px;
+  box-shadow: 0 18px 40px -14px rgba(59,20,112,.28);
+  display: flex;
+  padding: 8px;
+  gap: 4px;
+  z-index: 20;
+}
+
+.nav-flottante .onglet-bouton {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 9px 4px 8px;
+  border-radius: 16px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  background: none;
+  border: none;
+  margin: 0;
+  box-shadow: none;
+  min-height: 0;
+}
+
+.nav-flottante .onglet-bouton.onglet-actif {
+  color: #fff;
+  background: linear-gradient(160deg, var(--violet-2), var(--violet-vif));
+  box-shadow: 0 8px 16px -6px rgba(124,58,237,.55);
+}
+
+.nav-flottante .nav-icone {
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* `display: block` + `margin-left: auto` (spec-gen8-images : bouton "?" aligné à droite, jamais à
+   gauche comme le flux par défaut d'un `<button>` inline-block le placerait). */
+/* `padding: 0` override obligatoire : la règle `button` globale (padding 9px/18px) ferait, avec
+   `box-sizing: border-box` global, déborder le padding horizontal (36px) au-delà des 28px de
+   largeur fixée ici — bouton rendu en OVALE (largeur forcée ~40px, hauteur 28px) plutôt qu'un
+   cercle, trouvé par audit Chromium réel (capture "01-etat-initial") avant ce correctif. */
+.btn-terminologie {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-weight: 700;
+  font-family: var(--font-corps);
+  cursor: pointer;
+  margin: 0 0 var(--espace-2) auto;
+}
+
+.terminologie-liste {
+  list-style: none;
+  margin: 0 0 var(--espace-3);
+  padding: 10px 14px;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Même piège de cascade que `.groupe-champ[hidden]`/`label[hidden]`/`#exercice button[hidden]`
+   (documenté plus haut dans ce fichier, trouvé ici par audit Chromium réel — capture "01-etat-
+   initial" montrant la liste de terminologie déjà ouverte au premier rendu) : `display: flex`
+   (AUTEUR) l'emporte sur `display: none` de `[hidden]` (UTILISATEUR-AGENT), quelle que soit la
+   spécificité comparée — l'origine de la règle est comparée AVANT la spécificité dans la cascade
+   CSS. Override explicite, même remède que les 4 autres endroits déjà cités. */
+.terminologie-liste[hidden] {
+  display: none;
+}
+
+.curseur-row {
+  display: flex;
+  gap: var(--espace-3);
+  margin-bottom: var(--espace-2);
+}
+
+.curseur-champ {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.curseur-champ input[type="range"] {
+  width: 100%;
+}
+
+/*
+ * SOX est un `<button class="btn curseur-champ">` (spec §4, "vrai toggle à un seul bouton"), pas un
+ * `<label>` : override de mise en page. `color: #fff` réaffirmé explicitement — `.curseur-champ`
+ * (classe seule) pose `color: var(--text-muted)`, qui l'emporterait sinon sur le texte blanc du
+ * bouton PRIMAIRE global (règle `button`, élément seul, spécificité plus faible) : bug réel trouvé
+ * par audit Chromium (capture "01-etat-initial", texte "SOX : Non" gris illisible sur fond violet).
+ */
+.btn.curseur-champ {
+  display: block;
+  width: 100%;
+  text-align: center;
+  margin-bottom: var(--espace-3);
+  color: #fff;
+}
+
+/* Marquage rouge en direct (spec §4/§9, "EV et CV se marquent toujours ensemble") — même paire de tokens que `.retour-incorrect`/`.answer-reveal`. */
+.curseur-champ.is-erronee {
+  color: var(--danger);
+}
+
+.curseur-champ.is-erronee input[type="range"] {
+  accent-color: var(--danger);
+}
+
+/*
+ * gen9 (spec-gen9.md §4) — 1er générateur du pilote à marquer en rouge un CHAMP TEXTE LIBRE
+ * (`.champ-reponse`, ex. "xS"/"yS"/"formeCanonique"/"fonctionIntermediaire") plutôt qu'un seul
+ * `.curseur-champ` (bouton/curseur) — aucune règle CSS existante ne stylait encore `.is-erronee`
+ * sur un `<input>` classique avant cet ajout (vérifié : seul `.curseur-champ.is-erronee` existait).
+ * Bordure rouge (même token `--danger` que ci-dessus), reste focusable normalement.
+ */
+.champ-reponse.is-erronee {
+  border-color: var(--danger);
+}
+
+.template-box {
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-bottom: var(--espace-3);
+  text-align: center;
+}
+
+.field-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-2);
+  margin-bottom: var(--espace-2);
+}
+
+.field-inline .champ-reponse {
+  margin-bottom: 0;
+}
+
+/* `.sous-champ-label` uppercase globalement (voir sa règle plus haut) — "f(x) =" doit rester en minuscules (même piège déjà documenté pour "a ="/"x_S ="). */
+.field-label-minuscule {
+  text-transform: none;
+  letter-spacing: normal;
+  margin-bottom: 0;
+  white-space: nowrap;
+}
+
+.alert-error {
+  background: var(--danger-clair);
+  color: var(--danger);
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  margin: 0 0 var(--espace-2);
+  font-size: 13px;
+}
+
+.summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: var(--espace-4);
+  font-size: 13.5px;
+}
+
+.summary-table th, .summary-table td {
+  text-align: left;
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Prompt "Responsive mobile", Étape 1 — mise en page fluide sur petit écran (360-390px, Étape 4). */
+@media (max-width: 600px) {
+  .panneau {
+    padding: 16px;
+  }
+
+  /*
+   * `#exercice label { display: inline }` (règle plus haut) suppose une largeur suffisante pour
+   * aligner libellé + champ + bouton sur une ligne — vrai sur desktop, jamais garanti sur un écran
+   * étroit (ex. bloc-facteur-commun : libellé long + 2 champs numériques + bouton). Empilé
+   * verticalement ici plutôt que débordé (Étape 1 : "champs et boutons... empilés verticalement...
+   * s'ils ne tiennent pas").
+   */
+  #exercice label {
+    display: block;
+    margin-bottom: var(--espace-2);
+  }
+
+  #exercice button {
+    display: block;
+    width: 100%;
+  }
+
+  /*
+   * Bug trouvé en testant le prompt "Tentatives, aide, récapitulatif" (3/3), Étape 5 (Chromium,
+   * viewport mobile 390px) — voir RAPPORT.md : même piège de cascade que `label[hidden]`/
+   * `.groupe-champ[hidden]`/`.badge-serie[hidden]`/`.badge-flottant-composition[hidden]` plus haut
+   * dans ce fichier, jamais corrigé pour `#exercice button` en particulier — `display: block`
+   * ci-dessus (AUTEUR, spécificité ID+élément) l'emporte sur `display: none` du navigateur
+   * (UTILISATEUR-AGENT) pour `[hidden]`, quelle que soit la spécificité. Constaté sur `#btn-aide`
+   * (masqué après clic, restait pourtant affiché en `display: block` sur mobile) mais touche en
+   * réalité TOUT bouton de `#exercice` masqué via `.hidden = true` sur cet écran — y compris
+   * `#btn-valider-*` une fois la réponse verrouillée (`bouton.hidden = passee`, préexistant à ce
+   * prompt, jamais remarqué car aucune validation Chromium antérieure n'avait testé cet état
+   * précis sur mobile). Même remède qu'aux 4 endroits cités : règle explicite ci-dessous.
+   */
+  #exercice button[hidden] {
+    display: none;
+  }
+
+  /*
+   * Prompt "Verrouillage, reprise de progression, champs multiples" (URGENT), Étape 4 : cause
+   * exacte trouvée (RAPPORT.md), pas le `<select>`/`<input>` résiduel envisagé au départ — même
+   * mécanisme que celui qui affectait `.btn-signe` (bouton "−" retiré depuis, voir RAPPORT.md
+   * "Correction du régime de saisie") : `#exercice button` (spécificité ID+élément) écrase aussi
+   * `display: flex` de `.choix-btn` (spécificité classe seule) sur cet
+   * écran mobile, le remplaçant par `display: block`. Conséquence en cascade, confirmée par mesure
+   * Chromium AVANT ce correctif : `.rond-radio` (`width: 20px; height: 20px`, `<span>` donc
+   * `display: inline` par défaut, jamais explicitement mis en `display: block/flex` nulle part dans
+   * ce fichier) ne peut recevoir de largeur/hauteur qu'en `display` non-inline (CSS 2.1 §10.3.1,
+   * "this property does not apply" aux boîtes inline non remplacées) : privé de `display: flex` sur
+   * son parent, le rond s'effondre à ~4×21px — un mince trait vertical collé juste après le texte du
+   * bouton, RENDU exactement comme le "curseur clignotant par-dessus le bouton visuel" signalé
+   * (capture reproduite : "Mise en évidence (c=0)|"), jamais un `<select>`/`<input>` résiduel — le
+   * seul candidat de ce type (`<input type="hidden">`) est structurellement non focusable/non rendu
+   * par spécification, confirmé par `document.activeElement` en Chromium (pointe le `<button>`
+   * lui-même après clic, jamais l'input caché). Override ciblé (spécificité ID+classe) sur
+   * `#exercice button` : restaure `display: flex` (donc `justify-content: space-between` et la
+   * taille réelle du rond), ne touche à aucun autre bouton de `#exercice`.
+   */
+  #exercice .choix-btn {
+    display: flex;
+  }
+
+  /*
+   * Prompt "Refonte visuelle complète", Étape 1 — "Regroupement visuel" sur mobile : "clairement
+   * associés par un conteneur commun (léger fond ou bordure)" une fois le groupe empilé
+   * verticalement (l'alignement en ligne, seul indice de groupe sur desktop, disparaît ici).
+   */
+  .groupe-champ {
+    background: var(--surface-sunken);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--espace-3);
+  }
+}
+
+/*
+ * Refonte du formulaire "Assigner une tâche" (retour utilisateur, maquette "Option B" validée
+ * avant implémentation) : carte à 3 étapes numérotées, remplace l'ancien `.groupe-champ` en ligne
+ * pour ce formulaire précis (les autres formulaires du dépôt gardent `.groupe-champ` inchangé).
+ * Prompt "Repli + pagination", suite : "Assigner une tâche" a rejoint l'accordéon — plus de
+ * fond/bordure/ombre/padding propres ici (le panneau accordéon les fournit déjà, cf.
+ * `.panneau-accordeon-taches`/`.corps-accordeon-pad` ; les avoir aux 2 niveaux recréait le
+ * sous-bloc redondant signalé pour "Créer une tâche"), seul le layout flex des 3 étapes reste.
+ */
+.carte-assignation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-4);
+}
+.assignation-etape {
+  display: flex;
+  gap: var(--espace-3);
+}
+.assignation-etape-numero {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--violet-vif);
+  color: #fff;
+  font-weight: 700;
+  font-size: 12.5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.assignation-etape-numero-confirmer {
+  background: var(--vert);
+}
+.assignation-etape-corps {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+  min-width: 0;
+}
+.assignation-etape-corps > label {
+  margin-bottom: 0;
+}
+.assignation-etape-titre {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* Bascule Classe entière / Élèves spécifiques — mêmes tokens que les segmented controls existants. */
+.bascule-mode-assignation {
+  display: flex;
+  background: var(--surface-sunken);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 3px;
+}
+.bouton-mode-assignation {
+  all: unset;
+  flex: 1;
+  text-align: center;
+  padding: 8px;
+  border-radius: 9px;
+  font-family: var(--font-corps);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.bouton-mode-assignation.actif {
+  background: var(--violet-vif);
+  color: #fff;
+}
+
+.etiquette-champ-assignation {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.puces-classes-assignation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.puce-classe-assignation {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  padding: 6px 11px;
+  font-family: var(--font-corps);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  background: var(--surface-sunken);
+  border: 1.5px solid var(--border);
+  color: var(--text-muted);
+}
+.puce-classe-assignation.active {
+  background: var(--violet-vif);
+  border-color: var(--violet-vif);
+  color: #fff;
+}
+
+.recherche-eleves-assignation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 9px 11px;
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+}
+.recherche-eleves-assignation input {
+  all: unset;
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-corps);
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.liste-cases-eleves {
+  display: flex;
+  flex-direction: column;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.liste-cases-eleves:empty {
+  display: none;
+}
+.ligne-case-eleve {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  font-family: var(--font-corps);
+}
+.ligne-case-eleve:last-child {
+  border-bottom: none;
+}
+.case-eleve {
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  border: 1.5px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #fff;
+}
+.case-eleve.coche {
+  background: var(--violet-vif);
+  border-color: var(--violet-vif);
+}
+.nom-eleve-assignation {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.classe-eleve-assignation {
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--surface-sunken);
+  padding: 2px 7px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.statut-liste-eleves-assignation {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+}
+.statut-liste-eleves-assignation:empty {
+  display: none;
+}
+
+.resume-selection-eleves {
+  display: flex;
+  flex-direction: column;
+  background: var(--violet-clair);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.bouton-resume-selection {
+  all: unset;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 13px;
+  cursor: pointer;
+  font-family: var(--font-corps);
+}
+.bouton-resume-selection span:first-child {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--violet-2);
+}
+.bouton-resume-selection span:last-child {
+  font-size: 11px;
+  color: var(--violet-vif);
+}
+.detail-selection-eleves {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 13px 13px;
+}
+.detail-selection-eleves[hidden] {
+  display: none;
+}
+.detail-groupe-classe-eleve + .detail-groupe-classe-eleve {
+  margin-top: 0;
+}
+.detail-groupe-classe-titre {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--violet-2);
+  opacity: .75;
+  margin-bottom: 5px;
+}
+.detail-ligne-eleve-selectionne {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border-radius: 9px;
+  padding: 7px 10px;
+  cursor: pointer;
+  font-family: var(--font-corps);
+  margin-bottom: 5px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.avatar-mini-assignation {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--violet-clair);
+  color: var(--violet-vif);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.grille-dates-assignation {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--espace-2);
+}
+.grille-dates-assignation > label {
+  margin-bottom: 0;
+}
+@media (max-width: 600px) {
+  .grille-dates-assignation {
+    grid-template-columns: 1fr;
+  }
+}
+
+/*
+ * Prompt "Repli + pagination" (retour utilisateur : éviter de devoir scroller une centaine de
+ * tâches avant d'atteindre "Assigner une tâche") — Option C ("le titre entier est la poignée")
+ * + Modèle 3 ("accordéon exclusif" : ouvrir "Créer une tâche" referme "Liste des tâches" et
+ * inversement, voir panneauTachesActif dans prof.html) retenus par l'utilisateur parmi plusieurs
+ * maquettes. Mêmes tokens de carte que `.carte-formulaire` (surface/border/radius/shadow),
+ * réutilisés tels quels — un panneau accordéon n'est qu'une carte dont le corps se replie.
+ */
+.panneau-accordeon-taches {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 24px -18px rgba(59, 20, 112, 0.3);
+  overflow: hidden;
+  margin-bottom: var(--espace-4);
+}
+.entete-accordeon-taches {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 16px 20px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-corps);
+}
+.entete-accordeon-taches-gauche {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+.chevron-accordeon-taches {
+  flex-shrink: 0;
+  color: var(--violet-vif);
+  transition: transform 0.15s;
+}
+.panneau-accordeon-taches.ouvert .chevron-accordeon-taches {
+  transform: rotate(90deg);
+}
+.icone-accordeon-taches {
+  flex-shrink: 0;
+  font-size: 19px;
+  line-height: 1;
+}
+/*
+ * Demande utilisateur : remplacer l'emoji 🏫 de "Mes classes" par une icône représentant un banc
+ * d'école — aucun emoji Unicode natif n'existe pour ça (contrairement aux 3 autres panneaux
+ * 🆕/📋/🎯 qui restent des emoji). L'icône (`.icone-banc-ecole` dans prof.html) est la photo de
+ * référence fournie par l'utilisateur elle-même (détourée, fond blanc rendu transparent), en
+ * `<img>` avec `src` en `data:image/png;base64,...` inline — pas une reconstruction dessinée à la
+ * main, sur demande explicite après plusieurs essais de SVG jugés trop éloignés de la photo.
+ */
+.titre-accordeon-taches {
+  font-family: var(--font-marque);
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.badge-accordeon-taches {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+}
+/* "+" décoratif sur la poignée "Créer une tâche" (jamais interactif en soi, le `<button>`
+   englobant l'est déjà) — même esprit visuel que le compte de tâches sur "Liste des tâches",
+   sans faire croire à un 2e chiffre. */
+.badge-plus-accordeon {
+  color: var(--violet-vif);
+  font-size: 15px;
+  line-height: 1;
+  padding: 3px 11px;
+}
+.corps-accordeon-taches {
+  border-top: 1px solid var(--border);
+}
+/*
+ * Retour utilisateur : "Créer une tâche" a son propre padding interne par section
+ * (`.zone-edition`/`.zone-apercu`/`.zone-pied`, réutilisées telles quelles depuis
+ * `.carte-formulaire`) — lui ajouter aussi le padding du corps accordéon l'aurait doublé (padding
+ * visiblement plus généreux que "Liste"/"Assigner", incohérent entre panneaux). `.corps-
+ * accordeon-pad` n'est donc posée que sur les panneaux dont le contenu n'a pas déjà son padding
+ * propre ("Liste des tâches", "Assigner une tâche").
+ */
+.corps-accordeon-pad {
+  padding: 16px 16px 20px;
+}
+
+/*
+ * Pagination "Liste des tâches" (5 tâches/page) — fenêtre glissante de numéros centrée sur la
+ * page courante + « / » pour sauter en première/dernière page : pensé pour ~20 pages
+ * (94 tâches ÷ 5), où cliquer "suivant" en boucle serait pénible (retour utilisateur explicite).
+ */
+.pagination-taches-boutons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+}
+.bouton-page-tache,
+.bouton-nav-page-tache {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 7px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-corps);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.bouton-page-tache.actif {
+  background: var(--violet-vif);
+  border-color: var(--violet-vif);
+  color: #fff;
+}
+.bouton-nav-page-tache:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.pagination-taches-libelle {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 8px 0 0;
+}
+
+/*
+ * Refonte "Onglet Classes" (Option C, validée par l'utilisateur sur maquette interactive avant
+ * implémentation — même méthodologie que la refonte de l'onglet Tâches). Réutilise volontairement
+ * `.panneau-accordeon-taches`/`.entete-accordeon-taches`/`.chevron-accordeon-taches`/
+ * `.icone-accordeon-taches`/`.titre-accordeon-taches`/`.badge-accordeon-taches`/
+ * `.corps-accordeon-taches`/`.corps-accordeon-pad`/`.badge-plus-accordeon` telles quelles pour les
+ * 2 panneaux "Créer une classe"/"Mes classes" (déjà génériques malgré leur nom, voir leur propre
+ * commentaire plus haut) — jamais dupliquées sous un nom "-classes".
+ */
+.badge-classe-active-accordeon {
+  background: var(--violet-clair);
+  color: var(--violet);
+}
+
+.liste-mes-classes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ligne-mes-classes {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.ligne-mes-classes.actif {
+  background: var(--violet-clair);
+}
+.ligne-mes-classes-infos {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+.ligne-mes-classes-nom {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+}
+.ligne-mes-classes-effectif {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+.ligne-mes-classes-coche {
+  flex-shrink: 0;
+  color: var(--violet-vif);
+}
+
+/* Bandeau résumé de la classe active — crayon jaune (Modifier) à gauche de l'intitulé (retour
+   utilisateur explicite), code copiable, régénérer. Même chrome de carte que `.panneau`/
+   `.item-liste`/`.item-eleve` (fond/bordure/radius/ombre), jamais dupliqué en propriétés littérales. */
+.bandeau-classe-active {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 24px -18px rgba(59,20,112,.3);
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: var(--espace-4);
+}
+.avatar-bandeau-classe {
+  width: 48px;
+  height: 48px;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+.bouton-crayon-classe {
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--ambre-clair);
+  color: var(--ambre);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.bandeau-classe-active-corps {
+  flex: 1;
+  min-width: 0;
+}
+.bandeau-classe-active-nom {
+  font-family: var(--font-marque);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--text);
+}
+.bandeau-classe-active-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.bandeau-classe-active-code {
+  font-family: monospace;
+  font-weight: 600;
+  color: var(--text);
+}
+.bouton-copier-code {
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  color: var(--violet-vif);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.bouton-copier-code.copie {
+  color: var(--vert);
+}
+/*
+ * Correctif post-livraison (retour utilisateur, capture mobile) : `.bandeau-classe-active` en
+ * simple `display: flex` (une seule ligne) faisait chevaucher le texte "code XXXXXX" et le bouton
+ * "🔄 Régénérer le code" sous 600px (avatar 48px + crayon 30px + régénérer laissant trop peu de
+ * place à `.bandeau-classe-active-corps`). `flex-wrap: wrap` + `flex-basis: 100%` sur `-corps`
+ * (jamais un simple `flex-wrap` seul, insuffisant : sans `flex-basis`, le navigateur ne garantit
+ * pas que `-corps` bascule sur sa propre ligne si l'espace restant suffit presque) force 3 lignes
+ * nettes : avatar+crayon, puis nom+effectif+code+copier (pleine largeur), puis régénérer aligné à
+ * droite — jamais de chevauchement, quelle que soit la longueur du nom de classe.
+ *
+ * Retour utilisateur (maquette fournie) : `#btn-regenerer-code` remonte sur la 1re ligne (`order: 1`
+ * comme avatar/crayon, au lieu de `order: 3` sur sa propre ligne) — reste "très à droite" au même
+ * niveau que "Modifier" grâce au `margin-left: auto` conservé (pousse le bouton en bout de LIGNE,
+ * pas en bout de conteneur — la 1re ligne ne contient plus que avatar+crayon+régénérer, `-corps`
+ * bascule seul sur la 2e via son `flex-basis: 100%`). 2 lignes au lieu de 3 : bloc plus bas.
+ */
+@media (max-width: 600px) {
+  .bandeau-classe-active {
+    flex-wrap: wrap;
+  }
+  .avatar-bandeau-classe,
+  .bouton-crayon-classe {
+    order: 1;
+  }
+  .bandeau-classe-active-corps {
+    order: 2;
+    flex-basis: 100%;
+  }
+  #btn-regenerer-code {
+    order: 1;
+    margin-left: auto;
+  }
+}
+.bandeau-classe-active-edition {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* Même piège de cascade que `.groupe-champ[hidden]`/`.badge-flottant-composition[hidden]` (plus
+   haut dans ce fichier) : `display: flex` (AUTEUR) l'emporterait sur `[hidden]` (UTILISATEUR-AGENT)
+   sans cette règle explicite — trouvé par la validation Chromium de la refonte "Onglet Classes"
+   (le formulaire d'édition du nom restait visible après "Enregistrer"/"Annuler"). */
+.bandeau-classe-active-edition[hidden] {
+  display: none;
+}
+.bandeau-classe-active-edition-boutons {
+  display: flex;
+  gap: 8px;
+}
+.bandeau-classe-active-edition-boutons button {
+  margin: 0;
+}
+
+/*
+ * Correctif post-livraison (retour utilisateur, tests réels) : les formulaires inline "Modifier"/
+ * "Transférer" un élève (construireFormulaireEditionEleve/construireFormulaireTransfertEleve,
+ * public/prof.html) utilisaient encore `.groupe-champ` nu — remplacés par cet habillage, cohérent
+ * avec `.zone-edition`/`.zone-pied`/`.champ-label`/`.champ-input` déjà utilisés ailleurs dans
+ * l'onglet Classes (`.grille-2col` étendu ci-dessus pour s'appliquer aussi ici). Le `<li>` parent
+ * (`.item-liste`) porte déjà le chrome de carte (fond/bordure/radius/ombre) et son propre padding
+ * — ce bloc ne décrit que l'espacement interne, jamais un 2e habillage de carte superposé.
+ */
+.zone-edition-eleve {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.entete-edition-eleve {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.titre-edition-eleve {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text);
+}
+.zone-pied-eleve {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.statut-edition-eleve {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+/* Recherche/tri "Élèves de la classe active" — mêmes composants que "Liste des tâches"
+   (`.recherche-taches`, `.bouton-direction-tri-tache`), `.puce-tri-eleves` nouvelle (3 clés au lieu
+   d'un choix de colonne de table, pas de tableau ici). */
+.tri-eleves {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: var(--espace-2) 0 var(--espace-3);
+}
+.tri-eleves-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-right: 2px;
+}
+.puce-tri-eleves {
+  all: unset;
+  box-sizing: border-box;
+  padding: 6px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.puce-tri-eleves.actif {
+  background: var(--violet-clair);
+  color: var(--violet);
+  font-weight: 700;
+}
+/* Correctif post-livraison (retour utilisateur, capture mobile) : "Trier :" + les 3 puces + le
+   bouton de direction cassaient sur 3 lignes sous 600px, le bouton de direction isolé seul sur sa
+   propre ligne — padding/police resserrés pour que le tout reste sur au plus 2 lignes cohérentes
+   (voir aussi le libellé "Activité" raccourci depuis "Dernière activité" dans prof.html). */
+@media (max-width: 600px) {
+  .tri-eleves-label {
+    font-size: 10px;
+  }
+  .puce-tri-eleves {
+    padding: 5px 9px;
+    font-size: 11px;
+  }
+  .bouton-direction-tri-tache {
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
+  }
+}
+
+/* ==========================================================================
+   Tâche "Imprimer un rapport de résultats" — écran de réglages (à l'écran)
+   ========================================================================== */
+
+.entete-onglet-resultats { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: var(--espace-3); }
+.entete-onglet-resultats h2 { margin: 0; }
+
+.reglages-impression { display: flex; flex-direction: column; gap: var(--espace-4); }
+.champ-reglage-impression { display: flex; flex-direction: column; gap: 8px; }
+.description-format-impression { font-size: 0.8rem; color: var(--text-muted); margin: 0; }
+.case-filtre-impression { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--text); cursor: pointer; }
+.statut-impression-resultats { color: var(--danger); font-size: 0.85rem; min-height: 1.2em; }
+.bouton-generer-impression { align-self: flex-start; }
+#select-impression-eleve { width: 100%; }
+
+/* ==========================================================================
+   Tâche "Imprimer un rapport de résultats" — gabarits imprimables
+   Tokens couleur réutilisés tels quels (--violet/--ambre/--vert/--danger, etc.) — mêmes valeurs que
+   partout ailleurs dans ce fichier, jamais redéfinies ici. `#zone-impression` reste invisible à
+   l'écran (n'existe que pour être imprimée) : masquée par défaut, révélée uniquement par
+   `body.mode-impression` juste avant `window.print()` (voir prof.html).
+   ========================================================================== */
+
+#zone-impression { display: none; }
+
+.feuille-impression { background: #fff; color: var(--text); padding: 0; page-break-after: always; }
+.feuille-impression:last-child { page-break-after: auto; }
+
+.impression-entete { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding-bottom: 14px; border-bottom: 2px solid var(--text); margin-bottom: 20px; }
+.impression-fil-ariane { font-size: 10.5px; color: var(--text-muted); margin-bottom: 3px; }
+.impression-titre { font-family: var(--font-marque); margin: 0; font-size: 20px; font-weight: 700; }
+.impression-sous-titre { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+.impression-date { font-size: 10.5px; color: var(--text-muted); white-space: nowrap; }
+
+.impression-puce-competence { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+.impression-puce-non-maitrisee { background: var(--danger); }
+.impression-puce-en-observation { background: var(--ambre-vif); }
+
+table.impression-table-resume { width: 100%; border-collapse: collapse; font-size: 12px; }
+table.impression-table-resume th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-muted); padding: 6px 10px; border-bottom: 2px solid var(--border); }
+table.impression-table-resume td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+table.impression-table-resume tr { page-break-inside: avoid; }
+.impression-cell-nom { font-weight: 700; white-space: nowrap; }
+.impression-cell-score { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.impression-rien-a-signaler { color: var(--text-muted); font-style: italic; }
+.impression-chip-competence { display: inline-flex; align-items: center; font-size: 10.5px; font-weight: 600; padding: 3px 8px 3px 6px; border-radius: 999px; margin: 0 5px 5px 0; }
+.impression-chip-competence.non-maitrisee { background: var(--danger-clair); color: var(--danger); }
+.impression-chip-competence.en-observation { background: var(--ambre-clair); color: var(--ambre); }
+
+.impression-radiale-conteneur { display: flex; justify-content: center; margin: 12px 0 18px; }
+/*
+ * Correctif (rapport imprimé illisible, PDF à l'appui) : `max-width` doit correspondre à
+ * `LARGEUR_CIBLE_IMPRESSION_RADIALE_PX` (public/prof.html) — c'est CETTE largeur que
+ * `construireVueRadialeImpression` utilise pour calculer sa police en unités de viewBox
+ * (`taillePoliceLibelle`/`taillePoliceDetail`) afin qu'elle reste lisible (~12px/10.5px réels) une
+ * fois imprimée ; un `max-width` différent ici décalerait l'échelle réelle vs celle visée par le
+ * calcul de police. 680px ≈ largeur imprimable d'une page A4 portrait avec marges 15mm (`@page`
+ * plus bas dans ce fichier).
+ */
+.impression-radiale-svg { width: 100%; max-width: 680px; height: auto; }
+.impression-legende-radiale { display: flex; gap: 20px; justify-content: center; font-size: 11px; color: var(--text-muted); }
+.impression-legende-radiale span { display: inline-flex; align-items: center; }
+
+@media print {
+  body.mode-impression > *:not(#zone-impression) { display: none !important; }
+  body.mode-impression #zone-impression { display: block !important; }
+  @page { size: A4 portrait; margin: 15mm; }
+}
+
+/* ==========================================================================
+   Prompt "Impression d'une tâche en A4" — gabarits imprimables (énoncés + corrigé sur une page A4
+   séparée). Réutilise `#zone-impression`/`.feuille-impression`/`.impression-entete`/
+   `.impression-titre`/`.impression-sous-titre`/`.impression-date` déjà définis ci-dessus (même
+   `@media print`, jamais redéfini) — seules les classes propres à la liste d'exercices/au corrigé
+   sont ajoutées ici, absentes de la fonctionnalité "Imprimer un rapport de résultats".
+   ========================================================================== */
+
+.impression-groupe-generateur { margin: 18px 0 8px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-muted); border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+.impression-groupe-generateur:first-child { margin-top: 0; }
+
+.impression-liste-exercices { margin: 0; padding: 0; }
+
+.impression-exercice { page-break-inside: avoid; margin: 0 0 16px; padding-bottom: 10px; border-bottom: 1px dashed var(--border); }
+.impression-exercice-ligne { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.impression-exercice-numero { font-weight: 700; flex-shrink: 0; }
+.impression-exercice-enonce { display: inline-block; }
+
+.impression-corrige-champs { margin: 8px 0 0; padding-left: 20px; font-size: 12.5px; display: flex; flex-direction: column; gap: 4px; }
+.impression-corrige-champ { display: flex; align-items: baseline; gap: 5px; flex-wrap: wrap; }
+.impression-corrige-label { font-weight: 600; color: var(--text-muted); white-space: nowrap; }
+
+/* Correctif "Impression d'une tâche en A4" — une question (libellé + espace de réponse) par champ
+   attendu, sur la page énoncés (voir construireItemImpressionExercice, public/eleve.html) : même
+   liste de champs et mêmes libellés que `.impression-corrige-champ` ci-dessus, un exercice à
+   plusieurs `champs_attendus` (ex. gen2 : racines/signe_a/intervalle) a donc désormais une ligne
+   de question distincte par champ plutôt qu'un unique espace-réponse générique. */
+.impression-questions-champs { margin: 10px 0 0; padding-left: 20px; font-size: 12.5px; display: flex; flex-direction: column; gap: 14px; }
+.impression-question-champ { display: flex; align-items: baseline; gap: 8px; }
+.impression-question-label { flex-shrink: 0; color: var(--text-muted); }
+.impression-question-espace-reponse { flex-grow: 1; align-self: stretch; min-width: 60px; border-bottom: 1px solid var(--border); }
+
+/* ==========================================================================
+   Tâche "Refonte du tableau de bord (Option B — Centre d'action)"
+   ========================================================================== */
+
+.tdb-echeances-vide { font-size: 0.85rem; color: var(--text-muted); margin: 0 0 var(--espace-3); }
+
+.tdb-liste-echeances { display: flex; flex-direction: column; gap: 8px; margin-bottom: var(--espace-3); }
+
+.carte-echeance-tdb {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--ambre-vif);
+  border-radius: var(--radius-sm);
+  padding: 11px 13px;
+  cursor: pointer;
+}
+.carte-echeance-tdb:hover { filter: brightness(0.98); }
+.carte-echeance-tdb.urgente { border-left-color: var(--danger); }
+
+.infos-echeance-tdb { min-width: 0; flex: 1; }
+.nom-echeance-tdb { font-size: 12.5px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.detail-echeance-tdb { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+
+/* Réutilise la forme de `.badge-statut-tache` (pastille + pilule), nouvelle échelle de couleur
+   "urgence d'échéance" plutôt que "statut de tâche" — jamais confondue avec `.statut-tache-*`. */
+.badge-echeance-urgente { background: var(--danger-clair); color: var(--danger); flex: none; }
+.badge-echeance-proche { background: var(--ambre-clair); color: var(--ambre); flex: none; }
+
+.carte-raccourci-tdb {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--violet-clair);
+  border: 1.5px solid var(--violet-vif);
+  border-radius: var(--radius);
+  padding: 13px 14px;
+  cursor: pointer;
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: var(--espace-4);
+}
+.icone-raccourci-tdb {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  flex: none;
+}
+.texte-raccourci-tdb { flex: 1; min-width: 0; }
+.titre-raccourci-tdb { display: block; font-size: 13px; font-weight: 700; color: var(--violet); }
+.sous-titre-raccourci-tdb { display: block; font-size: 11px; color: var(--violet-2); margin-top: 1px; }
+.chevron-raccourci-tdb { color: var(--violet-2); font-size: 14px; flex: none; }
+
+/*
+ * Prompt "Aperçu d'une tâche avant création" — bandeau persistant en tête de `eleve.html` quand
+ * l'onglet a été ouvert depuis "Aperçu" (prof.html) : mêmes tokens ambre que `.badge-serie`/les
+ * autres avertissements de ce système de conception (`--ambre-clair`/`--ambre`), jamais une
+ * couleur ad hoc. Posé DANS `.barre-app-contenu` (violette) : fond clair volontairement opaque,
+ * pas de transparence, pour rester lisible par-dessus.
+ */
+/* Correctif (retour utilisateur réel, bandeau visible pour un vrai élève hors mode aperçu) : même
+   piège de cascade que `.nav-flottante[hidden]`/`.groupe-champ[hidden]`/`label[hidden]` documentés
+   ailleurs dans ce fichier — `display: flex` (AUTEUR, ci-dessous) l'emporte sur `display: none` de
+   `[hidden]` (UTILISATEUR-AGENT) quelle que soit la spécificité, donc le bandeau restait visible
+   pour TOUT élève depuis l'introduction du HTML de base (`hidden` posé dans la balise), l'attribut
+   `hidden` initial n'ayant jamais eu de prise sans cette règle explicite. */
+.bandeau-mode-apercu[hidden] { display: none; }
+
+.bandeau-mode-apercu {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--ambre-clair);
+  color: var(--ambre);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.bandeau-mode-apercu button {
+  all: unset;
+  cursor: pointer;
+  background: var(--ambre);
+  color: white;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
