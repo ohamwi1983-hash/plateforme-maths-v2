@@ -16,7 +16,19 @@ export async function categorieTachePourEleve(admin: AdminClient, tacheId: strin
     .eq("tache_id", tacheId)
     .in("classe_id", classeIds.length > 0 ? classeIds : [""]);
   if (erreurAssignations) throw new Error(erreurAssignations.message);
-  const derniereAssignation = assignations && assignations.length > 0 ? assignations[assignations.length - 1] : null;
+  // Phase 2 : assignation par ÉLÈVE (`taches_assignations_eleves`, prompt "Assigner à des élèves
+  // spécifiques") prise en compte au même titre que l'assignation par classe — sans elle, un élève
+  // assigné individuellement était classé avec une fenêtre de dates vide (jamais "pas commencée",
+  // jamais "antérieure"). Fenêtres concaténées (classe puis élève) ; la dernière est retenue, même
+  // règle que pour plusieurs assignations par classe.
+  const { data: assignationsEleve, error: erreurAssignationsEleve } = await admin
+    .from("taches_assignations_eleves")
+    .select("date_echeance, date_debut")
+    .eq("tache_id", tacheId)
+    .eq("eleve_id", eleveId);
+  if (erreurAssignationsEleve) throw new Error(erreurAssignationsEleve.message);
+  const toutesAssignations = [...(assignations ?? []), ...(assignationsEleve ?? [])];
+  const derniereAssignation = toutesAssignations.length > 0 ? toutesAssignations[toutesAssignations.length - 1] : null;
   const dateEcheance = (derniereAssignation?.date_echeance as string | null | undefined) ?? null;
   const dateDebut = (derniereAssignation?.date_debut as string | undefined) ?? new Date(0).toISOString();
 

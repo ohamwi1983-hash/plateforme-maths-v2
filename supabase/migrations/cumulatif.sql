@@ -146,3 +146,17 @@ alter table taches_composition add column if not exists chrono_duree_secondes in
 -- complète).
 alter table profs add column if not exists eleve_apercu_id uuid references eleves(id);
 alter table taches add column if not exists est_apercu boolean not null default false;
+
+-- Phase 2 (contrat de générateur) : graine du tirage seedé (l'exercice est régénéré à chaque appel,
+-- plus figé en base), `enonce`/`solution` deviennent optionnels, usage d'aide enregistré côté
+-- serveur (voir supabase/schema.sql pour la justification complète). Idempotent comme le reste de
+-- ce fichier (`drop not null` est un no-op si la colonne est déjà nullable).
+alter table exercices_assignes add column if not exists graine bigint;
+alter table exercices_assignes alter column enonce drop not null;
+alter table exercices_assignes alter column solution drop not null;
+create table if not exists aides_utilisees (
+  exercice_assigne_id uuid not null references exercices_assignes(id),
+  champ text not null,
+  horodatage timestamptz not null default now(),
+  primary key (exercice_assigne_id, champ)
+);

@@ -148,12 +148,16 @@ export function construireChampVue(
   etatTentatives: EtatChampTentatives,
 ): ChampVue {
   if (!derniereReponse) {
+    // Phase 2 : un champ RÉVÉLÉ sans aucune réponse (chrono écoulé avant toute soumission,
+    // `calculerEtatChampTentatives(…, chronoExpire=true)`) est verrouillé exactement comme un champ aux
+    // tentatives épuisées : la correction doit être montrée, sans quoi l'élève resterait bloqué sur un
+    // écran fermé sans savoir pourquoi ni voir la réponse.
     return {
       champ,
       valeur_saisie: null,
       statut: null,
-      solution_attendue: revelerSansReponse ? solutionAttendueTexte : null,
-      revele: false,
+      solution_attendue: revelerSansReponse || etatTentatives.revelee ? solutionAttendueTexte : null,
+      revele: etatTentatives.revelee,
     };
   }
   // Champ révélé (tentatives épuisées, Étape 2) OU tâche antérieure (`revelerSansReponse`, réglages
