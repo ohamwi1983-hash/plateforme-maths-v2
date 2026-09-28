@@ -337,3 +337,50 @@ identifiés) restent dans l'ancien pilote, non inventoriés individuellement ici
 touché. **Non portés intentionnellement** (générateurs, hors décision n°1) :
 `test-taxonomie-competences-tier0-1-15.ts`, `test-saisie-signe-negatif.ts`, et tout autre test dont
 le nom référence un générateur (gen1/gen6/secondDegre/inequationRationnelle).
+
+## §8 : Phase 1 §G — validation Chromium bout en bout + correctif `catalogue-generateurs-complet.json`
+
+**Méthode** : harnais réel (pas une simple inspection visuelle) — serveur HTTP local exécutant le
+VRAI `api/router.ts` compilé avec un faux client Supabase Auth+DB en mémoire injecté via
+`require.cache` (même idiome que `scripts/test-routeur.ts`/`test-gestion-classe-etendue.ts`),
+piloté par Chromium (`/opt/pw-browsers/chromium`) avec interception du seul CDN bloqué par le bac à
+sable (`unpkg.com/@supabase/supabase-js`, remplacé par un stub local fidèle à l'API réelle
+`auth.{getSession,setSession,signInWithPassword,...}`) — aucun réseau réel utilisé nulle part.
+
+**8 scénarios requis × 2 largeurs (390px mobile, 1280px desktop) : 16/16 PASS**, plus inscription
+prof (préalable) et connexion élève (préalable), soit 18/18 scénarios :
+- `prof.html` : inscription (invitation) → tableau de bord ; création de classe (POST
+  `/api/classes` → 201, apparaît immédiatement) ; création d'élève (POST `/api/profs/creer-eleve` →
+  201, apparaît dans la liste) ; formulaire de composition gen7 "4e:7" — champ "nombre
+  d'exercices" de `af_mise_en_evidence` vérifié **non disabled** par lecture de la propriété DOM
+  (`disabled: false`), capture desktop montrant le contraste avec un générateur voisin
+  (numero 9, absent de `CORRESPONDANCE_JSON_VERS_PILOTE`) resté visiblement grisé ; création réelle
+  d'une tâche bout en bout, `POST /api/taches` → 201, composition confirmée par un `GET /api/taches`
+  de suivi.
+- `eleve.html` : connexion (nom+prénom+mot de passe réels, élève créé quelques instants plus tôt
+  côté prof) ; tableau de bord — `GET /api/eleves/tableau-de-bord` renvoie un vrai 404 (route
+  absente de `TABLE_ROUTAGE`, différée phase 2), état vide affiché comme prévu, **0 erreur JS**
+  (`pageerror`/`console.error` applicatif — la seule entrée console est le diagnostic réseau natif
+  de Chromium pour ce même 404 attendu, jamais une exception) — conforme à la décision utilisateur
+  du §5 ; onglet Résultats (`GET /api/eleves/mes-resultats` → 200, état vide correct) ; onglet Mon
+  compte (avatar, stats 0/0, actions de compte).
+
+**Bug réel trouvé par la validation, corrigé dans ce même travail** (pas seulement documenté) :
+`public/catalogue-generateurs-complet.json` était **absent du dépôt** (jamais commité — confirmé
+par `git log --all` vide sur ce chemin), alors que `public/prof.html:2102` le récupère sans
+condition à chaque chargement de la table de composition (`fetch("/catalogue-generateurs-complet.json")`).
+Sans ce fichier, l'arbre de composition entier échoue pour TOUT professeur, pas seulement gen7 —
+exactement la même classe de régression silencieuse ("rien ne signale l'oubli, ni erreur ni log")
+que celle documentée par `CLAUDE.md` pour `CORRESPONDANCE_JSON_VERS_PILOTE`, mais un niveau
+au-dessus (le fichier JSON lui-même, jamais une de ses entrées). Écart introduit en §A/§D (fichier
+non listé parmi les fichiers `public/` copiés à l'époque, jamais rattrapé depuis) — la validation
+Chromium du harnais avait dû en fournir une copie de secours pour pouvoir tester quoi que ce soit
+côté composition, ce qui a signalé l'absence. **Correctif** : fichier copié verbatim depuis l'ancien
+pilote (`public/catalogue-generateurs-complet.json`, 123 269 octets, identique — `diff` vide,
+`json.load` valide) vers `public/catalogue-generateurs-complet.json` de ce dépôt (décision n°3 :
+fichier gardé "whole", jamais élagué).
+
+**Harnais de validation** : conservé hors dépôt, dans un répertoire scratch (`scratchpad-validation/`
+du clone de travail) jamais ajouté à git — confirmé non suivi (`git status --short`) et non commité
+ici. Les 18 captures d'écran et le journal console complet restent disponibles dans ce répertoire de
+travail pour consultation, mais ne font pas partie du livrable versionné.
