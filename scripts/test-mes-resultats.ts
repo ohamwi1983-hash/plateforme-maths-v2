@@ -98,6 +98,18 @@ async function main() {
     verifier(corps.historiqueTaches.length === 1 && corps.historiqueTaches[0].correct === 0, "sans tentative supplémentaire : une seule réponse suffit à noter la tâche");
   }
 
+  // ── Sans correction immédiate : un seul essai effectif (option B), même avec des tentatives supplémentaires ──
+  {
+    const s = creerScenario();
+    installerBase(s.base);
+    const t = creerTache(s, { nom: "Muette", feedback_immediat: false, tentatives_supplementaires: 3 });
+    const ex = exercice(s, t, ["champ1"]);
+    classe(s, t, FUTUR);
+    repondre(s, ex, "champ1", "not_equivalent"); // 1re réponse = champ terminé (révélé), pas « encore 3 essais »
+    const { corps } = await lire();
+    verifier(corps.historiqueTaches.length === 1 && corps.historiqueTaches[0].correct === 0 && corps.historiqueTaches[0].total === 1, `feedback coupé + 3 essais stockés : 1 réponse suffit, obtenu ${JSON.stringify(corps.historiqueTaches)}`);
+  }
+
   // ── Chrono écoulé sans réponse : champ terminé (révélé), compté raté dans le total ──
   {
     const s = creerScenario();

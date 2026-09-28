@@ -202,8 +202,6 @@ export const gererElevesMesResultats = avecGestionErreurs(async function handler
     // `GET /api/eleves/tableau-de-bord` et `POST /api/reponses` (`etatTentativesAvecChrono`,
     // lib/etatExercice.ts). Un champ_attendus manquant — ligne créée avant le correctif documenté là-bas
     // — reste traité comme jamais complet, jamais vacuously complet.
-    // Limite connue : le verrouillage côté client sous `feedback_immediat=false` (lib/etatExercice.ts,
-    // `verrouille`) n'est PAS compté ici — décision de conception en attente (voir RAPPORT.md §11).
     const champsTermineParExercice = new Map<string, Set<string>>();
     for (const ex of exercicesDeLaTache) {
       const cleContexte = `${tacheId}:${ex.variante_id}`;

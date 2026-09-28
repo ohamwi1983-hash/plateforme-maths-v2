@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "./supabaseAdmin";
 import { exerciceEstComplet, tacheEstComplete, classifierTache, type CategorieOuNonCommencee } from "./tableauDeBord";
-import { calculerEtatChampTentatives, tentativesMaxDepuisReglages } from "./moteurTentatives";
+import { calculerEtatChampTentatives, tentativesMaxEffectif } from "./moteurTentatives";
 import type { StatutVerification } from "../src/moteur/statutVerification";
 
 type AdminClient = ReturnType<typeof supabaseAdmin>;
@@ -45,11 +45,11 @@ export async function categorieTachePourEleve(admin: AdminClient, tacheId: strin
   // lib/routes/eleves/tableau-de-bord.ts.
   const { data: tache, error: erreurTache } = await admin
     .from("taches")
-    .select("tentatives_supplementaires, aide_penalite_pourcent")
+    .select("feedback_immediat, tentatives_supplementaires, aide_penalite_pourcent")
     .eq("id", tacheId)
     .maybeSingle();
   if (erreurTache) throw new Error(erreurTache.message);
-  const tentativesMax = tentativesMaxDepuisReglages((tache?.tentatives_supplementaires as number | undefined) ?? 0);
+  const tentativesMax = tentativesMaxEffectif((tache?.feedback_immediat as boolean | undefined) ?? true, (tache?.tentatives_supplementaires as number | undefined) ?? 0);
   const aidePenalitePourcent = (tache?.aide_penalite_pourcent as number | undefined) ?? 0;
 
   const { data: exercices, error: erreurExercices } = await admin

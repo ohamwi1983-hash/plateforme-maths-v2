@@ -6,7 +6,7 @@ import {
   calculerChronoExpire,
   calculerEtatChampTentatives,
   horodatageDebutPertinent,
-  tentativesMaxDepuisReglages,
+  tentativesMaxEffectif,
   type ChronoMode,
   type EtatChampTentatives,
   type LigneDebutEcran,
@@ -75,7 +75,7 @@ export async function chargerContexteTache(admin: AdminClient, tacheId: string, 
   return {
     nom: tache.nom as string,
     reglages: { feedback_immediat: tache.feedback_immediat as boolean, reponse_visible: tache.reponse_visible as boolean },
-    tentativesMax: tentativesMaxDepuisReglages(tache.tentatives_supplementaires as number),
+    tentativesMax: tentativesMaxEffectif(tache.feedback_immediat as boolean, tache.tentatives_supplementaires as number),
     aideActivee: tache.aide_activee as boolean,
     aidePenalitePourcent: tache.aide_penalite_pourcent as number,
     chronoMode,
@@ -185,17 +185,15 @@ type ReponseConfirmeeInterne = { champ: string; reponseBrute: string; statut: St
  * enregistrées et des réglages de tâche — jamais d'une saisie en cours (règle « état local d'édition
  * ≠ réponse », lib/contratGenerateur.ts).
  *
- * `verrouille` : champ sur lequel le client ne doit plus proposer de saisie. Vrai si le moteur de
- * tentatives l'a terminé (réussi ou révélé) OU si le feedback immédiat est désactivé et qu'une
- * réponse existe déjà : sans feedback, rendre une 2e tentative possible côté client révélerait
- * indirectement que la 1re était fausse. Le serveur, lui, continue de dériver le score du seul
- * moteur de tentatives.
+ * `verrouille` : champ sur lequel le client ne doit plus proposer de saisie = champ terminé par le
+ * moteur de tentatives (réussi ou révélé). Sans correction immédiate, `tentativesMax` vaut 1
+ * (`tentativesMaxEffectif`, lib/moteurTentatives.ts) : la première réponse termine donc le champ, sans
+ * cas particulier ici — client, tableau de bord et résultats voient la même chose.
  */
 export function calculerEtatExercice(regenere: ExerciceRegenere, donnees: DonneesExercice, contexte: ContexteTache, maintenant: Date): EtatExerciceComplet {
   const champs = regenere.ecrans.map((ecran) => {
     const etat = calculerEtatChamp(ecran.champ, donnees, contexte, maintenant);
-    const verrouille = etat.etat.terminee || (!contexte.reglages.feedback_immediat && etat.historique.length > 0);
-    return { ...etat, verrouille };
+    return { ...etat, verrouille: etat.etat.terminee };
   });
   const reponsesConfirmees: ReponseConfirmeeInterne[] = champs
     .filter((c) => c.verrouille)

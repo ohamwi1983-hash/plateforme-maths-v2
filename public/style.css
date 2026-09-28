@@ -1099,6 +1099,17 @@ button:disabled {
   gap: 10px;
 }
 
+/* Réglage verrouillé (ex. « Tentatives supplémentaires » sans correction immédiate) : sans grisage
+   explicite un stepper `disabled` serait visuellement identique à un stepper actif. */
+.ligne-reglage .stepper-bouton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ligne-reglage input.stepper-valeur:disabled {
+  opacity: 0.5;
+}
+
 .stepper-bouton {
   width: 24px;
   height: 24px;

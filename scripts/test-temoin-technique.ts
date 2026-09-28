@@ -240,7 +240,30 @@ async function main() {
   await appeler("assignations", "POST", { jeton: jetonProf, corps: { tache_id: tacheMuette, eleve_ids: ["eleve-2"] } });
   const exMuet = s.base.table("exercices_assignes").find((l) => l.tache_id === tacheMuette)!;
   const rm = await appeler("reponses", "POST", { jeton: "eleve:eleve-2", corps: { exercice_assigne_id: exMuet.id, champ: CHAMP_SOMME, reponse_brute: "0" } });
-  verifier(rm.corps.statut === undefined && rm.corps.solution_attendue === undefined && rm.corps.message_erreur === undefined && rm.corps.verrouille === true && rm.corps.champ_courant === CHAMP_PARITE, `feedback désactivé : ni statut ni solution, champ verrouillé côté client : ${JSON.stringify(rm.corps)}`);
+  // Héritage assumé de l'ancien pilote : à l'ÉPUISEMENT des essais la révélation est forcée quels que soient
+  // feedback_immediat/reponse_visible (sinon l'élève resterait bloqué sur un champ fermé). Sans correction
+  // immédiate il n'y a qu'UN essai (option B) : une mauvaise réponse révèle donc statut ET solution.
+  verifier(rm.corps.statut === "not_equivalent" && rm.corps.solution_attendue !== undefined && rm.corps.revele === true && rm.corps.verrouille === true && rm.corps.champ_courant === CHAMP_PARITE, `feedback coupé, réponse fausse : révélation forcée (1 seul essai) : ${JSON.stringify(rm.corps)}`);
+  // Option B : sans correction immédiate, UN SEUL essai quoi qu'indique `tentatives_supplementaires` (ici 2).
+  const gMuet = await appeler(`exercices/${exMuet.id}`, "GET", { jeton: "eleve:eleve-2" });
+  verifier(gMuet.corps.tache.tentatives_max === 1, `feedback coupé : tentatives_max effectif attendu 1, obtenu ${gMuet.corps.tache.tentatives_max}`);
+  verifier(gMuet.corps.champs.find((c: any) => c.champ === CHAMP_SOMME).verrouille === true, "feedback coupé : la 1re réponse termine le champ (verrouille)");
+  const exerciceMuet = temoin.generer(Number(exMuet.graine));
+  // Réponse JUSTE sans correction immédiate : rien n'est révélé (ni statut ni solution), le champ est verrouillé.
+  const bonnePariteMuet = await appeler("reponses", "POST", { jeton: "eleve:eleve-2", corps: { exercice_assigne_id: exMuet.id, champ: CHAMP_PARITE, reponse_brute: reponseBruteCorrecte(exerciceMuet, CHAMP_PARITE) } });
+  verifier(bonnePariteMuet.corps.statut === undefined && bonnePariteMuet.corps.solution_attendue === undefined && bonnePariteMuet.corps.message_erreur === undefined && bonnePariteMuet.corps.verrouille === true && bonnePariteMuet.corps.revele === false, `feedback coupé, réponse juste : ni statut ni solution, champ verrouillé : ${JSON.stringify(bonnePariteMuet.corps)}`);
+  const mauvaises: Record<string, string> = {
+    [CHAMP_DIVISEURS]: JSON.stringify(["1"]),
+    [CHAMP_SIGNES]: JSON.stringify({ facteur1: { c0: "+", c1: "+", c2: "+", c3: "+", c4: "+" }, facteur2: { c0: "+", c1: "+", c2: "+", c3: "+", c4: "+" }, produit: { c0: "+", c1: "+", c2: "+", c3: "+", c4: "+" } }),
+  };
+  for (const [champ, brute] of Object.entries(mauvaises)) await appeler("reponses", "POST", { jeton: "eleve:eleve-2", corps: { exercice_assigne_id: exMuet.id, champ, reponse_brute: brute } });
+  const tdbMuet = await appeler("eleves/tableau-de-bord", "GET", { jeton: "eleve:eleve-2" });
+  verifier(tdbMuet.corps.effectuees.some((t: any) => t.tache_id === tacheMuette), "feedback coupé : tâche répondue une fois par champ = « effectuée » au tableau de bord");
+  const resMuet = await appeler("eleves/mes-resultats", "GET", { jeton: "eleve:eleve-2" });
+  const ligneMuette = resMuet.corps.historiqueTaches.find((h: any) => h.nomTache === "muette");
+  verifier(!!ligneMuette && ligneMuette.total === 4 && ligneMuette.correct === 1, `feedback coupé : mes-résultats note la tâche (1/4), même verdict que le tableau de bord — obtenu ${JSON.stringify(ligneMuette)}`);
+  const { tentativesMaxEffectif } = require("../lib/moteurTentatives");
+  verifier(tentativesMaxEffectif(true, 0) === 1 && tentativesMaxEffectif(true, 2) === 3 && tentativesMaxEffectif(false, 0) === 1 && tentativesMaxEffectif(false, 5) === 1, "tentativesMaxEffectif : (true,0)=1 (true,2)=3 (false,·)=1");
   const tacheVisible = creerTache(s, { nom: "visible", reponse_visible: true, variantes: [{ variante_id: VARIANTE_TEMOIN, nombre_exercices: 1 }] });
   await appeler("assignations", "POST", { jeton: jetonProf, corps: { tache_id: tacheVisible, eleve_ids: ["eleve-2"] } });
   const exVis = s.base.table("exercices_assignes").find((l) => l.tache_id === tacheVisible)!;
