@@ -1,6 +1,6 @@
 // Test permanent — phase 2 §E : le design system reste (1) fidèle à sa documentation et (2) le seul
 // vocabulaire des composants d'écran du moteur.
-//  - les 31 tokens de `:root` (public/style.css) et le tableau de docs/design-system.md sont
+//  - les 32 tokens de `:root` (public/style.css) et le tableau de docs/design-system.md sont
 //    identiques (mêmes noms, mêmes valeurs, aucun token non documenté ni fantôme) ;
 //  - public/moteur/ecrans.css n'utilise que des `var(--token)` existants : aucune couleur, police,
 //    rayon ni longueur en dur (exceptions documentées : 0, 1px, 2px, 100%, em).
@@ -26,12 +26,12 @@ const bloc = css.slice(debut, fin).replace(/\/\*[\s\S]*?\*\//g, "");
 const tokensCss = new Map<string, string>();
 for (const m of bloc.matchAll(/^\s*(--[a-z0-9-]+):\s*(.+?);\s*$/gm)) tokensCss.set(m[1], m[2]);
 
-verifier(tokensCss.size === 31, `:root doit contenir exactement 31 tokens, trouvé ${tokensCss.size}`);
+verifier(tokensCss.size === 32, `:root doit contenir exactement 32 tokens, trouvé ${tokensCss.size}`);
 
 const doc = readFileSync(join(RACINE, "docs/design-system.md"), "utf8");
 const tokensDoc = new Map<string, string>();
 for (const m of doc.matchAll(/^\|\s*`(--[a-z0-9-]+)`\s*\|\s*`([^`]+)`\s*\|/gm)) tokensDoc.set(m[1], m[2]);
-verifier(tokensDoc.size === 31, `docs/design-system.md doit documenter exactement 31 tokens, trouvé ${tokensDoc.size}`);
+verifier(tokensDoc.size === 32, `docs/design-system.md doit documenter exactement 32 tokens, trouvé ${tokensDoc.size}`);
 for (const [nom, valeur] of tokensCss) {
   verifier(tokensDoc.has(nom), `token ${nom} absent de docs/design-system.md`);
   verifier(!tokensDoc.has(nom) || tokensDoc.get(nom) === valeur, `token ${nom} : valeur documentée « ${tokensDoc.get(nom)} » ≠ valeur CSS « ${valeur} »`);
@@ -47,7 +47,15 @@ for (const m of ecrans.matchAll(/font-family:\s*([^;]+);/g)) verifier(/^var\(--f
 for (const m of ecrans.matchAll(/(?<![\w.-])(\d+(?:\.\d+)?)px\b/g)) verifier(m[1] === "1" || m[1] === "2" || m[1] === "0", `ecrans.css : longueur en dur « ${m[0]} » (utiliser l'échelle --espace-* ou --radius*)`);
 verifier(!/\brem\b|\d+rem\b/.test(ecrans), "ecrans.css : unité rem en dur");
 for (const m of ecrans.matchAll(/border-radius:\s*([^;]+);/g)) verifier(/var\(--radius(-sm)?\)/.test(m[1]), `ecrans.css : border-radius en dur « ${m[1].trim()} »`);
-for (const m of ecrans.matchAll(/var\((--[a-z0-9-]+)\)/g)) verifier(tokensCss.has(m[1]), `ecrans.css : token inconnu ${m[1]}`);
+// Alias locaux (`--etat-*`) : autorisés SEULEMENT s'ils sont définis exclusivement par `var(--token)` existant.
+const aliasLocaux = new Set<string>();
+for (const m of ecrans.matchAll(/^\s*(--[a-z0-9-]+):\s*([^;]+);/gm)) {
+  aliasLocaux.add(m[1]);
+  verifier(/^var\((--[a-z0-9-]+)\)$/.test(m[2].trim()) && tokensCss.has(m[2].trim().slice(4, -1)), `ecrans.css : alias local ${m[1]} défini par « ${m[2].trim()} » (attendu : var(--token) existant)`);
+}
+for (const m of ecrans.matchAll(/var\((--[a-z0-9-]+)\)/g)) verifier(tokensCss.has(m[1]) || aliasLocaux.has(m[1]), `ecrans.css : token inconnu ${m[1]}`);
+verifier(/box-shadow:\s*var\(--ombre-carte\)/.test(ecrans), "ecrans.css : la carte d'écran doit utiliser var(--ombre-carte)");
+for (const m of ecrans.matchAll(/box-shadow:\s*([^;]+);/g)) verifier(/^(none|var\(--ombre-carte\)|inset 0 0 0 1px var\(--[a-z0-9-]+\))$/.test(m[1].trim()), `ecrans.css : box-shadow non conforme « ${m[1].trim()} »`);
 for (const m of ecrans.matchAll(/(?<![\w-])(margin|padding|gap)(-[a-z]+)?:\s*([^;]+);/g)) {
   const valeurs = m[3].trim().split(/\s+/);
   verifier(valeurs.every((v) => v === "0" || v === "auto" || v.startsWith("var(--espace-") || v.startsWith("calc(")), `ecrans.css : ${m[1]}${m[2] ?? ""} en dur « ${m[3].trim()} »`);
@@ -58,4 +66,4 @@ if (echecs.length > 0) {
   for (const e of echecs) console.error(" - " + e);
   process.exit(1);
 }
-console.log(`OK : ${nb} vérifications (31 tokens :root == docs/design-system.md, ecrans.css n'utilise que des tokens)`);
+console.log(`OK : ${nb} vérifications (32 tokens :root == docs/design-system.md, ecrans.css n'utilise que des tokens)`);

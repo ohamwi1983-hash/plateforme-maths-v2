@@ -1,10 +1,11 @@
 # Design system — tokens
 
 Source de vérité **technique** : le bloc `:root` de `public/style.css`. Ce document en est la
-description ; `scripts/test-design-system.ts` vérifie qu'ils restent identiques (mêmes 31 noms, mêmes
-valeurs, aucun token non documenté). **Aucune valeur n'a été inventée en phase 2** : les 31 variables
-issues du « système visuel partagé v3 » (phase 1) ont seulement été regroupées par famille et nommées
-par rôle.
+description ; `scripts/test-design-system.ts` vérifie qu'ils restent identiques (mêmes 32 noms, mêmes
+valeurs, aucun token non documenté). **Aucune valeur n'a été inventée** : les 31 variables issues du « système visuel partagé v3 » (phase 1)
+ont été regroupées par famille et nommées par rôle ; le 32e token, `--ombre-carte`, **nomme** l'ombre de carte
+qui était répétée à l'identique dans cinq règles de `style.css` (sans en changer la valeur ; ces cinq règles
+l'utilisent désormais).
 
 ## Règle d'usage
 
@@ -14,6 +15,28 @@ Exceptions documentées, seules valeurs littérales admises dans `ecrans.css` : 
 (épaisseur de filet/focus, absents des tokens), `100%`, `1`/`600` (`line-height`/`font-weight`), et les
 unités relatives `em` pour les tailles de police. Une hauteur de zone tactile se compose à partir de
 l'échelle : `calc(var(--espace-5) + var(--espace-1))` (44 px).
+
+Alias locaux : `public/moteur/ecrans.css` définit des alias `--etat-bordure`, `--etat-fond`, `--etat-texte`,
+`--etat-filet`, **uniquement** par `var(--token)` existant (vérifié par le test) — jamais une valeur.
+
+## États d'un composant d'écran
+
+| État | Quand | Carte | Sélection / cases |
+|---|---|---|---|
+| Défaut | avant toute action | fond `--surface`, filet `1px --border`, `--radius`, `--ombre-carte` | fond `--surface-sunken` (champ, case) ou `--surface` (option de QCM) |
+| Sélectionné | avant validation, et pendant une nouvelle tentative | inchangée | bordure 2px `--violet-vif`, fond `--violet-clair`, texte `--violet`, gras — **jamais vert ni rouge** |
+| `correct` | réponse du serveur | bordure `--vert`, fond `--vert-clair` | bordure `--vert`, fond `--surface`, texte `--text` |
+| `not_equivalent` | réponse du serveur | bordure `--danger`, fond `--danger-clair` | bordure `--danger`, fond `--surface`, texte `--text` |
+| `parse_error` | réponse du serveur | bordure `--ambre`, fond `--ambre-clair` | bordure `--ambre`, fond `--surface`, texte `--text` |
+
+Les trois verdicts sont posés sur la **carte entière** (`:has(.moteur-statut-…)`, classes présentes seulement si le
+serveur a répondu) et **remplacent** l'état sélectionné une fois le champ verrouillé. Le serveur ne rend qu'un verdict par
+champ : le tableau de signes est coloré **en entier**, jamais case par case.
+
+**Écarts assumés par rapport à la palette brute (contraste, WCAG AA = 4,5:1)** : `--vert` sur `--vert-clair` = 3,68:1 et
+`--ambre` sur `--ambre-clair` = 2,40:1 ne suffisent pas pour du texte ; le texte des messages de verdict `correct` et
+`parse_error` est donc en `--text`, la bordure et le fond gardant la couleur du statut (`--danger` sur blanc = 6,5:1 reste
+utilisé pour le libellé de `not_equivalent`).
 
 ## Tokens
 
@@ -60,6 +83,11 @@ l'échelle : `calc(var(--espace-5) + var(--espace-1))` (44 px).
 |---|---|---|
 | `--radius` | `20px` | Cartes |
 | `--radius-sm` | `13px` | Champs, boutons |
+
+### Ombre
+| Token | Valeur | Rôle |
+|---|---|---|
+| `--ombre-carte` | `0 10px 24px -18px rgba(59,20,112,.3)` | Ombre de toute carte (`.panneau`, `.item-liste`, `.item-eleve`, `.carte-formulaire`, cartes d'écran du moteur) |
 
 ### Typographie
 | Token | Valeur | Rôle |

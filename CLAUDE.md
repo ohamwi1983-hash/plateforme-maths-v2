@@ -83,10 +83,11 @@ sait exécuter) et leur cohérence est vérifiée au chargement du registre (éc
 
 ## Design system (phase 2)
 
-Les 31 tokens de `:root` (`public/style.css`) sont documentés dans `docs/design-system.md`
+Les 32 tokens de `:root` (`public/style.css`) sont documentés dans `docs/design-system.md`
 (`scripts/test-design-system.ts` vérifie qu'ils restent identiques, et que `public/moteur/ecrans.css`
 n'utilise que des `var(--token)`). Ne jamais ajouter de valeur en dur (couleur, police, espacement,
-rayon) dans un composant d'écran ; ne jamais inventer un token sans mettre à jour le document.
+rayon) dans un composant d'écran ; ne jamais inventer un token sans mettre à jour le document (et le compte attendu par le test). Ombre de carte :
+`var(--ombre-carte)`, jamais recopiée littéralement.
 
 ## Correction immédiate coupée (règle de révélation)
 
