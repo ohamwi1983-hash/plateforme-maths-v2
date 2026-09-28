@@ -201,3 +201,36 @@ export function calculerEtatExercice(regenere: ExerciceRegenere, donnees: Donnee
   const { champCourant } = regenere.generateur.etatActuel(regenere.exercice, reponsesConfirmees);
   return { champs, reponsesConfirmees, champCourant, termine: champs.every((c) => c.verrouille) };
 }
+
+/**
+ * Révélation de FIN DE TÂCHE sous correction immédiate coupée : sans correction immédiate, ni le
+ * verdict ni la solution d'un champ ne sont montrés avant que la tâche ENTIÈRE soit terminée (tous ses
+ * exercices, pour cet élève) — jamais à l'épuisement d'un seul champ. Une fois la tâche terminée, tout
+ * est révélé d'un coup. Sous correction immédiate active, la règle ne s'applique pas (`false`).
+ */
+export function revelationFinDeTache(contexte: Pick<ContexteTache, "reglages">, tacheComplete: boolean): boolean {
+  return tacheComplete && !contexte.reglages.feedback_immediat;
+}
+
+/**
+ * Une tâche est complète pour un élève quand chacun de ses exercices exécutables est terminé
+ * (`calculerEtatExercice(...).termine`) — même critère que `GET /api/eleves/tableau-de-bord`
+ * (`tacheEstComplete`). Une tâche sans aucun exercice exécutable n'est jamais complète.
+ */
+export async function tacheEstCompletePourEleve(admin: AdminClient, tacheId: string, eleveId: string, maintenant: Date): Promise<boolean> {
+  const { data, error } = await admin.from("exercices_assignes").select(COLONNES_EXERCICE_ASSIGNE).eq("tache_id", tacheId).eq("eleve_id", eleveId);
+  if (error) throw new Error(error.message);
+  let nbExecutables = 0;
+  const contextes = new Map<string, ContexteTache | null>();
+  for (const ligne of (data ?? []) as unknown as LigneExerciceAssigne[]) {
+    const regenere = regenererExercice(ligne);
+    if (!regenere) continue;
+    if (!contextes.has(ligne.variante_id)) contextes.set(ligne.variante_id, await chargerContexteTache(admin, tacheId, ligne.variante_id));
+    const contexte = contextes.get(ligne.variante_id);
+    if (!contexte) continue;
+    nbExecutables++;
+    const donnees = await chargerDonneesExercice(admin, ligne.id);
+    if (!calculerEtatExercice(regenere, donnees, contexte, maintenant).termine) return false;
+  }
+  return nbExecutables > 0;
+}

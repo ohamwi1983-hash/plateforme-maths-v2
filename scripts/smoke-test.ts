@@ -200,11 +200,27 @@ const NB_TIRAGES = 500;
     throw new Error(`construireChampVue : échec en cours avec tentatives restantes ne doit PAS révéler la solution même si reponse_visible=true, obtenu ${JSON.stringify(vueIncorrecteEnCours)}`);
   }
   // Une fois le champ réellement révélé (tentatives épuisées), la révélation est forcée MÊME si la
-  // tâche a reponse_visible=false (mécanisme préexistant, jamais cassé par ce correctif).
+  // tâche a reponse_visible=false — SOUS CORRECTION IMMÉDIATE ACTIVE (mécanisme préexistant conservé).
   const etatRevelee = { tentativesUtilisees: 3, terminee: true, reussie: false, revelee: true, score: 0 };
-  const vueRevelee = construireChampVue("champ1", reponseIncorrecte, solutionTexte, reglagesCaches, false, etatRevelee);
-  if (vueRevelee.solution_attendue !== solutionTexte) {
-    throw new Error(`construireChampVue : tentatives épuisées -> révélation forcée même avec reponse_visible=false, obtenu ${JSON.stringify(vueRevelee)}`);
+  const reglagesFeedbackSansReponseVisible: import("../lib/reglagesCorrection").ReglagesCorrection = { feedback_immediat: true, reponse_visible: false };
+  const vueRevelee = construireChampVue("champ1", reponseIncorrecte, solutionTexte, reglagesFeedbackSansReponseVisible, false, etatRevelee);
+  if (vueRevelee.solution_attendue !== solutionTexte || vueRevelee.revele !== true || vueRevelee.statut !== "not_equivalent") {
+    throw new Error(`construireChampVue : tentatives épuisées (correction immédiate active) -> révélation forcée même avec reponse_visible=false, obtenu ${JSON.stringify(vueRevelee)}`);
+  }
+  // SOUS CORRECTION IMMÉDIATE COUPÉE : l'épuisement d'un champ ne révèle RIEN (ni verdict, ni solution, ni
+  // `revele`) — un échec n'est pas plus visible qu'une réussite ; la révélation n'a lieu qu'à la fin de la
+  // tâche entière, que l'appelant signale en forçant la révélation (`revelerSansReponse = true`).
+  const vueEpuiseeSansFeedback = construireChampVue("champ1", reponseIncorrecte, solutionTexte, reglagesCaches, false, etatRevelee);
+  if (vueEpuiseeSansFeedback.statut !== null || vueEpuiseeSansFeedback.solution_attendue !== null || vueEpuiseeSansFeedback.revele !== false) {
+    throw new Error(`construireChampVue : sans correction immédiate, un champ épuisé ne doit rien révéler avant la fin de la tâche, obtenu ${JSON.stringify(vueEpuiseeSansFeedback)}`);
+  }
+  const vueReussieSansFeedback = construireChampVue("champ1", { valeur_saisie: "juste", statut: "correct" }, solutionTexte, reglagesCaches, false, { tentativesUtilisees: 0, terminee: true, reussie: true, revelee: false, score: 100 });
+  if (JSON.stringify({ ...vueReussieSansFeedback, valeur_saisie: 0 }) !== JSON.stringify({ ...vueEpuiseeSansFeedback, valeur_saisie: 0 })) {
+    throw new Error("construireChampVue : sans correction immédiate, un champ réussi et un champ échoué doivent avoir la même apparence");
+  }
+  const vueFinDeTacheSansFeedback = construireChampVue("champ1", reponseIncorrecte, solutionTexte, REGLAGES_FORCEES_ANTERIEURES, true, etatRevelee);
+  if (vueFinDeTacheSansFeedback.statut !== "not_equivalent" || vueFinDeTacheSansFeedback.solution_attendue !== solutionTexte || vueFinDeTacheSansFeedback.revele !== true) {
+    throw new Error(`construireChampVue : fin de tâche -> tout est révélé, obtenu ${JSON.stringify(vueFinDeTacheSansFeedback)}`);
   }
   // "Antérieures" (échéance dépassée) reste inchangé : révélation totale même sur un échec avec
   // tentatives restantes (comportement volontairement distinct du cas "en cours" ci-dessus).

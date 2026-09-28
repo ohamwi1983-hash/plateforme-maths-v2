@@ -2,7 +2,7 @@ import type { RequeteHttp, ReponseHttp } from "../../httpTypes";
 import { avecGestionErreurs } from "../../avecGestionErreurs";
 import { eleveAuthentifie, supabaseAdmin } from "../../supabaseAdmin";
 import { recupererToutesLesLignes } from "../../supabasePagination";
-import { calculerEtatExercice, chargerContexteTache, COLONNES_EXERCICE_ASSIGNE, regenererExercice, type ContexteTache, type DonneesExercice, type LigneExerciceAssigne, type LigneReponse } from "../../etatExercice";
+import { calculerEtatExercice, chargerContexteTache, COLONNES_EXERCICE_ASSIGNE, regenererExercice, revelationFinDeTache, type ContexteTache, type DonneesExercice, type LigneExerciceAssigne, type LigneReponse } from "../../etatExercice";
 import { calculerSerieActuelle, classifierTache, construireChampVue, REGLAGES_FORCEES_ANTERIEURES, resumeExercice, resumeTache, tacheEstComplete, type CategorieTableauDeBord, type ResumeProgression } from "../../tableauDeBord";
 import type { LigneDebutEcran } from "../../moteurTentatives";
 import { labelPourVariante } from "../../catalogueGenerateurs";
@@ -93,6 +93,9 @@ export const gererElevesTableauDeBord = avecGestionErreurs(async function handle
 
   const sortie: Record<CategorieTableauDeBord, unknown[]> = { en_cours: [], effectuees: [], anterieures: [] };
   const cacheContextes = new Map<string, ContexteTache | null>();
+  // Exercices dont les verdicts sont MASQUÉS : correction immédiate coupée et tâche ni terminée ni échue.
+  // Leurs réponses ne comptent pas dans la série (sinon un échec caché ferait retomber la série à 0).
+  const exercicesMasques = new Set<string>();
 
   for (const [tacheId, exercices] of exercicesParTache) {
     const fenetre = fenetres.get(tacheId);
@@ -119,9 +122,13 @@ export const gererElevesTableauDeBord = avecGestionErreurs(async function handle
     const categorie = classifierTache(fenetre.date_debut, fenetre.date_echeance, complete, maintenant);
     if (categorie === "pas_commencee") continue;
     const anterieure = categorie === "anterieures";
+    // Sous correction immédiate coupée, la révélation n'a lieu qu'à la fin de la TÂCHE entière (ou à
+    // l'échéance) : tout est alors révélé d'un coup, jamais champ par champ.
+    const reveleTout = anterieure || revelationFinDeTache(contexteTache, complete);
+    if (!contexteTache.reglages.feedback_immediat && !reveleTout) for (const { ligne } of etats) exercicesMasques.add(ligne.id);
 
     for (const { ligne, regenere, contexte, etat } of etats) {
-      const reglages = anterieure ? REGLAGES_FORCEES_ANTERIEURES : contexte.reglages;
+      const reglages = reveleTout ? REGLAGES_FORCEES_ANTERIEURES : contexte.reglages;
       const champsTermines = new Set(etat.champs.filter((c) => c.verrouille).map((c) => c.champ));
       vuesExercices.push({
         id: ligne.id,
@@ -129,7 +136,7 @@ export const gererElevesTableauDeBord = avecGestionErreurs(async function handle
         libelle: labelPourVariante(ligne.variante_id),
         termine: etat.termine,
         resume: resumeExercice(regenere.ecrans.map((e) => e.champ), champsTermines),
-        champs: etat.champs.map((c) => ({ ...construireChampVue(c.champ, c.derniere, regenere.generateur.solutionAttendue(regenere.exercice, c.champ), reglages, anterieure, c.etat), verrouille: c.verrouille })),
+        champs: etat.champs.map((c) => ({ ...construireChampVue(c.champ, c.derniere, regenere.generateur.solutionAttendue(regenere.exercice, c.champ), reglages, reveleTout, c.etat), verrouille: c.verrouille })),
       });
     }
 
@@ -144,6 +151,6 @@ export const gererElevesTableauDeBord = avecGestionErreurs(async function handle
     });
   }
 
-  const statutsRecentsD: StatutVerification[] = [...reponsesToutes].reverse().map((r) => r.statut);
+  const statutsRecentsD: StatutVerification[] = [...reponsesToutes].reverse().filter((r) => !exercicesMasques.has(r.exercice_assigne_id)).map((r) => r.statut);
   res.status(200).json({ ...sortie, serieActuelle: calculerSerieActuelle(statutsRecentsD) });
 });

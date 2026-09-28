@@ -240,10 +240,9 @@ async function main() {
   await appeler("assignations", "POST", { jeton: jetonProf, corps: { tache_id: tacheMuette, eleve_ids: ["eleve-2"] } });
   const exMuet = s.base.table("exercices_assignes").find((l) => l.tache_id === tacheMuette)!;
   const rm = await appeler("reponses", "POST", { jeton: "eleve:eleve-2", corps: { exercice_assigne_id: exMuet.id, champ: CHAMP_SOMME, reponse_brute: "0" } });
-  // Héritage assumé de l'ancien pilote : à l'ÉPUISEMENT des essais la révélation est forcée quels que soient
-  // feedback_immediat/reponse_visible (sinon l'élève resterait bloqué sur un champ fermé). Sans correction
-  // immédiate il n'y a qu'UN essai (option B) : une mauvaise réponse révèle donc statut ET solution.
-  verifier(rm.corps.statut === "not_equivalent" && rm.corps.solution_attendue !== undefined && rm.corps.revele === true && rm.corps.verrouille === true && rm.corps.champ_courant === CHAMP_PARITE, `feedback coupé, réponse fausse : révélation forcée (1 seul essai) : ${JSON.stringify(rm.corps)}`);
+  // Sans correction immédiate : UN essai, et rien n'est révélé (ni verdict, ni solution, ni `revele`) avant la fin
+  // de la TÂCHE entière — un échec n'est pas plus visible qu'une réussite.
+  verifier(rm.corps.statut === undefined && rm.corps.solution_attendue === undefined && rm.corps.message_erreur === undefined && rm.corps.revele === false && rm.corps.verrouille === true && rm.corps.tache_terminee === false && rm.corps.champ_courant === CHAMP_PARITE, `feedback coupé, réponse fausse : rien de révélé, champ verrouillé : ${JSON.stringify(rm.corps)}`);
   // Option B : sans correction immédiate, UN SEUL essai quoi qu'indique `tentatives_supplementaires` (ici 2).
   const gMuet = await appeler(`exercices/${exMuet.id}`, "GET", { jeton: "eleve:eleve-2" });
   verifier(gMuet.corps.tache.tentatives_max === 1, `feedback coupé : tentatives_max effectif attendu 1, obtenu ${gMuet.corps.tache.tentatives_max}`);
@@ -251,7 +250,9 @@ async function main() {
   const exerciceMuet = temoin.generer(Number(exMuet.graine));
   // Réponse JUSTE sans correction immédiate : rien n'est révélé (ni statut ni solution), le champ est verrouillé.
   const bonnePariteMuet = await appeler("reponses", "POST", { jeton: "eleve:eleve-2", corps: { exercice_assigne_id: exMuet.id, champ: CHAMP_PARITE, reponse_brute: reponseBruteCorrecte(exerciceMuet, CHAMP_PARITE) } });
-  verifier(bonnePariteMuet.corps.statut === undefined && bonnePariteMuet.corps.solution_attendue === undefined && bonnePariteMuet.corps.message_erreur === undefined && bonnePariteMuet.corps.verrouille === true && bonnePariteMuet.corps.revele === false, `feedback coupé, réponse juste : ni statut ni solution, champ verrouillé : ${JSON.stringify(bonnePariteMuet.corps)}`);
+  verifier(bonnePariteMuet.corps.statut === undefined && bonnePariteMuet.corps.solution_attendue === undefined && bonnePariteMuet.corps.message_erreur === undefined && bonnePariteMuet.corps.verrouille === true && bonnePariteMuet.corps.revele === false && bonnePariteMuet.corps.tache_terminee === false, `feedback coupé, réponse juste : ni statut ni solution, champ verrouillé : ${JSON.stringify(bonnePariteMuet.corps)}`);
+  const formeVisible = (c: any) => JSON.stringify({ statut: c.statut, solution: c.solution_attendue, message: c.message_erreur, revele: c.revele, verrouille: c.verrouille, restantes: c.tentatives_restantes });
+  verifier(formeVisible(rm.corps) === formeVisible(bonnePariteMuet.corps), "feedback coupé : la réponse fausse et la réponse juste ont EXACTEMENT la même apparence côté élève");
   const mauvaises: Record<string, string> = {
     [CHAMP_DIVISEURS]: JSON.stringify(["1"]),
     [CHAMP_SIGNES]: JSON.stringify({ facteur1: { c0: "+", c1: "+", c2: "+", c3: "+", c4: "+" }, facteur2: { c0: "+", c1: "+", c2: "+", c3: "+", c4: "+" }, produit: { c0: "+", c1: "+", c2: "+", c3: "+", c4: "+" } }),
@@ -286,6 +287,61 @@ async function main() {
   const gPasse = await appeler(`exercices/${exPasse.id}`, "GET", { jeton: "eleve:eleve-2" });
   verifier(gPasse.statut === 200 && gPasse.corps.saisie_possible === false && gPasse.corps.champs.every((c: any) => c.solution_attendue !== null), "tâche échue : consultable, solutions révélées, saisie fermée");
   verifier((await appeler(`exercices/${exFutur.id}`, "GET", { jeton: "eleve:eleve-2" })).statut === 403, "GET exercice d'une tâche pas commencée : 403");
+
+  // ── Sans correction immédiate : révélation à la fin de la TÂCHE entière (2 exercices), jamais champ par champ ──
+  {
+    const s2 = creerScenario();
+    installerBase(s2.base);
+    const tache = creerTache(s2, { nom: "Fin de tâche", feedback_immediat: false, variantes: [{ variante_id: VARIANTE_TEMOIN, nombre_exercices: 2 }] });
+    await appeler("assignations", "POST", { jeton: `prof:${s2.profId}`, corps: { tache_id: tache, eleve_ids: ["eleve-1"] } });
+    const [ex1, ex2] = s2.base.table("exercices_assignes").filter((l) => l.tache_id === tache);
+    const e1 = temoin.generer(Number(ex1.graine));
+    const e2 = temoin.generer(Number(ex2.graine));
+    const jeton = "eleve:eleve-1";
+    const poster2 = (ex: any, champ: string, brute: string) => appeler("reponses", "POST", { jeton, corps: { exercice_assigne_id: ex.id, champ, reponse_brute: brute } });
+    const toutBlanc = (r: any) => r.statut === 200 && r.corps.statut === undefined && r.corps.solution_attendue === undefined && r.corps.message_erreur === undefined && r.corps.revele === false && r.corps.verrouille === true && r.corps.tache_terminee === false;
+    const signesFaux = JSON.stringify({ facteur1: { c0: "+", c1: "+", c2: "+", c3: "+", c4: "+" }, facteur2: { c0: "+", c1: "+", c2: "+", c3: "+", c4: "+" }, produit: { c0: "+", c1: "+", c2: "+", c3: "+", c4: "+" } });
+    // Exercice 1 : faux (avec code de compétence), juste, juste, faux — tous indiscernables.
+    const r1 = [
+      await poster2(ex1, CHAMP_SOMME, String(e1.a - e1.b)),
+      await poster2(ex1, CHAMP_PARITE, reponseBruteCorrecte(e1, CHAMP_PARITE)),
+      await poster2(ex1, CHAMP_DIVISEURS, reponseBruteCorrecte(e1, CHAMP_DIVISEURS)),
+      await poster2(ex1, CHAMP_SIGNES, signesFaux),
+    ];
+    verifier(r1.every(toutBlanc), `fin de tâche : les 4 réponses de l'exercice 1 (2 fausses, 2 justes) doivent être indiscernables : ${JSON.stringify(r1.map((r) => r.corps))}`);
+    verifier(new Set(r1.map((r) => JSON.stringify({ ...r.corps, champ_courant: 0, exercice_termine: 0 }))).size === 1, "fin de tâche : réponses fausses et justes de forme strictement identique");
+    verifier(r1[3].corps.exercice_termine === true && r1[3].corps.tache_terminee === false, "l'exercice 1 est terminé mais pas la tâche (exercice 2 ouvert)");
+    // Rien ne fuit par les autres canaux tant que la tâche n'est pas terminée.
+    const g1 = await appeler(`exercices/${ex1.id}`, "GET", { jeton });
+    verifier(g1.corps.champs.every((c: any) => c.statut === null && c.solution_attendue === null && c.revele === false && c.verrouille === true), "GET exercice 1 en cours de tâche : aucun verdict ni solution");
+    const t1 = await appeler("eleves/tableau-de-bord", "GET", { jeton });
+    const tache1 = t1.corps.en_cours.find((t: any) => t.tache_id === tache);
+    verifier(!!tache1 && tache1.exercices.every((e: any) => e.champs.every((c: any) => c.statut === null && c.solution_attendue === null && c.revele === false)), "tableau de bord en cours de tâche : aucun verdict ni solution");
+    verifier(t1.corps.serieActuelle === 0, `série : les réponses masquées ne comptent pas (ni hausse ni remise à zéro), obtenu ${t1.corps.serieActuelle}`);
+    const m1 = await appeler("eleves/mes-resultats", "GET", { jeton });
+    verifier(m1.corps.competences.length === 0 && m1.corps.evolution.length === 0 && m1.corps.historiqueTaches.length === 0, `mes-résultats en cours de tâche : aucune compétence/évolution révélée : ${JSON.stringify(m1.corps.competences)}`);
+    // Exercice 2 : tout juste. La dernière réponse termine la tâche ET la révèle.
+    const r2 = [
+      await poster2(ex2, CHAMP_SOMME, reponseBruteCorrecte(e2, CHAMP_SOMME)),
+      await poster2(ex2, CHAMP_PARITE, reponseBruteCorrecte(e2, CHAMP_PARITE)),
+      await poster2(ex2, CHAMP_DIVISEURS, reponseBruteCorrecte(e2, CHAMP_DIVISEURS)),
+    ];
+    verifier(r2.every(toutBlanc), "fin de tâche : les réponses de l'exercice 2 avant la dernière restent muettes");
+    const derniere = await poster2(ex2, CHAMP_SIGNES, reponseBruteCorrecte(e2, CHAMP_SIGNES));
+    verifier(derniere.corps.tache_terminee === true && derniere.corps.statut === "correct" && derniere.corps.solution_attendue !== undefined, `la réponse qui termine la tâche la révèle : ${JSON.stringify(derniere.corps)}`);
+    // Après la fin : tout est révélé d'un coup (verdicts + solutions, y compris les échecs de l'exercice 1).
+    const g1b = await appeler(`exercices/${ex1.id}`, "GET", { jeton });
+    const champsG1 = Object.fromEntries(g1b.corps.champs.map((c: any) => [c.champ, c]));
+    verifier(champsG1[CHAMP_SOMME].statut === "not_equivalent" && champsG1[CHAMP_SOMME].revele === true && champsG1[CHAMP_SOMME].solution_attendue === String(e1.a + e1.b), `après la tâche : l'échec de l'exercice 1 est révélé avec sa solution : ${JSON.stringify(champsG1[CHAMP_SOMME])}`);
+    verifier(champsG1[CHAMP_PARITE].statut === "correct", "après la tâche : la réussite est révélée aussi");
+    const t2 = await appeler("eleves/tableau-de-bord", "GET", { jeton });
+    const fin = t2.corps.effectuees.find((t: any) => t.tache_id === tache);
+    verifier(!!fin && fin.exercices.every((e: any) => e.champs.every((c: any) => c.statut !== null && c.solution_attendue !== null)), "tableau de bord après la tâche : tout est révélé");
+    const m2 = await appeler("eleves/mes-resultats", "GET", { jeton });
+    verifier(m2.corps.historiqueTaches.length === 1 && m2.corps.historiqueTaches[0].correct === 6 && m2.corps.historiqueTaches[0].total === 8, `mes-résultats après la tâche : noté 6/8, obtenu ${JSON.stringify(m2.corps.historiqueTaches)}`);
+    verifier(m2.corps.competences.some((c: any) => c.code === CODE_ERREUR_CALCUL), "mes-résultats après la tâche : la compétence détectée apparaît");
+    verifier(t2.corps.serieActuelle === 4, `série après la tâche : les 4 dernières réponses (exercice 2) sont justes, obtenu ${t2.corps.serieActuelle}`);
+  }
 
   if (echecs.length > 0) {
     console.error(`ÉCHEC : ${echecs.length} vérification(s) sur ${nbVerifs}`);

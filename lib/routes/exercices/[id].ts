@@ -1,7 +1,7 @@
 import type { RequeteHttp, ReponseHttp } from "../../httpTypes";
 import { avecGestionErreurs } from "../../avecGestionErreurs";
 import { eleveAuthentifie, supabaseAdmin } from "../../supabaseAdmin";
-import { calculerEtatExercice, chargerContexteTache, chargerDonneesExercice, COLONNES_EXERCICE_ASSIGNE, regenererExercice, type LigneExerciceAssigne } from "../../etatExercice";
+import { calculerEtatExercice, chargerContexteTache, chargerDonneesExercice, COLONNES_EXERCICE_ASSIGNE, regenererExercice, revelationFinDeTache, tacheEstCompletePourEleve, type LigneExerciceAssigne } from "../../etatExercice";
 import { construireChampVue, REGLAGES_FORCEES_ANTERIEURES } from "../../tableauDeBord";
 import { categorieTachePourEleve } from "../../verrouillageTache";
 
@@ -57,9 +57,12 @@ export const gererExercicesId = avecGestionErreurs(async function handler(req: R
   const etat = calculerEtatExercice(regenere, donnees, contexte, new Date());
 
   const anterieure = categorie === "anterieures";
-  const reglages = anterieure ? REGLAGES_FORCEES_ANTERIEURES : contexte.reglages;
+  // Sous correction immédiate coupée : rien n'est révélé avant la fin de la TÂCHE entière, puis tout l'est.
+  const finDeTache = !anterieure && revelationFinDeTache(contexte, etat.termine && (await tacheEstCompletePourEleve(admin, ligne.tache_id as string, eleve.id, new Date())));
+  const reveleTout = anterieure || finDeTache;
+  const reglages = reveleTout ? REGLAGES_FORCEES_ANTERIEURES : contexte.reglages;
   const champs = etat.champs.map((c) => {
-    const vue = construireChampVue(c.champ, c.derniere, regenere.generateur.solutionAttendue(regenere.exercice, c.champ), reglages, anterieure, c.etat);
+    const vue = construireChampVue(c.champ, c.derniere, regenere.generateur.solutionAttendue(regenere.exercice, c.champ), reglages, reveleTout, c.etat);
     return {
       champ: c.champ,
       valeur_saisie: vue.valeur_saisie,

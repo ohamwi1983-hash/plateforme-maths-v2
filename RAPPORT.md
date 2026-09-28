@@ -601,3 +601,25 @@ Décision de l'utilisateur : A **et** B, ensemble.
 **Régression complète après ce changement** : `tsc -b` propre ; les 18 scripts de test passent (dont `smoke-test`, `test-routeur`, `test-design-system` 244) ; Chromium 88/88 à 390 px et 1280 px, 0 erreur console/JS.
 
 **Toujours en attente avant fusion** : exécution de `supabase/migrations/cumulatif.sql` sur la vraie base (`graine`, `enonce`/`solution` nullables, `aides_utilisees`) — à confirmer par l'utilisateur.
+
+## §13 : Sous correction immédiate coupée, révélation à la fin de la TÂCHE entière — remplace le « constat » du §12
+
+Décision de l'utilisateur : la révélation, correction immédiate coupée, ne se déclenche qu'à la fin de la tâche entière, jamais à l'épuisement d'un champ ; un échec ne doit pas être plus visible qu'une réussite pour ce réglage.
+
+**Règle implémentée** (correction immédiate active : inchangée, y compris la révélation forcée à l'épuisement des essais) :
+- Sous correction immédiate coupée, tant que la tâche n'est pas terminée (tous ses exercices, pour l'élève) ni échue : **ni verdict, ni solution, ni message de syntaxe, ni `revele`** ne sont exposés, pour une réponse fausse comme pour une réponse juste. Réponse fausse et réponse juste ont **exactement** la même apparence (`verrouille: true`, `tentatives_restantes: 0`, « Réponse enregistrée. »).
+- Dès que la tâche est terminée (ou échue), **tout est révélé d'un coup** (verdicts + solutions de tous les exercices) ; la réponse qui termine la tâche révèle son propre champ (`tache_terminee: true`).
+
+**Où** :
+- `lib/tableauDeBord.ts:156` (`construireChampVue`) : `revele = revelee && (feedback_immediat || révélation forcée)` ; plus aucune révélation forcée à l'épuisement si le feedback est coupé.
+- `lib/etatExercice.ts:211,220` : `revelationFinDeTache` (règle, source unique) et `tacheEstCompletePourEleve` (complétion d'une tâche pour un élève, même critère que le tableau de bord).
+- `lib/routes/reponses.ts:134-135` (réponse `POST`, champ `tache_terminee`), `lib/routes/exercices/[id].ts:61-65` (consultation), `lib/routes/eleves/tableau-de-bord.ts:127-139`.
+- **Fuites indirectes fermées** (même principe : un échec caché ne doit pas se voir par un autre canal) : la **série** du tableau de bord ignore les réponses d'une tâche masquée (`tableau-de-bord.ts:98,128,154` — sinon un échec caché faisait retomber la série à 0) ; `mes-resultats` exclut les bugs détectés d'une tâche masquée de « compétences à travailler », de l'évolution et des segments (`mes-resultats.ts:191,230,260` — sinon un échec caché apparaissait comme compétence non maîtrisée). L'historique de scores ne porte déjà que sur les tâches terminées.
+
+**Tests** : `scripts/smoke-test.ts` (l'assertion qui figeait l'ancienne règle est remplacée : épuisement sous feedback actif → révélé ; sous feedback coupé → rien, fausse = juste, fin de tâche → tout) ; `scripts/test-temoin-technique.ts` (137 vérifications, dont un scénario 2 exercices : 2 fausses + 2 justes indiscernables, GET exercice / tableau de bord / mes-résultats / série muets en cours de tâche, tout révélé après la dernière réponse, score 6/8 et compétence visibles seulement à ce moment) — **7 de ces vérifications échouent sans le correctif** (vérifié par `git stash`) ; `scripts/chromium-temoin-technique.ts` (104) : nouveau scénario « sans correction immédiate » à 390 px et 1280 px (retours identiques après réponse fausse/juste, aucun verdict ni solution avant la fin, 2 échecs + 2 réussites + 4 solutions révélés à la fin, 0 erreur console).
+
+**Régression complète** : `tsc -b` propre ; 18 scripts de test passent ; Chromium 104/104.
+
+**Deux choix de détail à connaître** : (1) la réponse qui termine la tâche révèle immédiatement son propre champ (le reste se consulte ensuite) ; (2) un champ sans réponse verrouillé par le chrono, sous feedback coupé, ne révèle rien avant la fin de la tâche — comme les autres.
+
+**Toujours en attente avant fusion** : confirmation que `supabase/migrations/cumulatif.sql` a été exécuté avec succès sur la vraie base.

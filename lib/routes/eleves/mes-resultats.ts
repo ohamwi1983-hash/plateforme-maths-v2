@@ -138,7 +138,8 @@ export const gererElevesMesResultats = avecGestionErreurs(async function handler
     return;
   }
 
-  const bugsChronologiques: (string | null)[] = [];
+  // Bug détecté par réponse, avec sa tâche — filtré plus bas (verdicts masqués, voir `tachesMasquees`).
+  const bugsAvecTache: { tacheId: string | undefined; bug: string | null }[] = [];
   const derniereStatutParCle = new Map<string, StatutVerification>();
   // Historique chronologique des statuts par (exercice, champ) — nécessaire à l'état du moteur de
   // tentatives (un champ n'est « terminé » que réussi ou révélé, jamais dès la 1re réponse).
@@ -157,12 +158,12 @@ export const gererElevesMesResultats = avecGestionErreurs(async function handler
   // tentatives multiples sur un même champ partagent le même `debuts_ecran`.
   const reponsesTempsParExercice = new Map<string, LigneReponseTemps[]>();
   for (const r of reponsesBrutes ?? []) {
-    bugsChronologiques.push(r.bug_detecte);
     derniereStatutParCle.set(`${r.exercice_assigne_id}:${r.champ}`, r.statut);
     const cleHistorique = `${r.exercice_assigne_id}:${r.champ}`;
     if (!historiqueStatutsParCle.has(cleHistorique)) historiqueStatutsParCle.set(cleHistorique, []);
     historiqueStatutsParCle.get(cleHistorique)!.push(r.statut);
     const tacheId = tacheIdParExercice.get(r.exercice_assigne_id);
+    bugsAvecTache.push({ tacheId, bug: r.bug_detecte });
     if (tacheId) derniereHorodatageParTache.set(tacheId, r.horodatage);
     const nomTache = tacheId ? nomParTache.get(tacheId) : undefined;
     if (tacheId && nomTache) reponsesPourSegments.push({ tacheId, nomTache, exerciceAssigneId: r.exercice_assigne_id, champ: r.champ, bugDetecte: r.bug_detecte });
@@ -183,6 +184,11 @@ export const gererElevesMesResultats = avecGestionErreurs(async function handler
     debutsParExercice.get(d.exercice_assigne_id)!.push({ champ: d.champ, horodatage_debut: d.horodatage_debut });
   }
   const contextesParTacheVariante = new Map<string, ContexteTache | null>();
+  // Tâches dont les verdicts sont MASQUÉS à l'élève : correction immédiate coupée, tâche ni terminée ni
+  // échue. Leurs bugs détectés ne doivent alimenter ni « compétences à travailler », ni l'évolution, ni
+  // les segments : sinon un échec caché serait plus visible qu'une réussite (révélation à la fin de la
+  // TÂCHE entière seulement, comme partout ailleurs).
+  const tachesMasquees = new Set<string>();
 
   const exercicesParTache = new Map<string, ExerciceBrut[]>();
   for (const ex of exercicesBruts) {
@@ -220,6 +226,8 @@ export const gererElevesMesResultats = avecGestionErreurs(async function handler
     const completions = exercicesDeLaTache.map((ex) => (ex.champs_attendus === null ? false : exerciceEstComplet(ex.champs_attendus, champsTermineParExercice.get(ex.id) ?? new Set())));
     const complete = tacheEstComplete(completions);
     const categorie: CategorieOuNonCommencee = classifierTache(debutParTache.get(tacheId) ?? new Date(0).toISOString(), echeanceParTache.get(tacheId) ?? null, complete, maintenant);
+    const feedbackCoupe = exercicesDeLaTache.some((ex) => contextesParTacheVariante.get(`${tacheId}:${ex.variante_id}`)?.reglages.feedback_immediat === false);
+    if (feedbackCoupe && !complete && categorie !== "anterieures") tachesMasquees.add(tacheId);
     if (categorie !== "effectuees" && categorie !== "anterieures") continue; // ni "en_cours" (pas encore noté) ni "pas_commencee"
 
     let correct = 0;
@@ -249,8 +257,10 @@ export const gererElevesMesResultats = avecGestionErreurs(async function handler
   // uniquement aux compétences `non_maitrisee` (mêmes codes que `evolution` ci-dessous) — inutile de
   // calculer des segments pour une compétence `en_observation`, jamais montrée dans "Compétences à
   // travailler" côté client.
+  const bugsChronologiques = bugsAvecTache.filter((b) => b.tacheId === undefined || !tachesMasquees.has(b.tacheId)).map((b) => b.bug);
+  const segmentsVisibles = reponsesPourSegments.filter((r) => !tachesMasquees.has(r.tacheId));
   const competences = calculerProfilCompetences(bugsChronologiques).map((c) =>
-    c.statut === "non_maitrisee" ? { ...c, segments: calculerSegmentsCompetence(reponsesPourSegments, c.code) } : c,
+    c.statut === "non_maitrisee" ? { ...c, segments: calculerSegmentsCompetence(segmentsVisibles, c.code) } : c,
   );
   const evolution = calculerEvolutionCompetences(bugsChronologiques);
   const tendanceScore = calculerTendanceScore(historiqueTaches);

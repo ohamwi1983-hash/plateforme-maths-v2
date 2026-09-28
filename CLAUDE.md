@@ -87,3 +87,13 @@ Les 31 tokens de `:root` (`public/style.css`) sont documentés dans `docs/design
 (`scripts/test-design-system.ts` vérifie qu'ils restent identiques, et que `public/moteur/ecrans.css`
 n'utilise que des `var(--token)`). Ne jamais ajouter de valeur en dur (couleur, police, espacement,
 rayon) dans un composant d'écran ; ne jamais inventer un token sans mettre à jour le document.
+
+## Correction immédiate coupée (règle de révélation)
+
+Sous `feedback_immediat = false` : **un seul essai effectif** (`tentativesMaxEffectif`, `lib/moteurTentatives.ts`,
+seule source ; le formulaire prof verrouille « Tentatives supplémentaires » à 0) et **rien n'est révélé —
+ni verdict, ni solution, ni `revele`, ni message d'erreur — avant que la tâche ENTIÈRE soit terminée**, jamais
+à l'épuisement d'un champ. Un échec ne doit pas être plus visible qu'une réussite, par AUCUN canal : ajouter
+un nouvel indicateur dérivé des réponses d'un élève (série, compétences, score, badge…) impose de l'exclure
+tant que la tâche est masquée (`revelationFinDeTache`, `lib/etatExercice.ts` ; voir `RAPPORT.md` §13).
+

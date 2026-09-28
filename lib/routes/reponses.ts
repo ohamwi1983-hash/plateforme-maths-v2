@@ -2,9 +2,9 @@ import type { RequeteHttp, ReponseHttp } from "../httpTypes";
 import { avecGestionErreurs } from "../avecGestionErreurs";
 import { eleveAuthentifie, supabaseAdmin } from "../supabaseAdmin";
 import { verifierAvecControle } from "../registreGenerateurs";
-import { calculerEtatExercice, chargerContexteTache, chargerDonneesExercice, COLONNES_EXERCICE_ASSIGNE, regenererExercice, type LigneExerciceAssigne } from "../etatExercice";
+import { calculerEtatExercice, chargerContexteTache, chargerDonneesExercice, COLONNES_EXERCICE_ASSIGNE, regenererExercice, revelationFinDeTache, tacheEstCompletePourEleve, type LigneExerciceAssigne } from "../etatExercice";
 import { calculerDureeEcouleeSecondes, horodatageDebutPertinent } from "../moteurTentatives";
-import { construireChampVue } from "../tableauDeBord";
+import { construireChampVue, REGLAGES_FORCEES_ANTERIEURES } from "../tableauDeBord";
 import { joindreBugsDetectes } from "../profilCompetences";
 import { categorieTachePourEleve } from "../verrouillageTache";
 
@@ -125,15 +125,22 @@ export const gererReponses = avecGestionErreurs(async function handler(req: Requ
   const champApres = apres.champs.find((c) => c.champ === champ)!;
 
   // Même gating que le tableau de bord (`construireChampVue` -> `construireReponseHttpReponses`) :
-  // `feedback_immediat`/`reponse_visible`, révélation forcée à l'épuisement des tentatives.
-  const vue = construireChampVue(champ, { valeur_saisie: reponse_brute, statut: resultat.statut }, regenere.generateur.solutionAttendue(regenere.exercice, champ), contexte.reglages, false, champApres.etat);
+  // `feedback_immediat`/`reponse_visible`, révélation forcée à l'épuisement des tentatives (sous
+  // correction immédiate active seulement). Sous correction immédiate COUPÉE, rien n'est révélé — ni
+  // verdict, ni solution, ni `revele` — avant que la tâche ENTIÈRE soit terminée : un échec n'est pas
+  // plus visible qu'une réussite. La réponse qui termine la tâche révèle alors son champ (le reste se
+  // consulte via GET /api/exercices/:id, qui révèle tout à ce moment-là).
+  const tacheTerminee = apres.termine && (await tacheEstCompletePourEleve(admin, ligne.tache_id as string, eleve.id, maintenant));
+  const reveleTout = revelationFinDeTache(contexte, tacheTerminee);
+  const vue = construireChampVue(champ, { valeur_saisie: reponse_brute, statut: resultat.statut }, regenere.generateur.solutionAttendue(regenere.exercice, champ), reveleTout ? REGLAGES_FORCEES_ANTERIEURES : contexte.reglages, reveleTout, champApres.etat);
   res.status(200).json({
     ...(vue.statut !== null ? { statut: vue.statut } : {}),
     ...(vue.solution_attendue !== null ? { solution_attendue: vue.solution_attendue } : {}),
     ...(resultat.statut === "parse_error" && contexte.reglages.feedback_immediat ? { message_erreur: resultat.messageErreur } : {}),
     enregistree: true,
     verrouille: champApres.verrouille,
-    revele: champApres.etat.revelee,
+    revele: vue.revele,
+    tache_terminee: tacheTerminee,
     tentatives_restantes: champApres.verrouille ? 0 : Math.max(0, contexte.tentativesMax - champApres.etat.tentativesUtilisees),
     champ_courant: apres.champCourant,
     exercice_termine: apres.termine,

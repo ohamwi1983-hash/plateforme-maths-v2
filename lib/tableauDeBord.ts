@@ -147,24 +147,32 @@ export function construireChampVue(
   revelerSansReponse: boolean,
   etatTentatives: EtatChampTentatives,
 ): ChampVue {
+  // Révélation d'un champ (essais épuisés ou chrono écoulé) : n'existe QUE si la correction immédiate est
+  // active — ou si l'appelant force la révélation (`revelerSansReponse` : tâche antérieure, ou tâche
+  // entièrement terminée sous correction immédiate coupée). Sous correction immédiate coupée, la
+  // révélation n'a lieu qu'à la fin de la TÂCHE entière, jamais à l'épuisement d'un seul champ : un
+  // échec ne doit pas être plus visible qu'une réussite (ni `revele`, ni statut, ni solution) tant que
+  // la tâche n'est pas terminée. Le verrouillage du champ, lui, est le même que l'on ait réussi ou non.
+  const revele = etatTentatives.revelee && (reglagesEffectifs.feedback_immediat || revelerSansReponse);
   if (!derniereReponse) {
     // Phase 2 : un champ RÉVÉLÉ sans aucune réponse (chrono écoulé avant toute soumission,
     // `calculerEtatChampTentatives(…, chronoExpire=true)`) est verrouillé exactement comme un champ aux
-    // tentatives épuisées : la correction doit être montrée, sans quoi l'élève resterait bloqué sur un
-    // écran fermé sans savoir pourquoi ni voir la réponse.
+    // tentatives épuisées : la correction doit être montrée (si la révélation est permise, voir
+    // ci-dessus), sans quoi l'élève resterait bloqué sur un écran fermé sans voir la réponse.
     return {
       champ,
       valeur_saisie: null,
       statut: null,
-      solution_attendue: revelerSansReponse || etatTentatives.revelee ? solutionAttendueTexte : null,
-      revele: etatTentatives.revelee,
+      solution_attendue: revelerSansReponse || revele ? solutionAttendueTexte : null,
+      revele,
     };
   }
   // Champ révélé (tentatives épuisées, Étape 2) OU tâche antérieure (`revelerSansReponse`, réglages
   // déjà forcés en amont par l'appelant via REGLAGES_FORCEES_ANTERIEURES) : pleine révélation quels
   // que soient les réglages réels de la tâche — même raisonnement que la réponse HTTP déjà forcée en
   // direct au moment de l'épuisement (lib/routes/reponses.ts) : le champ est verrouillé, l'élève ne
-  // peut plus recommencer, il doit voir la correction.
+  // peut plus recommencer, il doit voir la correction — SAUF sous correction immédiate coupée (voir
+  // ci-dessus).
   //
   // Bug trouvé après livraison (signalé par l'utilisateur, URGENT), même cause que
   // lib/routes/reponses.ts : hors de ces 2 cas (tâche EN COURS, champ pas encore révélé),
@@ -172,7 +180,7 @@ export function construireChampVue(
   // sur un échec intermédiaire alors que des tentatives restent disponibles, sans quoi
   // `reponse_visible` révélait la solution dès le 1er échec et rendait les tentatives sans objet.
   const reglagesReels: ReglagesCorrection =
-    etatTentatives.revelee || revelerSansReponse
+    revele || revelerSansReponse
       ? { feedback_immediat: true, reponse_visible: true }
       : { feedback_immediat: reglagesEffectifs.feedback_immediat, reponse_visible: reglagesEffectifs.reponse_visible && derniereReponse.statut === "correct" };
   const vue = construireReponseHttpReponses(reglagesReels, derniereReponse.statut, solutionAttendueTexte);
@@ -181,6 +189,6 @@ export function construireChampVue(
     valeur_saisie: derniereReponse.valeur_saisie,
     statut: vue.statut ?? null,
     solution_attendue: vue.solution_attendue ?? null,
-    revele: etatTentatives.revelee,
+    revele,
   };
 }

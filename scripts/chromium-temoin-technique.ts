@@ -243,6 +243,62 @@ async function scenarioEleve(navigateur: any, base: string, largeur: number) {
   await contexte.close();
 }
 
+async function scenarioSansCorrection(navigateur: any, base: string, largeur: number) {
+  const s: Scenario = creerScenario();
+  installerBase(s.base);
+  const l = `${largeur}`;
+  const tacheId = creerTache(s, { nom: "Sans correction immédiate", feedback_immediat: false, tentatives_supplementaires: 2, variantes: [{ variante_id: VARIANTE_TEMOIN, nombre_exercices: 1 }] });
+  await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tacheId, eleve_ids: ["eleve-1"] } });
+  const ligne = s.base.table("exercices_assignes").find((x) => x.eleve_id === "eleve-1")!;
+  const ex = temoin.generer(Number(ligne.graine));
+  const { page, contexte, journal } = await preparerPage(navigateur, base, largeur, largeur < 600 ? 800 : 900, "eleve:eleve-1", "e1@x", `localStorage.setItem("eleve-profil-cache", JSON.stringify({ affichage: "Test eleve-1", prenom: "Test", nom: "eleve-1" }));`);
+  await page.goto(base + "/eleve.html");
+  await page.waitForSelector(".carte-tache");
+  await page.locator(".carte-tache").click();
+  await page.waitForSelector(".moteur-ecran-courant");
+
+  // Une réponse fausse et une juste doivent produire EXACTEMENT le même retour, sans verdict ni solution.
+  const retours: string[] = [];
+  const valider = async (masque = true) => {
+    await page.locator(".moteur-ecran-courant .moteur-bouton-principal").click();
+    await page.waitForSelector(".moteur-statut");
+    if (!masque) return; // la réponse qui TERMINE la tâche la révèle : vérifié séparément
+    retours.push((await page.locator(".moteur-retour").innerText()).replace(/\s+/g, " ").trim());
+    verifier((await page.locator(".moteur-solution").count()) === 0 && (await page.locator(".moteur-statut-correct, .moteur-statut-not_equivalent, .moteur-statut-parse_error").count()) === 0, `${l} sans correction : aucun verdict ni solution visible après une réponse`);
+  };
+  await page.locator(".moteur-ecran-courant .moteur-champ").fill(String(ex.a - ex.b)); // fausse
+  await valider();
+  await page.screenshot({ path: join(CAPTURES, `${l}-13-sans-correction-reponse-fausse.png`), fullPage: true });
+  await page.getByRole("button", { name: "Question suivante" }).click();
+  await page.waitForSelector(".moteur-qcm");
+  await page.locator(`.moteur-qcm input[value="${reponseBruteCorrecte(ex, CHAMP_PARITE)}"]`).check(); // juste
+  await valider();
+  await page.getByRole("button", { name: "Question suivante" }).click();
+  await page.waitForSelector(".moteur-liste-valeurs");
+  const diviseurs: string[] = JSON.parse(reponseBruteCorrecte(ex, CHAMP_DIVISEURS));
+  await page.locator(".moteur-liste-ligne .moteur-champ").first().fill(diviseurs[0]);
+  for (const d of diviseurs.slice(1)) {
+    await page.getByRole("button", { name: "Ajouter un diviseur" }).click();
+    await page.locator(".moteur-liste-ligne .moteur-champ").last().fill(d);
+  }
+  await valider(); // juste
+  await page.getByRole("button", { name: "Question suivante" }).click();
+  await page.waitForSelector(".moteur-table-signes");
+  for (const b of await page.locator(".moteur-table-signes tbody button").all()) await b.click(); // 1 clic = « + » partout : faux
+  await valider(false);
+  verifier(retours.length === 3 && (await page.locator(".moteur-ecran-courant .moteur-statut-not_equivalent").count()) === 1, `${l} sans correction : la réponse qui termine la tâche la révèle`);
+  verifier(new Set(retours.map((r) => r.replace(/Question suivante|Voir la fin/g, "").trim())).size === 1, `${l} sans correction : réponses fausses et justes de même apparence — obtenu ${JSON.stringify(retours)}`);
+  // Fin de tâche : la révélation a lieu maintenant, pour tous les champs.
+  await page.getByRole("button", { name: "Voir la fin" }).click();
+  await page.waitForSelector(".moteur-fin");
+  verifier((await page.locator(".moteur-statut-not_equivalent").count()) === 2 && (await page.locator(".moteur-statut-correct").count()) === 2, `${l} sans correction : à la fin de la tâche, 2 échecs et 2 réussites révélés (obtenu ${await page.locator(".moteur-statut-not_equivalent").count()} / ${await page.locator(".moteur-statut-correct").count()})`);
+  verifier((await page.locator(".moteur-solution").count()) === 4, `${l} sans correction : à la fin de la tâche, les 4 solutions sont montrées`);
+  await page.screenshot({ path: join(CAPTURES, `${l}-14-sans-correction-fin-de-tache-revelee.png`), fullPage: true });
+  const erreursUtiles = journal.erreursConsole.filter((m) => !/fonts\.g|net::ERR_FAILED/.test(m));
+  verifier(journal.pageerrors.length === 0 && erreursUtiles.length === 0, `${l} sans correction : erreurs JS/console : ${[...journal.pageerrors, ...erreursUtiles].join(" | ")}`);
+  await contexte.close();
+}
+
 async function scenarioProf(navigateur: any, base: string, largeur: number) {
   const s = creerScenario();
   installerBase(s.base);
@@ -300,6 +356,7 @@ async function main() {
   try {
     for (const largeur of [390, 1280]) {
       await scenarioEleve(navigateur, url, largeur);
+      await scenarioSansCorrection(navigateur, url, largeur);
       await scenarioProf(navigateur, url, largeur);
     }
   } finally {
