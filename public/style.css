@@ -33,7 +33,7 @@
  * (h2/h3/legend/summary) pour une cohérence de marque, pas seulement ce seul élément).
  */
 :root {
-  /* ── Design system (phase 2) — 31 tokens, documentés dans docs/design-system.md (le test
+  /* ── Design system (phase 2) — 32 tokens, documentés dans docs/design-system.md (le test
      scripts/test-design-system.ts vérifie que ce bloc et ce document restent identiques). Aucune
      valeur n'a été ajoutée ni modifiée par rapport au système visuel v3 : ce bloc n'est que
      réorganisé par famille. Toute nouvelle règle CSS s'appuie sur ces tokens, jamais sur une valeur
@@ -72,6 +72,10 @@
   /* Rayons. */
   --radius: 20px;
   --radius-sm: 13px;
+
+  /* Ombre de carte : la valeur unique jusque-là répétée à l'identique dans cinq règles (`.panneau`,
+     `.item-liste`, `.item-eleve`, `.carte-formulaire`…) — nommée, pas modifiée. */
+  --ombre-carte: 0 10px 24px -18px rgba(59,20,112,.3);
 
   /* Typographie : Fraunces (titres, marque), Inter (corps). */
   --font-marque: "Fraunces", serif;
@@ -174,7 +178,7 @@ h3 {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 10px 24px -18px rgba(59,20,112,.3);
+  box-shadow: var(--ombre-carte);
 }
 
 .panneau {
@@ -266,7 +270,7 @@ h3 {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 10px 24px -18px rgba(59,20,112,.3);
+  box-shadow: var(--ombre-carte);
   padding: var(--espace-3);
   display: flex;
   flex-direction: column;
@@ -857,7 +861,7 @@ button:disabled {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 10px 24px -18px rgba(59, 20, 112, 0.3);
+  box-shadow: var(--ombre-carte);
   overflow: hidden;
   margin-bottom: var(--espace-4);
 }
@@ -4111,7 +4115,7 @@ p[id^="statut-"]:not(:empty) {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 10px 24px -18px rgba(59, 20, 112, 0.3);
+  box-shadow: var(--ombre-carte);
   overflow: hidden;
   margin-bottom: var(--espace-4);
 }
@@ -4305,7 +4309,7 @@ p[id^="statut-"]:not(:empty) {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 10px 24px -18px rgba(59,20,112,.3);
+  box-shadow: var(--ombre-carte);
   padding: 18px 20px;
   display: flex;
   align-items: center;

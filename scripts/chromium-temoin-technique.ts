@@ -13,11 +13,14 @@
 
 export {}; // module
 
+// Code exécuté DANS la page (fonctions passées à `locator.evaluate`) : le projet n'inclut pas la bibliothèque DOM.
+declare const getComputedStyle: (el: unknown) => Record<string, string>;
+
 import { createServer, type Server } from "node:http";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
 import { appeler, creerScenario, creerTache, installerBase, type Scenario } from "./support/harnaisRouteur";
-import { CHAMP_DIVISEURS, CHAMP_PARITE, CHAMP_SIGNES, generateurTemoinTechnique as temoin, reponseBruteCorrecte, VARIANTE_TEMOIN } from "../src/generateurs/_temoinTechnique";
+import { CHAMP_DIVISEURS, CHAMP_PARITE, CHAMP_SIGNES, CHAMP_SOMME, generateurTemoinTechnique as temoin, reponseBruteCorrecte, VARIANTE_TEMOIN } from "../src/generateurs/_temoinTechnique";
 
 const RACINE = join(__dirname, "..");
 const CAPTURES = process.env.CAPTURES_DIR ?? join(RACINE, "captures-chromium");
@@ -299,6 +302,160 @@ async function scenarioSansCorrection(navigateur: any, base: string, largeur: nu
   await contexte.close();
 }
 
+// ── Matrice visuelle : 4 composants × états (défaut, sélectionné, correct, not_equivalent, parse_error) ──
+const RGB = {
+  vert: "rgb(21, 143, 82)", vertClair: "rgb(228, 246, 236)", danger: "rgb(179, 38, 30)", dangerClair: "rgb(251, 234, 232)",
+  ambre: "rgb(224, 138, 46)", ambreClair: "rgb(253, 241, 226)", violetVif: "rgb(124, 58, 237)", violetClair: "rgb(241, 235, 252)",
+};
+const CHAMPS_ORDRE = [CHAMP_SOMME, CHAMP_PARITE, CHAMP_DIVISEURS, CHAMP_SIGNES];
+const NOMS_TYPES = ["champ_expression", "qcm", "liste_valeurs", "tableau_signes"];
+type EtatVisuel = "defaut" | "selectionne" | "correct" | "not_equivalent" | "parse_error";
+
+/** Réponses brutes envoyées directement à l'API (états impossibles à produire par l'interface : `parse_error` du QCM et du tableau). */
+function reponseApi(ex: ReturnType<typeof temoin.generer>, indice: number, etat: "correct" | "not_equivalent" | "parse_error"): string {
+  const champ = CHAMPS_ORDRE[indice];
+  if (etat === "correct") return reponseBruteCorrecte(ex, champ);
+  if (etat === "parse_error") return ["12+", "inexistant", "pas du json", "[]"][indice];
+  const tousPlus = JSON.stringify(Object.fromEntries(["facteur1", "facteur2", "produit"].map((l) => [l, Object.fromEntries(["c0", "c1", "c2", "c3", "c4"].map((c) => [c, "+"]))])));
+  return [String(ex.a - ex.b), (ex.a + ex.b) % 2 === 0 ? "impair" : "pair", JSON.stringify(["1"]), tousPlus][indice];
+}
+
+async function agirSurComposant(page: any, ex: ReturnType<typeof temoin.generer>, indice: number, etat: "selectionne" | "correct" | "not_equivalent" | "parse_error") {
+  const brute = etat === "selectionne" ? reponseApi(ex, indice, "not_equivalent") : reponseApi(ex, indice, etat);
+  const carte = page.locator(".moteur-ecran-courant");
+  if (indice === 0) await carte.locator(".moteur-champ").fill(brute);
+  if (indice === 1) await carte.locator(`.moteur-qcm input[value="${brute}"]`).check();
+  if (indice === 2) {
+    const valeurs: string[] = etat === "parse_error" ? ["a"] : JSON.parse(brute);
+    await carte.locator(".moteur-liste-ligne .moteur-champ").first().fill(valeurs[0]);
+    for (const v of valeurs.slice(1)) {
+      await carte.getByRole("button", { name: "Ajouter un diviseur" }).click();
+      await carte.locator(".moteur-liste-ligne .moteur-champ").last().fill(v);
+    }
+  }
+  if (indice === 3) {
+    const signes = JSON.parse(brute) as Record<string, Record<string, string>>;
+    const lignes = Object.keys(signes);
+    for (const [i, ligne] of lignes.entries()) {
+      for (const [colonne, signe] of Object.entries(signes[ligne])) {
+        const cellule = carte.locator("tbody tr").nth(i).locator("td").nth(Number(colonne.slice(1))).locator("button");
+        for (let k = 0; k < 4 && (await cellule.innerText()) !== signe; k++) await cellule.click();
+      }
+    }
+  }
+}
+
+async function matriceVisuelle(navigateur: any, base: string, largeur: number) {
+  const l = `${largeur}`;
+  let ombreCarteDashboard = "";
+  let rayonCarteDashboard = "";
+  for (let indice = 0; indice < 4; indice++) {
+    const etats: EtatVisuel[] = ["defaut", ...(indice === 1 || indice === 3 || indice === 0 || indice === 2 ? (["selectionne"] as EtatVisuel[]) : []), "correct", "not_equivalent", "parse_error"];
+    for (const etat of etats) {
+      const s: Scenario = creerScenario();
+      installerBase(s.base);
+      const tacheId = creerTache(s, { nom: "Matrice visuelle", variantes: [{ variante_id: VARIANTE_TEMOIN, nombre_exercices: 1 }] });
+      await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tacheId, eleve_ids: ["eleve-1"] } });
+      const ligne = s.base.table("exercices_assignes").find((x) => x.eleve_id === "eleve-1")!;
+      const ex = temoin.generer(Number(ligne.graine));
+      const api = (champ: string, brute: string) => appeler("reponses", "POST", { jeton: "eleve:eleve-1", corps: { exercice_assigne_id: ligne.id, champ, reponse_brute: brute } });
+      for (let i = 0; i < indice; i++) await api(CHAMPS_ORDRE[i], reponseBruteCorrecte(ex, CHAMPS_ORDRE[i])); // atteindre l'écran visé
+      // `parse_error` du QCM et du tableau : impossible par l'interface (choix inconnu / tableau incomplet bloqués côté client)
+      // -> appel DIRECT à l'API, puis l'écran verrouillé est relu par le moteur.
+      const parApi = etat === "parse_error" && (indice === 1 || indice === 3);
+      if (parApi) verifier((await api(CHAMPS_ORDRE[indice], reponseApi(ex, indice, "parse_error"))).corps.statut === "parse_error", `${l} ${NOMS_TYPES[indice]} : l'appel direct doit produire parse_error`);
+
+      const { page, contexte, journal } = await preparerPage(navigateur, base, largeur, largeur < 600 ? 800 : 900, "eleve:eleve-1", "e1@x", `localStorage.setItem("eleve-profil-cache", JSON.stringify({ affichage: "Test eleve-1", prenom: "Test", nom: "eleve-1" }));`);
+      await page.goto(base + "/eleve.html");
+      await page.waitForSelector(".carte-tache", { state: "attached" });
+      if (!ombreCarteDashboard) {
+        const c = (await page.evaluate(`(() => { const e = document.querySelector(".carte-tache"); const st = getComputedStyle(e); return { ombre: st.boxShadow, rayon: st.borderRadius, filet: st.borderTopColor + " " + st.borderTopWidth, fond: st.backgroundColor }; })()`)) as { ombre: string; rayon: string; filet: string; fond: string };
+        ombreCarteDashboard = c.ombre;
+        rayonCarteDashboard = `${c.rayon}|${c.filet}|${c.fond}`;
+      }
+      if (await page.locator(".carte-tache").first().isVisible()) {
+        await page.locator(".carte-tache").click();
+      } else {
+        // Tâche terminée (dernier écran fermé par l'appel direct) : consultation depuis « Effectuées ».
+        await page.locator("#entete-mt-effectuees").click();
+        await page.locator(".carte-tache-exercices a").first().click();
+      }
+      await page.waitForSelector(".moteur-ecran");
+      const consigne = temoin.ecrans(ex)[indice].consigne;
+      const carte = page.locator(".moteur-ecran").filter({ hasText: consigne });
+
+      if (etat === "selectionne") await agirSurComposant(page, ex, indice, "selectionne");
+      if (etat === "correct" || etat === "not_equivalent" || (etat === "parse_error" && !parApi)) {
+        await agirSurComposant(page, ex, indice, etat);
+        await carte.locator(".moteur-bouton-principal").click();
+        await page.waitForSelector(`.moteur-ecran:has-text("${consigne.slice(0, 12).replace(/"/g, "")}") .moteur-statut-${etat}`);
+      }
+      const nom = `${l}-matrice-${NOMS_TYPES[indice]}-${etat}`;
+      await carte.screenshot({ path: join(CAPTURES, `${nom}.png`) });
+
+      // ── Assertions de style calculé sur la carte concernée ──
+      const style = (await carte.evaluate((el: unknown) => { const st = getComputedStyle(el); return { filet: st.borderTopColor, fond: st.backgroundColor, largeurFilet: st.borderTopWidth, rayon: st.borderRadius, ombre: st.boxShadow }; })) as { filet: string; fond: string; largeurFilet: string; rayon: string; ombre: string };
+      const attendu: Record<string, [string, string] | null> = { correct: [RGB.vert, RGB.vertClair], not_equivalent: [RGB.danger, RGB.dangerClair], parse_error: [RGB.ambre, RGB.ambreClair] };
+      if (etat === "correct" || etat === "not_equivalent" || etat === "parse_error") {
+        verifier(style.filet === attendu[etat]![0] && style.fond === attendu[etat]![1], `${nom} : carte attendue ${attendu[etat]!.join(" / ")}, obtenu ${style.filet} / ${style.fond}`);
+      } else {
+        verifier(![RGB.vert, RGB.danger, RGB.ambre].includes(style.filet) && ![RGB.vertClair, RGB.dangerClair, RGB.ambreClair].includes(style.fond), `${nom} : jamais de couleur de verdict avant la réponse du serveur (obtenu ${style.filet} / ${style.fond})`);
+      }
+      // Sélection : violet avant validation, jamais vert/rouge.
+      if (etat === "selectionne" && indice === 1) {
+        const o = (await carte.locator(".moteur-choix:has(input:checked)").evaluate((el: unknown) => { const st = getComputedStyle(el); return { filet: st.borderTopColor, fond: st.backgroundColor, poids: st.fontWeight }; })) as { filet: string; fond: string; poids: string };
+        verifier(o.filet === RGB.violetVif && o.fond === RGB.violetClair && o.poids === "600", `${nom} : option sélectionnée attendue violet-vif / violet-clair / 600, obtenu ${JSON.stringify(o)}`);
+      }
+      if (etat === "selectionne" && indice === 3) {
+        const cellules = (await carte.locator(".moteur-case-signe").evaluateAll((els: unknown[]) => els.map((el) => { const st = getComputedStyle(el); return st.borderTopColor + "|" + st.backgroundColor; }))) as string[];
+        verifier(cellules.every((c) => c === `${RGB.violetVif}|${RGB.violetClair}`), `${nom} : toutes les cases remplies attendues violet avant validation, obtenu ${[...new Set(cellules)].join(" ; ")}`);
+      }
+      // Verdict, tableau de signes : coloré EN ENTIER (toutes les cases identiques), jamais case par case.
+      if (indice === 3 && (etat === "correct" || etat === "not_equivalent")) {
+        const cellules = (await carte.locator(".moteur-case-signe").evaluateAll((els: unknown[]) => els.map((el) => { const st = getComputedStyle(el); return st.borderTopColor + "|" + st.backgroundColor; }))) as string[];
+        verifier(new Set(cellules).size === 1 && cellules[0].startsWith(attendu[etat]![0]), `${nom} : toutes les cases doivent avoir la couleur du verdict, obtenu ${[...new Set(cellules)].join(" ; ")}`);
+      }
+      // Cohérence avec les cartes existantes (carte de tâche du tableau de bord = `.item-liste`) : même ombre, même rayon.
+      if (etat === "defaut" && (await page.locator(".moteur-ecran-courant").count()) > 0) {
+        const carteCourante = (await page.locator(".moteur-ecran-courant").evaluate((el: unknown) => { const st = getComputedStyle(el); return { ombre: st.boxShadow, rayon: st.borderRadius, filet: st.borderTopColor + " " + st.borderTopWidth, fond: st.backgroundColor }; })) as { ombre: string; rayon: string; filet: string; fond: string };
+        verifier(carteCourante.ombre === ombreCarteDashboard && `${carteCourante.rayon}|${carteCourante.filet}|${carteCourante.fond}` === rayonCarteDashboard, `${nom} : la carte d'écran doit avoir la même ombre/rayon/filet/fond que .carte-tache du tableau de bord (${carteCourante.ombre} vs ${ombreCarteDashboard})`);
+        verifier(carteCourante.ombre === "rgba(59, 20, 112, 0.3) 0px 10px 24px -18px", `${nom} : l'ombre doit résoudre à la valeur historique inchangée, obtenu ${carteCourante.ombre}`);
+      }
+      const erreursUtiles = journal.erreursConsole.filter((m) => !/fonts\.g|net::ERR_FAILED/.test(m));
+      verifier(journal.pageerrors.length === 0 && erreursUtiles.length === 0, `${nom} : erreurs JS/console : ${[...journal.pageerrors, ...erreursUtiles].join(" | ")}`);
+      await contexte.close();
+    }
+  }
+}
+
+/** Nouvelle tentative après `not_equivalent` (essais restants) : la nouvelle sélection reste VIOLETTE, jamais rouge — la carte garde le verdict précédent. */
+async function scenarioRetentative(navigateur: any, base: string, largeur: number) {
+  const l = `${largeur}`;
+  const s: Scenario = creerScenario();
+  installerBase(s.base);
+  const tacheId = creerTache(s, { nom: "Retentative", tentatives_supplementaires: 1, variantes: [{ variante_id: VARIANTE_TEMOIN, nombre_exercices: 1 }] });
+  await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tacheId, eleve_ids: ["eleve-1"] } });
+  const ligne = s.base.table("exercices_assignes").find((x) => x.eleve_id === "eleve-1")!;
+  const ex = temoin.generer(Number(ligne.graine));
+  await appeler("reponses", "POST", { jeton: "eleve:eleve-1", corps: { exercice_assigne_id: ligne.id, champ: CHAMP_SOMME, reponse_brute: reponseBruteCorrecte(ex, CHAMP_SOMME) } });
+  const { page, contexte } = await preparerPage(navigateur, base, largeur, largeur < 600 ? 800 : 900, "eleve:eleve-1", "e1@x", `localStorage.setItem("eleve-profil-cache", JSON.stringify({ affichage: "Test eleve-1", prenom: "Test", nom: "eleve-1" }));`);
+  await page.goto(base + "/eleve.html");
+  await page.waitForSelector(".carte-tache");
+  await page.locator(".carte-tache").click();
+  await page.waitForSelector(".moteur-qcm");
+  const mauvaise = reponseApi(ex, 1, "not_equivalent");
+  const autre = (ex.a + ex.b) % 2 === 0 ? "pair" : "impair";
+  await page.locator(`.moteur-qcm input[value="${mauvaise}"]`).check();
+  await page.locator(".moteur-ecran-courant .moteur-bouton-principal").click();
+  await page.waitForSelector(".moteur-statut-not_equivalent");
+  await page.locator(`.moteur-qcm input[value="${autre}"]`).check(); // nouvelle sélection en attente de validation
+  const etat = (await page.evaluate(`(() => { const carte = document.querySelector(".moteur-ecran-courant"); const opt = document.querySelector(".moteur-choix:has(input:checked)"); return { carte: getComputedStyle(carte).borderTopColor, option: getComputedStyle(opt).borderTopColor, fond: getComputedStyle(opt).backgroundColor }; })()`)) as { carte: string; option: string; fond: string };
+  verifier(etat.carte === RGB.danger, `${l} retentative : la carte garde le verdict précédent (rouge), obtenu ${etat.carte}`);
+  verifier(etat.option === RGB.violetVif && etat.fond === RGB.violetClair, `${l} retentative : la nouvelle sélection reste violette (jamais rouge avant la réponse du serveur), obtenu ${etat.option} / ${etat.fond}`);
+  await page.locator(".moteur-ecran-courant").screenshot({ path: join(CAPTURES, `${l}-matrice-qcm-retentative-selection-violette.png`) });
+  await contexte.close();
+}
+
 async function scenarioProf(navigateur: any, base: string, largeur: number) {
   const s = creerScenario();
   installerBase(s.base);
@@ -357,6 +514,8 @@ async function main() {
     for (const largeur of [390, 1280]) {
       await scenarioEleve(navigateur, url, largeur);
       await scenarioSansCorrection(navigateur, url, largeur);
+      await matriceVisuelle(navigateur, url, largeur);
+      await scenarioRetentative(navigateur, url, largeur);
       await scenarioProf(navigateur, url, largeur);
     }
   } finally {

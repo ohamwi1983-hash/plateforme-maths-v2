@@ -623,3 +623,38 @@ Décision de l'utilisateur : la révélation, correction immédiate coupée, ne 
 **Deux choix de détail à connaître** : (1) la réponse qui termine la tâche révèle immédiatement son propre champ (le reste se consulte ensuite) ; (2) un champ sans réponse verrouillé par le chrono, sous feedback coupé, ne révèle rien avant la fin de la tâche — comme les autres.
 
 **Toujours en attente avant fusion** : confirmation que `supabase/migrations/cumulatif.sql` a été exécuté avec succès sur la vraie base.
+
+## §14 : Finalisation visuelle des composants d'écran (post phase 2)
+
+Prérequis relu avant modification : `public/moteur/ecrans.css` (323 lignes, phase 2) et le témoin technique (`src/generateurs/_temoinTechnique/index.ts`) ; contrat et moteur (`public/moteur/moteur.js`) **non modifiés**. Décisions de l'utilisateur appliquées : ombre par nouveau token, padding par tokens, verdicts sur la carte entière par `:has()`, tableau de signes coloré en entier, texte des messages en `--text`, deux `parse_error` fabriqués par appel direct à l'API, 4 précisions par défaut.
+
+### Token `--ombre-carte` (32e token)
+- `public/style.css:78` : `--ombre-carte: 0 10px 24px -18px rgba(59,20,112,.3)` — **nomme la valeur historique**, sans la modifier. Elle était répétée à l'identique dans cinq règles ; toutes utilisent désormais `var(--ombre-carte)` (`style.css:181,273,864,4118,4312` ; vérifié en Chromium : la valeur calculée reste `rgba(59, 20, 112, 0.3) 0px 10px 24px -18px`, inchangée). Compte de `:root` : 31 → 32.
+- `docs/design-system.md` (nouvelle famille « Ombre », section « États d'un composant d'écran », mention des alias locaux) ; `CLAUDE.md` (32 tokens, règle « ombre de carte : `var(--ombre-carte)`, jamais recopiée ») ; `scripts/test-design-system.ts` : compte attendu 32, et nouveaux contrôles — alias locaux `--etat-*` autorisés **seulement** s'ils valent `var(--token)` existant, `box-shadow` limité à `none` / `var(--ombre-carte)` / anneau intérieur `inset 0 0 0 1px var(--…)`, carte d'écran obligatoirement sur `var(--ombre-carte)` (326 vérifications, vert).
+- Point d'attention : « aucun token modifié » (prompt) reste vrai — un token est **ajouté**, aucun des 31 existants n'est touché.
+
+### Composants — `public/moteur/ecrans.css` (réécrit)
+- **Carte d'écran commune** `ecrans.css:53` : `--surface`, `1px --border`, `--radius`, `--ombre-carte`, padding `--espace-4` ; consigne 600 / `--text`. Écran courant = carte blanche ombrée ; écrans terminés = carte en creux sans ombre (`:71`) — **remplace la bordure violette de 2 px** de l'écran courant, pour réserver le violet à l'état « sélectionné ».
+- **Champ** `:166` : `--surface-sunken`, `1px --border`, `--radius-sm`, padding `var(--espace-2) var(--espace-3)` (tokens, 8/16 au lieu des 10/12 de la maquette — décision utilisateur), anneau de focus 2 px `--violet-vif`.
+- **QCM** `:194-231` : options en blocs pleine largeur ; sélectionné = bordure 2 px `--violet-vif` (filet de 1 px + anneau intérieur de 1 px : **aucun décalage de mise en page**), fond `--violet-clair`, texte `--violet`, gras ; bouton radio natif conservé (accessibilité clavier). `margin: 0` : la règle globale `label { margin-bottom }` créait de grands vides entre options (trouvé en Chromium).
+- **Liste** `:257` : icône de suppression `--text-muted`, `--text` au survol, zone tactile 44 px conservée ; bouton d'ajout = secondaire du site (`:133`, fond transparent, texte et bordure `--violet-vif`), qui s'applique aussi à « Retour » et « Besoin d'un indice ? ».
+- **Tableau de signes** `:319-360` : même traitement que le QCM ; libellés de ligne collés à gauche avec `z-index: 1` (`:313`) — **sans lui les cases qui défilent passaient par-dessus le libellé** (trouvé en Chromium).
+
+### États post-validation (sur la carte entière, CSS seul — moteur non touché)
+- `ecrans.css:85,94,103` : `:has(.moteur-statut-correct | -not_equivalent | -parse_error)` → bordure et fond `--vert`/`--vert-clair`, `--danger`/`--danger-clair`, `--ambre`/`--ambre-clair`. Ces classes n'existent que si le serveur a répondu (et, sans correction immédiate, seulement à la fin de la tâche — §13) : **aucun verdict ne peut apparaître depuis l'état local d'édition**.
+- Alias locaux `--etat-bordure/-fond/-texte/-filet` (définis par tokens) : le champ verrouillé, l'option de QCM sélectionnée et **toutes** les cases du tableau prennent la couleur du verdict (`:181,226,346`) ; le tableau est de plus encadré en entier (`:353`). Le serveur ne rend qu'un verdict par champ : **jamais case par case**.
+- **Précision d'interprétation (à confirmer)** : la sélection ne « devient » couleur de verdict qu'une fois le champ **verrouillé** (composant désactivé). Tant que des essais restent, une **nouvelle** sélection reste violette et la carte garde le verdict précédent — sinon une réponse pas encore validée apparaîtrait rouge, contraire au principe « jamais de rouge avant la réponse du serveur ». Vérifié : `scenarioRetentative` (carte rouge, nouvelle option violette).
+- `button:disabled` (`style.css`) impose `opacity: 0.55` : il délavait les cases verrouillées (`ecrans.css:340`, `opacity: 1`).
+
+### Écarts assumés par rapport au prompt (contraste, calculé)
+1. **Texte du message `correct`** : `--vert` sur `--vert-clair` = **3,68:1** (< 4,5:1, seuil WCAG AA) → texte en `var(--text)` ; bordure et fond gardent `--vert`/`--vert-clair`. Même choix pour la mention « Exercice terminé » (`:404`, même paire).
+2. **Texte du message `parse_error`** : `--ambre` sur `--ambre-clair` = **2,40:1** → texte en `var(--text)` ; bordure et fond gardent l'ambre. `--danger` sur blanc (≈ 6,5:1) est conservé pour le libellé de `not_equivalent`.
+Aucune couleur du système n'a été modifiée : seul l'usage de `--vert`/`--ambre` comme couleur de texte est écarté.
+
+### Validation
+- `tsc -b` propre ; 18 scripts de test passent, dont `scripts/test-design-system.ts` (326).
+- **Chromium — matrice des 4 composants × états × 2 largeurs** (`scripts/chromium-temoin-technique.ts:315` `reponseApi`, `:348` `matriceVisuelle`, `:432` `scenarioRetentative`) : défaut, sélectionné, `correct`, `not_equivalent`, `parse_error` — **42 captures** (390 px et 1280 px). Le `parse_error` du QCM (choix inconnu) et du tableau (incomplet, bloqué côté client) est produit par **appel direct à l'API**, l'écran verrouillé étant relu par le moteur (le résumé n'affiche pas le message pédagogique : celui-ci n'est visible qu'en direct, ce qui est le cas du champ et de la liste). Assertions sur styles calculés : couleurs exactes du verdict sur la carte, jamais de vert/rouge/ambre avant la réponse, option sélectionnée violet-vif/violet-clair/600, cases du tableau toutes identiques (avant validation : violet ; après : couleur du verdict), même ombre / rayon / filet / fond que `.carte-tache` du tableau de bord (`.item-liste`), ombre résolue inchangée. **216 vérifications, 0 erreur console/JS.**
+- Cohérence visuelle avec les cartes de `prof.html`/`eleve.html` confirmée par ces égalités de styles calculés et par relecture des captures.
+- **Défauts trouvés à l'inspection des captures, corrigés** : vides entre options de QCM (marge globale de `label`), cases passant par-dessus les libellés collés, couleur des cases verrouillées délavée (`opacity` global des boutons désactivés).
+
+**Non couvert** : rendu sur vrai navigateur mobile (émulation Chromium seulement) ; pas de mode sombre (aucun token dédié).

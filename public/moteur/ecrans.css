@@ -1,8 +1,20 @@
 /**
  * Styles des composants d'écran du moteur (`public/moteur/`). Design system : UNIQUEMENT les tokens de
- * `:root` (public/style.css, docs/design-system.md) — aucune couleur, police, espacement ni rayon en
- * dur (vérifié par scripts/test-design-system.ts). Exceptions littérales admises : 0, 1px, 2px, 100%,
- * `line-height`/`font-weight`, unités `em`.
+ * `:root` (public/style.css, docs/design-system.md) — aucune couleur, police, ombre, espacement ni rayon
+ * en dur (vérifié par scripts/test-design-system.ts). Exceptions littérales admises : 0, auto, 1px, 2px,
+ * 100%, `line-height`/`font-weight`, unités `em`. Les alias locaux `--etat-*` ci-dessous sont autorisés
+ * parce qu'ils sont définis EXCLUSIVEMENT à partir de tokens (vérifié aussi).
+ *
+ * Deux états visuels, jamais confondus :
+ *  - SÉLECTION (avant réponse du serveur, et pendant une nouvelle tentative) : violet. Ce que l'élève
+ *    compose n'est ni juste ni faux : jamais de vert ni de rouge à ce stade.
+ *  - VERDICT DU SERVEUR (`correct` / `not_equivalent` / `parse_error`) : posé sur la CARTE ENTIÈRE par
+ *    `:has(.moteur-statut-…)` — les classes de statut n'existent que si le serveur a répondu (et, sans
+ *    correction immédiate, elles n'existent pas avant la fin de la tâche), donc aucun état de verdict ne
+ *    peut apparaître à partir de l'état local d'édition. Le serveur ne rend qu'UN verdict par champ : le
+ *    tableau de signes est coloré en entier, jamais case par case. Une fois le champ verrouillé (composant
+ *    désactivé), la sélection prend les couleurs du verdict ; tant que des essais restent (composant
+ *    actif), une nouvelle sélection reste violette.
  */
 
 .moteur-exercice {
@@ -35,30 +47,66 @@
   overflow-wrap: anywhere;
 }
 
+/* ── Carte d'écran (commune aux 4 types) : mêmes fond / filet / rayon / ombre que `.panneau`,
+   `.item-liste` et `.carte-formulaire` (style.css). L'écran courant est la carte blanche ombrée ; les
+   écrans terminés sont des cartes « en creux » sans ombre. ── */
 .moteur-ecran {
+  /* Alias de couleurs d'état, définis à partir de tokens. Défaut = SÉLECTION (violet). */
+  --etat-bordure: var(--violet-vif);
+  --etat-fond: var(--violet-clair);
+  --etat-texte: var(--violet);
+  --etat-filet: var(--border);
+
   display: flex;
   flex-direction: column;
   gap: var(--espace-3);
-  padding: var(--espace-4) var(--espace-3);
+  padding: var(--espace-4);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  box-shadow: var(--ombre-carte);
   min-width: 0;
-}
-
-.moteur-ecran-courant {
-  border: 2px solid var(--violet-vif);
 }
 
 .moteur-ecran-termine {
   background: var(--surface-sunken);
+  box-shadow: none;
 }
 
 .moteur-consigne {
   margin: 0;
   font-weight: 600;
+  color: var(--text);
   line-height: 1.4;
   overflow-wrap: anywhere;
+}
+
+/* ── Verdicts du serveur, sur la carte entière ── */
+.moteur-ecran:has(.moteur-statut-correct) {
+  --etat-bordure: var(--vert);
+  --etat-fond: var(--surface);
+  --etat-texte: var(--text);
+  --etat-filet: var(--vert);
+  border-color: var(--vert);
+  background: var(--vert-clair);
+}
+
+.moteur-ecran:has(.moteur-statut-not_equivalent) {
+  --etat-bordure: var(--danger);
+  --etat-fond: var(--surface);
+  --etat-texte: var(--text);
+  --etat-filet: var(--danger);
+  border-color: var(--danger);
+  background: var(--danger-clair);
+}
+
+.moteur-ecran:has(.moteur-statut-parse_error) {
+  --etat-bordure: var(--ambre);
+  --etat-fond: var(--surface);
+  --etat-texte: var(--text);
+  --etat-filet: var(--ambre);
+  border-color: var(--ambre);
+  background: var(--ambre-clair);
 }
 
 /* ── Boutons ── */
@@ -81,9 +129,16 @@
   color: var(--surface);
 }
 
+/* Secondaire : même traitement que `.bouton-secondaire` du site (fond transparent, texte et bordure violets). */
 .moteur-bouton-secondaire {
-  background: var(--surface);
-  color: var(--violet);
+  background: transparent;
+  color: var(--violet-vif);
+  border: 2px solid var(--violet-vif);
+}
+
+.moteur-bouton-secondaire:hover:not(:disabled) {
+  filter: none;
+  background: var(--violet-clair);
 }
 
 .moteur-bouton:disabled {
@@ -121,7 +176,15 @@
   border-radius: var(--radius-sm);
 }
 
-/* ── QCM ── */
+/* Champ verrouillé après verdict : filet de la couleur du verdict (violet exclu, `--etat-filet` vaut
+   `--border` tant que le serveur n'a rien dit). */
+.moteur-champ:disabled {
+  color: var(--text);
+  background: var(--surface);
+  border-color: var(--etat-filet);
+}
+
+/* ── QCM : options en blocs pleine largeur, empilés ── */
 .moteur-qcm {
   display: flex;
   flex-direction: column;
@@ -130,11 +193,14 @@
 
 .moteur-choix {
   display: flex;
+  margin: 0; /* neutralise `label { margin-bottom }` (style.css) */
+  font-size: inherit;
   align-items: center;
   gap: var(--espace-3);
   min-height: calc(var(--espace-5) + var(--espace-1));
   padding: var(--espace-2) var(--espace-3);
-  background: var(--surface-sunken);
+  color: var(--text);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -143,11 +209,25 @@
 .moteur-choix input {
   flex: none;
   margin: 0;
+  accent-color: var(--violet-vif);
 }
 
+/* Sélectionné, avant validation : bordure de 2px (filet de 1px + anneau intérieur de 1px : aucun
+   décalage de mise en page), fond violet clair, texte violet, gras. */
 .moteur-choix:has(input:checked) {
+  color: var(--violet);
+  font-weight: 600;
   background: var(--violet-clair);
   border-color: var(--violet-vif);
+  box-shadow: inset 0 0 0 1px var(--violet-vif);
+}
+
+/* Champ verrouillé : la sélection prend les couleurs du verdict (violet par défaut si le serveur n'a rien dit). */
+.moteur-choix:has(input:checked:disabled) {
+  color: var(--etat-texte);
+  background: var(--etat-fond);
+  border-color: var(--etat-bordure);
+  box-shadow: inset 0 0 0 1px var(--etat-bordure);
 }
 
 /* ── Liste de valeurs ── */
@@ -173,10 +253,26 @@
   gap: var(--espace-2);
 }
 
-.moteur-bouton-retirer {
+/* Icône de suppression : discrète (texte atténué), plus foncée au survol, zone tactile de 44px conservée. */
+.moteur-bouton.moteur-bouton-retirer {
   flex: none;
   min-width: calc(var(--espace-5) + var(--espace-1));
   padding: var(--espace-2);
+  font-size: 1.4em;
+  line-height: 1;
+  color: var(--text-muted);
+  background: transparent;
+  border-color: transparent;
+}
+
+.moteur-bouton.moteur-bouton-retirer:hover:not(:disabled) {
+  color: var(--text);
+  background: transparent;
+}
+
+.moteur-bouton.moteur-bouton-retirer:disabled {
+  background: transparent;
+  border-color: transparent;
 }
 
 /* ── Tableau de signes ── */
@@ -214,9 +310,12 @@
 .moteur-table-signes thead th:first-child {
   position: sticky;
   left: 0;
+  z-index: 1; /* sans cela les cases qui défilent passent PAR-DESSUS le libellé collé */
   background: var(--surface);
 }
 
+/* Case : même traitement que le QCM (défaut en creux ; renseignée = violet, avant validation). Une case
+   remplie n'est ni juste ni fausse tant que le serveur n'a pas répondu. */
 .moteur-case-signe {
   min-width: calc(var(--espace-5) + var(--espace-1));
   min-height: calc(var(--espace-5) + var(--espace-1));
@@ -234,6 +333,26 @@
   color: var(--violet);
   background: var(--violet-clair);
   border-color: var(--violet-vif);
+  box-shadow: inset 0 0 0 1px var(--violet-vif);
+}
+
+/* `button:disabled` (style.css) applique `opacity: 0.55` : sur une case verrouillée cela délaverait la couleur du verdict. */
+.moteur-case-signe:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+/* Verdict du serveur : TOUTES les cases prennent la couleur du verdict (un verdict par champ, jamais case par case). */
+.moteur-case-signe.moteur-case-renseignee:disabled {
+  color: var(--etat-texte);
+  background: var(--etat-fond);
+  border-color: var(--etat-bordure);
+  box-shadow: inset 0 0 0 1px var(--etat-bordure);
+}
+
+.moteur-ecran:is(:has(.moteur-statut-correct), :has(.moteur-statut-not_equivalent), :has(.moteur-statut-parse_error)) .moteur-tableau-defilement {
+  border: 1px solid var(--etat-filet);
+  border-radius: var(--radius-sm);
 }
 
 /* ── Retour du serveur ── */
@@ -265,22 +384,32 @@
   font-weight: 600;
 }
 
+/* Étiquettes de verdict : fond blanc, filet de la couleur du verdict. Texte en `--text` pour « correct » et
+   « parse_error » (`--vert` sur `--vert-clair` = 3,68:1 et `--ambre` sur `--ambre-clair` = 2,40:1, sous le
+   seuil WCAG AA de 4,5:1) ; `--danger` sur blanc dépasse le seuil et est conservé. */
 .moteur-statut-correct,
-.moteur-message-succes {
-  background: var(--vert-clair);
-  color: var(--vert);
+.moteur-statut-not_equivalent,
+.moteur-statut-parse_error,
+.moteur-message-syntaxe {
+  background: var(--surface);
+  border: 1px solid var(--etat-filet);
+  color: var(--text);
 }
 
-.moteur-statut-not_equivalent,
-.moteur-message-erreur {
-  background: var(--danger-clair);
+.moteur-statut-not_equivalent {
   color: var(--danger);
 }
 
-.moteur-statut-parse_error,
-.moteur-message-syntaxe {
-  background: var(--ambre-clair);
-  color: var(--ambre);
+/* Message de l'étape (succès de fin d'exercice, erreur réseau) : hors carte de verdict. */
+.moteur-message-succes {
+  background: var(--vert-clair);
+  border: 1px solid var(--vert);
+  color: var(--text);
+}
+
+.moteur-message-erreur {
+  background: var(--danger-clair);
+  color: var(--danger);
 }
 
 .moteur-statut-neutre,
