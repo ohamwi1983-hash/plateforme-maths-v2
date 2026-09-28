@@ -172,3 +172,49 @@ source) — pas une régression introduite ici. Aucune référence résiduelle �
 commentaires explicatifs de cette section (vérifié par grep). La validation Chromium complète
 (disabled absent du champ « nombre d'exercices » pour "4e:7", création de tâche de bout en bout)
 est reportée au §G (validation finale), après §E/§F.
+
+## §5 : Phase 1 §E — client `public/eleve.html` (checkpoint obligatoire, validé par l'utilisateur)
+
+**Point de contrôle** : avant toute copie, classification exhaustive de l'ancien `eleve.html`
+(23 612 lignes) livrée à l'utilisateur (fichier `CLASSIFICATION-ELEVE-HTML.md`, envoyé hors dépôt)
+et validation explicite obtenue ("Go, avec la gestion d'erreur silencieuse sur
+chargerTableauDeBord face à une 404") avant d'écrire le moindre fichier. Méthode : lecture directe
+de la structure HTML (lignes 1-3858, moi-même) + un agent de recherche dédié pour la zone
+entrelacée gen1-gen6 (3859-13930, 329 fonctions) et le bloc impression/aperçu jamais audité
+auparavant (23025-23601) ; 6 fonctions majeures spot-vérifiées par moi ligne par ligne après coup
+(lignes exactes confirmées à 100%).
+
+**Construit un fichier NEUF** (jamais une copie élaguée du fichier de 23 612 lignes) : 970 lignes,
+contenant exclusivement les ~285 lignes HTML de gestion identifiées (tête, en-tête, authentification,
+nav à 4 onglets, panneau Tableau de bord résumé, panneau Mes tâches — **liste de tâches
+uniquement, sans `#exercice`**, onglet Résultats, onglet Mon compte) et les 20 fonctions JS de
+gestion classées, adaptées :
+
+- `chargerTableauDeBord` : `GET /api/eleves/tableau-de-bord` étant différé à la phase 2 (§C),
+  gestion d'erreur silencieuse spécifique au 404 (état vide `{en_cours: [], effectuees: [],
+  anterieures: [], serieActuelle: 0}`, jamais de bannière d'erreur fatale) — décision validée
+  explicitement par l'utilisateur. Tout autre code d'erreur continue d'appeler
+  `window.afficherErreurFatale` comme avant (bug réel à ne pas masquer).
+- `btn-deconnexion` : retiré `document.getElementById("exercice").hidden = true` (élément absent
+  de ce fichier), reste inchangé sinon.
+- `demarrerFluxPasAPas`/`ouvrirExercice` : **stubs temporaires** (avertissement console, aucune
+  action) au lieu d'être copiées — ce sont des fonctions du moteur d'exercice (~437 et ~340 lignes
+  dans l'ancien fichier), hors périmètre phase 1. En pratique, ces branches ne s'exécutent jamais
+  (les 3 catégories de tâches sont toujours vides tant que le tableau de bord est différé), mais
+  les stubs évitent un `ReferenceError` si cette hypothèse changeait avant la phase 3.
+- `libelleCategorie` : portée **verbatim**, sans modification — vérifié qu'elle dégrade
+  gracieusement (repli sur le slug brut) en l'absence de tout `.choix-btn[data-valeur]` dans le
+  DOM (ces boutons n'existent que dans les blocs de générateur, absents de ce fichier).
+- KaTeX (CDN script + feuille de style) retiré de `<head>` : aucune des 20 fonctions de gestion
+  portées n'en dépend (confirmé par grep) — chargement CDN inutile en phase 1.
+- Point d'entrée du script : `initSupabaseClient()` directement, jamais
+  `initModeImpression()`/`initModeApercu()` (tous deux hors périmètre, dépendants du moteur
+  d'exercice — voir la classification).
+
+**Validation** : les 2 blocs `<script>` inline parsent sans erreur de syntaxe (`new Function`, Node).
+Les 55 cibles distinctes de `document.getElementById(...)` résolvent toutes vers un élément
+existant du HTML de ce même fichier (script de vérification automatisé, 0 manquant). Balance des
+tags HTML (`div`/`section`/`script`/`button`/`p`) vérifiée égale. Aucune référence résiduelle à
+`formatEnonceKatex`/`afficherEtapeCourante`/`soumettreEtapeCourante`/`champsPourVariante`/
+`VARIANTES_*`/`katex` (vérifié par grep). La validation Chromium réelle (connexion, onglets
+Résultats/Compte, tableau de bord vide sans erreur console) est reportée au §G.

@@ -1,0 +1,970 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Espace élève</title>
+  <link rel="manifest" href="/manifest-eleve.json" />
+  <meta name="theme-color" content="#3B1470" />
+  <link rel="apple-touch-icon" href="/icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Maths Élève" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+  <script>
+    // Filet de sécurité diagnostic — copie verbatim de l'ancien pilote (même mécanisme que
+    // public/prof.html).
+    (function () {
+      var messagesEnAttente = [];
+      var conteneur = null;
+
+      function creerConteneurSiPossible() {
+        if (conteneur || !document.body) return;
+        conteneur = document.createElement("div");
+        conteneur.id = "erreur-fatale-pilote";
+        conteneur.style.cssText =
+          "background:#b00020;color:#fff;padding:12px;margin:0;font:13px/1.4 monospace;" +
+          "white-space:pre-wrap;word-break:break-word;position:relative;z-index:2147483647;";
+        document.body.insertBefore(conteneur, document.body.firstChild);
+        messagesEnAttente.forEach(ajouterLigne);
+        messagesEnAttente = [];
+      }
+
+      function ajouterLigne(message) {
+        var ligne = document.createElement("div");
+        ligne.textContent = message;
+        ligne.style.cssText = "border-top:1px solid rgba(255,255,255,0.4);padding-top:6px;margin-top:6px;";
+        conteneur.appendChild(ligne);
+      }
+
+      window.afficherErreurFatale = function (message) {
+        creerConteneurSiPossible();
+        if (conteneur) {
+          ajouterLigne(message);
+        } else {
+          messagesEnAttente.push(message);
+        }
+      };
+
+      document.addEventListener("DOMContentLoaded", function () {
+        if (messagesEnAttente.length > 0) creerConteneurSiPossible();
+      });
+
+      window.onerror = function (message, source, lineno, colno, error) {
+        window.afficherErreurFatale(
+          "Erreur JS : " + message + " (" + source + ":" + lineno + ":" + colno + ")" + (error && error.stack ? "\n" + error.stack : ""),
+        );
+        return false;
+      };
+
+      window.addEventListener("unhandledrejection", function (event) {
+        var raison = event.reason;
+        var texte = raison && raison.stack ? raison.stack : String(raison);
+        window.afficherErreurFatale("Promesse rejetée non gérée : " + texte);
+      });
+    })();
+  </script>
+  <script
+    src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"
+    onerror="window.afficherErreurFatale('Échec du chargement du script externe https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js (CDN bloqué, CSP, ou hors ligne).')"
+  ></script>
+</head>
+<body>
+  <header class="barre-app">
+    <div class="barre-app-fond">
+      <svg class="motif-courbe" viewBox="0 0 220 140" aria-hidden="true">
+        <path d="M -10 130 Q 90 -20 230 100" stroke="white" stroke-width="3" fill="none" />
+        <circle cx="55" cy="55" r="3" fill="white" />
+        <circle cx="150" cy="40" r="3" fill="white" />
+      </svg>
+    </div>
+    <div class="barre-app-contenu">
+      <div>
+        <p class="salutation" id="salutation-eleve">Espace élève</p>
+        <p class="salutation-ligne" id="salutation-ligne" hidden></p>
+        <p class="badge-serie" id="badge-serie" hidden></p>
+      </div>
+    </div>
+  </header>
+
+  <main class="contenu-page">
+  <section id="authentification">
+    <div id="fieldset-connexion" class="carte-formulaire">
+      <div class="zone-edition">
+        <h3 class="zone-titre">Se connecter</h3>
+        <label class="champ-label" for="connexion-nom">Nom</label>
+        <input class="champ-input" id="connexion-nom" type="text" />
+        <div class="grille-2col" style="margin-top: 14px;">
+          <div><label class="champ-label" for="connexion-prenom">Prénom</label><input class="champ-input" id="connexion-prenom" type="text" /></div>
+          <div><label class="champ-label" for="connexion-mdp">Mot de passe</label><input class="champ-input" id="connexion-mdp" type="password" /></div>
+        </div>
+      </div>
+      <div class="zone-pied" style="justify-content: space-between; align-items: center;">
+        <a href="#" id="lien-vers-inscription" style="font-size: 13px;">Pas encore inscrit ? Créer un compte</a>
+        <button id="btn-connexion"><span class="emoji-inline" aria-hidden="true">🔑</span>Se connecter</button>
+      </div>
+      <p id="statut-connexion" style="padding: 0 24px 16px;"></p>
+    </div>
+
+    <div id="fieldset-inscription" class="carte-formulaire" hidden>
+      <div class="zone-edition">
+        <h3 class="zone-titre">S'inscrire (première visite)</h3>
+        <label class="champ-label" for="code-classe">Code de classe</label>
+        <input class="champ-input" id="code-classe" type="text" maxlength="6" style="text-transform: uppercase;" />
+        <div class="grille-2col" style="margin-top: 14px;">
+          <div><label class="champ-label" for="inscription-nom">Nom</label><input class="champ-input" id="inscription-nom" type="text" /></div>
+          <div><label class="champ-label" for="inscription-prenom">Prénom</label><input class="champ-input" id="inscription-prenom" type="text" /></div>
+        </div>
+        <div class="grille-2col" style="margin-top: 14px;">
+          <div><label class="champ-label" for="inscription-mdp">Mot de passe (6 caractères minimum)</label><input class="champ-input" id="inscription-mdp" type="password" /></div>
+          <div><label class="champ-label" for="inscription-email">Email (facultatif)</label><input class="champ-input" id="inscription-email" type="email" /></div>
+        </div>
+      </div>
+      <div class="zone-pied" style="justify-content: space-between; align-items: center;">
+        <a href="#" id="lien-vers-connexion" style="font-size: 13px;">Déjà un compte ? Se connecter</a>
+        <button id="btn-inscription"><span class="emoji-inline" aria-hidden="true">🆕</span>S'inscrire</button>
+      </div>
+      <p id="statut-inscription" style="padding: 0 24px 16px;"></p>
+    </div>
+  </section>
+
+  <section id="espace-eleve" hidden>
+    <nav class="nav-flottante" id="onglets-nav">
+      <button type="button" class="onglet-bouton" data-onglet="tableau-de-bord"><span class="nav-icone" aria-hidden="true">🏠</span>Tableau de bord</button>
+      <button type="button" class="onglet-bouton" data-onglet="mes-taches"><span class="nav-icone" aria-hidden="true">📚</span>Mes tâches</button>
+      <button type="button" class="onglet-bouton" data-onglet="resultats"><span class="nav-icone" aria-hidden="true">📊</span>Résultats</button>
+      <button type="button" class="onglet-bouton" data-onglet="mon-compte"><span class="nav-icone" aria-hidden="true">👤</span>Mon compte</button>
+    </nav>
+
+    <div id="onglet-tableau-de-bord" class="onglet-panneau" hidden>
+      <h2 class="titre-section">Tableau de bord</h2>
+
+      <div class="panneau carte-serie-tdb-eleve">
+        <span class="carte-serie-tdb-eleve-valeur" id="tdbg-serie-valeur">–</span>
+        <span class="carte-serie-tdb-eleve-libelle">série actuelle</span>
+      </div>
+
+      <div class="grille-stats-tdb-eleve">
+        <div class="carte-stat">
+          <span class="carte-stat-valeur" id="tdbg-stat-reussite">–</span>
+          <span class="carte-stat-libelle">Réussite</span>
+        </div>
+        <div class="carte-stat">
+          <span class="carte-stat-valeur" id="tdbg-stat-effectuees">–</span>
+          <span class="carte-stat-libelle">Tâches faites</span>
+        </div>
+        <div class="carte-stat carte-stat-violette">
+          <span class="carte-stat-valeur" id="tdbg-stat-encours">–</span>
+          <span class="carte-stat-libelle">En cours</span>
+        </div>
+      </div>
+
+      <section class="panneau">
+        <h3 class="titre-souligne">Prochaines échéances</h3>
+        <div id="tdbg-liste-echeances"></div>
+        <p id="tdbg-echeances-vide" class="tdb-echeances-vide" hidden>Aucune échéance proche, bravo !</p>
+      </section>
+    </div>
+
+    <!--
+      Phase 1 (socle de gestion) : ce panneau ne contient QUE la liste de tâches (`#tableau-de-bord`
+      ci-dessous), jamais l'écran d'exercice pas-à-pas (`#exercice` et tout son contenu dans
+      l'ancien pilote) — le moteur d'exercice et les générateurs seront reconstruits en phase 3, voir
+      CLAUDE.md et RAPPORT.md. GET /api/eleves/tableau-de-bord est différé à la phase 2 (voir
+      RAPPORT.md §C) : `chargerTableauDeBord` gère silencieusement le 404 attendu de cette route
+      (état vide, jamais de bannière d'erreur), décision validée explicitement par l'utilisateur.
+    -->
+    <div id="onglet-mes-taches" class="onglet-panneau" hidden>
+      <section id="tableau-de-bord" hidden>
+        <div class="grille-stats-tdb-eleve">
+          <div class="carte-stat">
+            <span class="carte-stat-valeur" id="tdb-eleve-stat-reussite">–</span>
+            <span class="carte-stat-libelle">Réussite</span>
+          </div>
+          <div class="carte-stat">
+            <span class="carte-stat-valeur" id="tdb-eleve-stat-serie">–</span>
+            <span class="carte-stat-libelle">Série</span>
+          </div>
+          <div class="carte-stat carte-stat-violette">
+            <span class="carte-stat-valeur" id="tdb-eleve-stat-encours">–</span>
+            <span class="carte-stat-libelle">En cours</span>
+          </div>
+        </div>
+
+        <div class="panneau-accordeon-taches ouvert" id="panneau-mt-en-cours">
+          <button type="button" class="entete-accordeon-taches" id="entete-mt-en-cours" aria-expanded="true" aria-controls="corps-mt-en-cours">
+            <span class="entete-accordeon-taches-gauche">
+              <svg class="chevron-accordeon-taches" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"></polyline></svg>
+              <span class="titre-accordeon-taches">En cours</span>
+            </span>
+            <span class="badge-accordeon-taches" id="badge-mt-en-cours">0</span>
+          </button>
+          <div class="corps-accordeon-taches corps-accordeon-pad" id="corps-mt-en-cours">
+            <ul id="ul-en-cours"></ul>
+          </div>
+        </div>
+
+        <div class="panneau-accordeon-taches" id="panneau-mt-effectuees">
+          <button type="button" class="entete-accordeon-taches" id="entete-mt-effectuees" aria-expanded="false" aria-controls="corps-mt-effectuees">
+            <span class="entete-accordeon-taches-gauche">
+              <svg class="chevron-accordeon-taches" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"></polyline></svg>
+              <span class="titre-accordeon-taches">Effectuées</span>
+            </span>
+            <span class="badge-accordeon-taches" id="badge-mt-effectuees">0</span>
+          </button>
+          <div class="corps-accordeon-taches corps-accordeon-pad" id="corps-mt-effectuees" hidden>
+            <ul id="ul-effectuees"></ul>
+          </div>
+        </div>
+
+        <div class="panneau-accordeon-taches" id="panneau-mt-anterieures">
+          <button type="button" class="entete-accordeon-taches" id="entete-mt-anterieures" aria-expanded="false" aria-controls="corps-mt-anterieures">
+            <span class="entete-accordeon-taches-gauche">
+              <svg class="chevron-accordeon-taches" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"></polyline></svg>
+              <span class="titre-accordeon-taches">Antérieures</span>
+            </span>
+            <span class="badge-accordeon-taches" id="badge-mt-anterieures">0</span>
+          </button>
+          <div class="corps-accordeon-taches corps-accordeon-pad" id="corps-mt-anterieures" hidden>
+            <ul id="ul-anterieures"></ul>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div id="onglet-resultats" class="onglet-panneau" hidden>
+      <h2 class="titre-section">Résultats</h2>
+
+      <section class="panneau">
+        <h3 class="titre-souligne">Ta progression</h3>
+        <p id="resultats-tendance-texte" class="resultats-tendance-texte"></p>
+        <p id="resultats-tendance-temps-texte" class="resultats-tendance-texte" hidden></p>
+        <div id="resultats-courbe-conteneur"></div>
+        <p id="resultats-courbe-legende" class="resultats-courbe-legende" hidden></p>
+        <p id="resultats-historique-vide" class="tdb-echeances-vide" hidden>Pas encore de tâche notée — reviens ici une fois tes premières tâches terminées !</p>
+      </section>
+
+      <section class="panneau">
+        <h3 class="titre-souligne">Compétences à travailler</h3>
+        <div id="resultats-liste-competences"></div>
+        <p id="resultats-competences-vide" class="tdb-echeances-vide" hidden>Rien à signaler pour l'instant, bravo !</p>
+      </section>
+
+      <section class="panneau" id="resultats-section-resume" hidden>
+        <h3 class="titre-souligne">Tes tâches en un coup d'œil</h3>
+        <div class="grille-stats-tdb-eleve">
+          <div class="carte-stat">
+            <span class="carte-stat-valeur" id="resultats-resume-nb">–</span>
+            <span class="carte-stat-libelle">Tâches notées</span>
+          </div>
+          <div class="carte-stat">
+            <span class="carte-stat-valeur" id="resultats-resume-moyenne">–</span>
+            <span class="carte-stat-libelle">Score moyen</span>
+          </div>
+          <div class="carte-stat carte-stat-violette">
+            <span class="carte-stat-valeur" id="resultats-resume-meilleur">–</span>
+            <span class="carte-stat-libelle">Meilleur score</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div id="onglet-mon-compte" class="onglet-panneau" hidden>
+      <section class="panneau">
+        <div class="carte-profil">
+          <div class="avatar-grand" id="avatar-mon-compte"></div>
+          <div class="nom-profil" id="nom-eleve-connecte"></div>
+          <div class="sous-nom-profil">Espace élève</div>
+          <div class="mini-stats">
+            <div class="mini-stat">
+              <div class="valeur" id="stat-taches-faites">0</div>
+              <div class="label">Tâches faites</div>
+            </div>
+            <div class="mini-stat">
+              <div class="valeur" id="stat-serie-actuelle">0</div>
+              <div class="label">Série actuelle</div>
+            </div>
+          </div>
+        </div>
+        <div class="actions-compte">
+          <button type="button" id="btn-afficher-changer-mdp" class="btn-compte">
+            <span class="icone-rond" aria-hidden="true">🔒</span>
+            <span>Changer de mot de passe</span>
+            <span class="chevron" aria-hidden="true">›</span>
+          </button>
+          <button type="button" id="btn-deconnexion" class="btn-compte">
+            <span class="icone-rond" aria-hidden="true">🚪</span>
+            <span>Se déconnecter</span>
+          </button>
+        </div>
+        <div id="bloc-changer-mdp" class="groupe-champ" hidden>
+          <label>Nouveau mot de passe : <input id="nouveau-mdp" type="password" /></label>
+          <button id="btn-valider-nouveau-mdp">Valider</button>
+          <span id="statut-changer-mdp"></span>
+        </div>
+      </section>
+    </div>
+  </section>
+  </main>
+
+  <script>
+    // Session élève courante — variable JS en mémoire uniquement ; le SDK Supabase persiste déjà
+    // la session par défaut (`persistSession: true`, localStorage), `getSession()` ci-dessous en
+    // tire parti au chargement.
+    let session = null;
+    let supabaseClient = null;
+
+    async function initSupabaseClient() {
+      try {
+        const config = await fetch("/api/config").then((r) => r.json());
+        if (!config.supabaseUrl || !config.supabaseAnonKey) {
+          window.afficherErreurFatale("Configuration Supabase manquante côté serveur (SUPABASE_URL / SUPABASE_ANON_KEY).");
+          return;
+        }
+        supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
+
+        const {
+          data: { session: sessionExistante },
+        } = await supabaseClient.auth.getSession();
+        if (sessionExistante) {
+          const profilCache = localStorage.getItem("eleve-profil-cache");
+          if (profilCache) {
+            const { affichage, prenom, nom } = JSON.parse(profilCache);
+            await definirSession(sessionExistante, affichage, prenom, nom);
+          }
+        }
+      } catch (e) {
+        window.afficherErreurFatale("Impossible de charger la configuration : " + e.message);
+      }
+    }
+
+    function enteteAuthentification() {
+      return { Authorization: "Bearer " + session.access_token };
+    }
+
+    function formaterErreur(reponse) {
+      return reponse.detail ? `${reponse.erreur} — ${reponse.detail}` : reponse.erreur;
+    }
+
+    const ONGLETS = ["tableau-de-bord", "mes-taches", "resultats", "mon-compte"];
+
+    function afficherOnglet(nom) {
+      for (const o of ONGLETS) {
+        document.getElementById("onglet-" + o).hidden = o !== nom;
+      }
+      for (const bouton of document.querySelectorAll(".onglet-bouton")) {
+        bouton.classList.toggle("onglet-actif", bouton.dataset.onglet === nom);
+      }
+      if (nom === "resultats") chargerMesResultats();
+    }
+
+    for (const bouton of document.querySelectorAll(".onglet-bouton")) {
+      bouton.addEventListener("click", () => afficherOnglet(bouton.dataset.onglet));
+    }
+
+    function initiales(prenom, nom) {
+      const p = (prenom ?? "").trim().charAt(0);
+      const n = (nom ?? "").trim().charAt(0);
+      return (p + n || "?").toUpperCase();
+    }
+
+    async function definirSession(nouvelleSession, affichage, prenom, nom) {
+      session = nouvelleSession;
+      if (supabaseClient) {
+        await supabaseClient.auth.setSession({ access_token: session.access_token, refresh_token: session.refresh_token });
+      }
+      localStorage.setItem("eleve-profil-cache", JSON.stringify({ affichage, prenom, nom }));
+      document.getElementById("nom-eleve-connecte").textContent = affichage;
+      document.getElementById("avatar-mon-compte").textContent = initiales(prenom, nom);
+      document.getElementById("salutation-eleve").textContent = `Salut, ${prenom} 👋`;
+      document.getElementById("authentification").hidden = true;
+      document.getElementById("espace-eleve").hidden = false;
+      afficherOnglet("mes-taches");
+      chargerTableauDeBord();
+    }
+
+    document.getElementById("lien-vers-inscription").addEventListener("click", (e) => {
+      e.preventDefault();
+      document.getElementById("fieldset-connexion").hidden = true;
+      document.getElementById("fieldset-inscription").hidden = false;
+    });
+
+    document.getElementById("lien-vers-connexion").addEventListener("click", (e) => {
+      e.preventDefault();
+      document.getElementById("fieldset-inscription").hidden = true;
+      document.getElementById("fieldset-connexion").hidden = false;
+    });
+
+    document.getElementById("btn-connexion").addEventListener("click", async () => {
+      const statut = document.getElementById("statut-connexion");
+      statut.textContent = "Connexion…";
+      try {
+        const reponse = await fetch("/api/connexion-eleve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nom: document.getElementById("connexion-nom").value,
+            prenom: document.getElementById("connexion-prenom").value,
+            motDePasse: document.getElementById("connexion-mdp").value,
+          }),
+        }).then((r) => r.json());
+        if (reponse.erreur) {
+          statut.textContent = formaterErreur(reponse);
+          return;
+        }
+        statut.textContent = "";
+        await definirSession(reponse, `${reponse.eleve.prenom} ${reponse.eleve.nom}`, reponse.eleve.prenom, reponse.eleve.nom);
+      } catch (e) {
+        statut.textContent = "Erreur inattendue : " + e.message;
+      }
+    });
+
+    document.getElementById("btn-inscription").addEventListener("click", async () => {
+      const statut = document.getElementById("statut-inscription");
+      statut.textContent = "Inscription…";
+      try {
+        const email = document.getElementById("inscription-email").value.trim();
+        const reponse = await fetch("/api/inscription-eleve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            code: document.getElementById("code-classe").value,
+            nom: document.getElementById("inscription-nom").value,
+            prenom: document.getElementById("inscription-prenom").value,
+            motDePasse: document.getElementById("inscription-mdp").value,
+            email: email === "" ? undefined : email,
+          }),
+        }).then((r) => r.json());
+        if (reponse.erreur) {
+          statut.textContent = formaterErreur(reponse);
+          return;
+        }
+        statut.textContent = "";
+        await definirSession(reponse, reponse.eleve.affichage, reponse.eleve.prenom, reponse.eleve.nom);
+      } catch (e) {
+        statut.textContent = "Erreur inattendue : " + e.message;
+      }
+    });
+
+    document.getElementById("btn-deconnexion").addEventListener("click", async () => {
+      if (supabaseClient) await supabaseClient.auth.signOut();
+      localStorage.removeItem("eleve-profil-cache");
+      session = null;
+      document.getElementById("espace-eleve").hidden = true;
+      document.getElementById("authentification").hidden = false;
+      document.getElementById("fieldset-inscription").hidden = true;
+      document.getElementById("fieldset-connexion").hidden = false;
+      document.getElementById("tableau-de-bord").hidden = true;
+      document.getElementById("salutation-eleve").textContent = "Espace élève";
+      document.getElementById("salutation-ligne").hidden = true;
+      document.getElementById("badge-serie").hidden = true;
+      afficherOnglet("mes-taches");
+    });
+
+    document.getElementById("btn-afficher-changer-mdp").addEventListener("click", () => {
+      document.getElementById("bloc-changer-mdp").hidden = !document.getElementById("bloc-changer-mdp").hidden;
+    });
+
+    document.getElementById("btn-valider-nouveau-mdp").addEventListener("click", async () => {
+      const statut = document.getElementById("statut-changer-mdp");
+      if (!supabaseClient) {
+        statut.textContent = "Client Supabase non initialisé (configuration indisponible).";
+        return;
+      }
+      const { error } = await supabaseClient.auth.updateUser({ password: document.getElementById("nouveau-mdp").value });
+      statut.textContent = error ? "Erreur : " + error.message : "Mot de passe modifié.";
+    });
+
+    // Stubs temporaires (phase 1, socle de gestion) : le moteur d'exercice (ouverture d'un
+    // exercice, flux pas-à-pas) revient en phase 3 — voir CLAUDE.md. GET /api/eleves/tableau-de-bord
+    // étant différé (§C), les 3 catégories de tâches sont toujours vides en pratique : ces branches
+    // ne s'exécutent donc jamais réellement en phase 1. Ces stubs existent uniquement pour ne
+    // jamais lever de ReferenceError si cette hypothèse changeait avant la phase 3.
+    function demarrerFluxPasAPas(tache) {
+      console.warn("Moteur d'exercice indisponible en phase 1 (revient en phase 3).");
+    }
+    function ouvrirExercice(exercice, categorie) {
+      console.warn("Moteur d'exercice indisponible en phase 1 (revient en phase 3).");
+    }
+
+    let exercicesParId = {};
+
+    const NOMS_SECTIONS = { en_cours: "ul-en-cours", effectuees: "ul-effectuees", anterieures: "ul-anterieures" };
+
+    async function chargerTableauDeBord() {
+      const reponse = await fetch("/api/eleves/tableau-de-bord", { headers: enteteAuthentification() });
+      let donnees;
+      if (reponse.status === 404) {
+        // Phase 1 (socle de gestion) : cette route est différée à la phase 2 (voir RAPPORT.md §C).
+        // Gestion d'erreur silencieuse pour ce cas attendu — décidée explicitement par
+        // l'utilisateur (voir RAPPORT.md §E) : le tableau de bord reste visible avec un état vide,
+        // jamais de bannière d'erreur fatale pour un 404 de route pas encore livrée.
+        donnees = { en_cours: [], effectuees: [], anterieures: [], serieActuelle: 0 };
+      } else {
+        donnees = await reponse.json();
+        if (!reponse.ok) {
+          window.afficherErreurFatale(donnees.erreur ? formaterErreur(donnees) : "Échec de récupération du tableau de bord");
+          return;
+        }
+      }
+
+      const nEnCours = (donnees.en_cours ?? []).length;
+      const ligneSalutation = document.getElementById("salutation-ligne");
+      ligneSalutation.textContent =
+        nEnCours === 0
+          ? "Aucune tâche en cours, bravo !"
+          : nEnCours === 1
+            ? "Tu as 1 tâche en cours — encore un petit effort !"
+            : `Tu as ${nEnCours} tâches en cours — encore un petit effort !`;
+      ligneSalutation.hidden = false;
+
+      const badgeSerie = document.getElementById("badge-serie");
+      const serieActuelle = donnees.serieActuelle ?? 0;
+      if (serieActuelle >= 3) {
+        badgeSerie.textContent = `⚡ ${serieActuelle} séries d'affilée sans erreur`;
+        badgeSerie.hidden = false;
+      } else {
+        badgeSerie.hidden = true;
+      }
+
+      document.getElementById("stat-taches-faites").textContent = String((donnees.effectuees ?? []).length);
+      document.getElementById("stat-serie-actuelle").textContent = String(serieActuelle);
+
+      let champsCorrects = 0;
+      let champsRepondus = 0;
+      for (const categorie of Object.keys(NOMS_SECTIONS)) {
+        for (const tache of donnees[categorie] ?? []) {
+          for (const exercice of tache.exercices ?? []) {
+            for (const champ of exercice.champs ?? []) {
+              if (champ.statut === null) continue;
+              champsRepondus++;
+              if (champ.statut === "correct") champsCorrects++;
+            }
+          }
+        }
+      }
+      document.getElementById("tdb-eleve-stat-reussite").textContent = champsRepondus > 0 ? `${Math.round((champsCorrects / champsRepondus) * 100)}%` : "–";
+      document.getElementById("tdb-eleve-stat-serie").textContent = serieActuelle > 0 ? `⚡${serieActuelle}` : "0";
+      document.getElementById("tdb-eleve-stat-encours").textContent = String(nEnCours);
+
+      document.getElementById("tdbg-serie-valeur").textContent = serieActuelle > 0 ? `⚡ ${serieActuelle}` : "0";
+      document.getElementById("tdbg-stat-reussite").textContent = champsRepondus > 0 ? `${Math.round((champsCorrects / champsRepondus) * 100)}%` : "–";
+      document.getElementById("tdbg-stat-effectuees").textContent = String((donnees.effectuees ?? []).length);
+      document.getElementById("tdbg-stat-encours").textContent = String(nEnCours);
+
+      afficherEcheancesProchesEleve(donnees.en_cours ?? []);
+
+      exercicesParId = {};
+      for (const [categorie, idUl] of Object.entries(NOMS_SECTIONS)) {
+        const ul = document.getElementById(idUl);
+        ul.innerHTML = "";
+        for (const tache of donnees[categorie] ?? []) {
+          ul.appendChild(construireCarteTache(tache, categorie));
+        }
+      }
+      document.getElementById("badge-mt-en-cours").textContent = String((donnees.en_cours ?? []).length);
+      document.getElementById("badge-mt-effectuees").textContent = String((donnees.effectuees ?? []).length);
+      document.getElementById("badge-mt-anterieures").textContent = String((donnees.anterieures ?? []).length);
+
+      document.getElementById("tableau-de-bord").hidden = false;
+      return donnees;
+    }
+
+    const MS_PAR_JOUR_ELEVE = 24 * 60 * 60 * 1000;
+    const formatCourtEleve = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" });
+    function afficherEcheancesProchesEleve(enCours) {
+      const maintenant = new Date();
+      const avecEcheance = enCours.filter((t) => t.date_echeance !== null).slice(0, 3);
+
+      const conteneur = document.getElementById("tdbg-liste-echeances");
+      const vide = document.getElementById("tdbg-echeances-vide");
+      conteneur.innerHTML = "";
+      vide.hidden = avecEcheance.length > 0;
+
+      for (const tache of avecEcheance) {
+        const echeance = new Date(tache.date_echeance);
+        const joursRestants = Math.ceil((echeance.getTime() - maintenant.getTime()) / MS_PAR_JOUR_ELEVE);
+        const urgent = joursRestants <= 2;
+
+        const carte = document.createElement("div");
+        carte.className = "carte-echeance-tdb " + (urgent ? "urgente" : "proche");
+
+        const infos = document.createElement("div");
+        infos.className = "infos-echeance-tdb";
+        const nom = document.createElement("div");
+        nom.className = "nom-echeance-tdb";
+        nom.textContent = tache.nom_tache;
+        const detail = document.createElement("div");
+        detail.className = "detail-echeance-tdb";
+        detail.textContent = `échéance ${formatCourtEleve.format(echeance)}`;
+        infos.appendChild(nom);
+        infos.appendChild(detail);
+        carte.appendChild(infos);
+
+        const badge = document.createElement("span");
+        badge.className = "badge-statut-tache " + (urgent ? "badge-echeance-urgente" : "badge-echeance-proche");
+        badge.textContent = urgent ? (joursRestants <= 0 ? "Aujourd'hui" : joursRestants === 1 ? "Demain" : `${joursRestants} j.`) : `${joursRestants} j.`;
+        carte.appendChild(badge);
+
+        carte.addEventListener("click", () => {
+          afficherOnglet("mes-taches");
+          demarrerFluxPasAPas(tache);
+        });
+
+        conteneur.appendChild(carte);
+      }
+    }
+
+    function echapperHtml(texte) {
+      return String(texte)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    async function chargerMesResultats() {
+      const reponse = await fetch("/api/eleves/mes-resultats", { headers: enteteAuthentification() });
+      const donnees = await reponse.json();
+      if (!reponse.ok) {
+        window.afficherErreurFatale(donnees.erreur ? formaterErreur(donnees) : "Échec de récupération des résultats");
+        return;
+      }
+
+      afficherProgressionResultats(donnees.historiqueTaches ?? [], donnees.tendanceScore ?? "stable");
+      afficherTendanceTemps(donnees.tendanceTemps ?? null);
+      afficherCompetencesResultats(donnees.competences ?? [], donnees.evolution ?? []);
+      afficherResumeTachesResultats(donnees.historiqueTaches ?? []);
+    }
+
+    function afficherTendanceTemps(tendanceTemps) {
+      const texte = document.getElementById("resultats-tendance-temps-texte");
+      if (!tendanceTemps) {
+        texte.hidden = true;
+        texte.textContent = "";
+        return;
+      }
+      texte.textContent = `⏱️ Tu réponds de plus en plus vite sur "${tendanceTemps.label}" !`;
+      texte.hidden = false;
+    }
+
+    const TEXTE_TENDANCE_SCORE = {
+      en_progression: "📈 Tes scores sont en progression sur tes dernières tâches — continue comme ça !",
+      en_baisse: "📉 Tes scores ont baissé sur tes dernières tâches — n'hésite pas à redemander de l'aide.",
+      stable: "Tes scores sont stables sur tes dernières tâches.",
+    };
+
+    const FORMAT_COURT_RESULTAT = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" });
+
+    function couleurScoreResultat(pourcentage) {
+      return pourcentage >= 75 ? "var(--vert)" : pourcentage >= 50 ? "var(--ambre)" : "var(--danger)";
+    }
+
+    function afficherProgressionResultats(historiqueTaches, tendanceScore) {
+      const texte = document.getElementById("resultats-tendance-texte");
+      const conteneurCourbe = document.getElementById("resultats-courbe-conteneur");
+      const legende = document.getElementById("resultats-courbe-legende");
+      const vide = document.getElementById("resultats-historique-vide");
+
+      if (historiqueTaches.length === 0) {
+        texte.hidden = true;
+        conteneurCourbe.innerHTML = "";
+        legende.hidden = true;
+        vide.hidden = false;
+        return;
+      }
+      vide.hidden = true;
+      texte.hidden = historiqueTaches.length < 2;
+      texte.textContent = TEXTE_TENDANCE_SCORE[tendanceScore] ?? "";
+
+      const LARGEUR = 340;
+      const HAUTEUR = 190;
+      const MARGE_GAUCHE = 30;
+      const MARGE_DROITE = 14;
+      const MARGE_HAUT = 22;
+      const MARGE_BAS = 28;
+      const largeurTracee = LARGEUR - MARGE_GAUCHE - MARGE_DROITE;
+      const hauteurTracee = HAUTEUR - MARGE_HAUT - MARGE_BAS;
+      const n = historiqueTaches.length;
+      const xPas = n > 1 ? largeurTracee / (n - 1) : 0;
+      const xDe = (i) => MARGE_GAUCHE + (n > 1 ? i * xPas : largeurTracee / 2);
+      const yDe = (p) => MARGE_HAUT + (100 - p) * (hauteurTracee / 100);
+
+      let svg = `<svg viewBox="0 0 ${LARGEUR} ${HAUTEUR}" width="100%" height="${HAUTEUR}" role="img" aria-label="Évolution du pourcentage de réussite par tâche notée">`;
+
+      for (const p of [0, 25, 50, 75, 100]) {
+        const y = yDe(p);
+        svg += `<line x1="${MARGE_GAUCHE}" y1="${y}" x2="${LARGEUR - MARGE_DROITE}" y2="${y}" stroke="var(--border)" stroke-width="1" />`;
+        svg += `<text x="${MARGE_GAUCHE - 6}" y="${y + 3}" text-anchor="end" font-size="8" fill="var(--text-muted)">${p}%</text>`;
+      }
+
+      const points = historiqueTaches.map((t, i) => `${xDe(i)},${yDe(t.pourcentage)}`);
+      svg += `<polyline points="${points.join(" ")}" fill="none" stroke="var(--violet-vif)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />`;
+
+      historiqueTaches.forEach((t, i) => {
+        const x = xDe(i);
+        const y = yDe(t.pourcentage);
+        svg += `<circle cx="${x}" cy="${y}" r="4" fill="${couleurScoreResultat(t.pourcentage)}" stroke="var(--surface)" stroke-width="1.5"><title>${echapperHtml(t.nomTache)} — ${FORMAT_COURT_RESULTAT.format(new Date(t.date))} — ${t.pourcentage}%</title></circle>`;
+        const yEtiquette = y - MARGE_HAUT < 10 ? y + 13 : y - 8;
+        svg += `<text x="${x}" y="${yEtiquette}" text-anchor="middle" font-size="8.5" font-weight="700" fill="var(--text)">${t.pourcentage}%</text>`;
+        svg += `<text x="${x}" y="${HAUTEUR - MARGE_BAS + 14}" text-anchor="middle" font-size="7.5" fill="var(--text-muted)">${i + 1}</text>`;
+      });
+
+      svg += "</svg>";
+      conteneurCourbe.innerHTML = svg;
+
+      if (n >= 2) {
+        const premier = historiqueTaches[0].pourcentage;
+        const dernier = historiqueTaches[n - 1].pourcentage;
+        legende.textContent = `Chaque point = une tâche notée, dans l'ordre où tu les as terminées (1 à ${n}). Ta première tâche : ${premier}%. Ta plus récente : ${dernier}%.`;
+      } else {
+        legende.textContent = "Ce point représente ta seule tâche notée jusqu'ici. Reviens après ta prochaine tâche pour voir ta courbe se dessiner !";
+      }
+      legende.hidden = false;
+    }
+
+    const LIBELLE_TENDANCE_COMPETENCE = {
+      en_progres: { texte: "Tu progresses !", classe: "badge-tendance-progres" },
+      stable: { texte: "Ça stagne un peu", classe: "badge-tendance-stable" },
+      toujours_difficile: { texte: "Encore un petit effort", classe: "badge-tendance-difficile" },
+    };
+
+    const DEGRADE_SCORE_ARRETS = [
+      { arret: 0, rgb: [0xb3, 0x26, 0x1e] },
+      { arret: 0.55, rgb: [0xe0, 0x8a, 0x2e] },
+      { arret: 1, rgb: [0x15, 0x8f, 0x52] },
+    ];
+    function couleurDegradeScore(score) {
+      const s = Math.max(0, Math.min(1, score));
+      let i = 0;
+      while (i < DEGRADE_SCORE_ARRETS.length - 2 && s > DEGRADE_SCORE_ARRETS[i + 1].arret) i++;
+      const a = DEGRADE_SCORE_ARRETS[i];
+      const b = DEGRADE_SCORE_ARRETS[i + 1];
+      const t = (s - a.arret) / (b.arret - a.arret);
+      const rgb = a.rgb.map((v, idx) => Math.round(v + (b.rgb[idx] - v) * t));
+      return `rgb(${rgb.join(",")})`;
+    }
+
+    function afficherBarreSegmentee(barre, segments) {
+      barre.innerHTML = "";
+      const total = segments.reduce((somme, seg) => somme + seg.exercicesConcernes, 0);
+      if (total === 0) return;
+      for (const seg of segments) {
+        const portion = document.createElement("div");
+        portion.className = "barre-progression-competence-segment";
+        portion.style.width = `${(seg.exercicesConcernes / total) * 100}%`;
+        portion.style.backgroundColor = couleurDegradeScore(seg.score);
+        portion.title = `${seg.nomTache} : ${seg.exercicesConcernes} exercice(s) concerné(s) par cette compétence`;
+        barre.appendChild(portion);
+      }
+    }
+
+    function afficherCompetencesResultats(competences, evolution) {
+      const conteneur = document.getElementById("resultats-liste-competences");
+      const vide = document.getElementById("resultats-competences-vide");
+      conteneur.innerHTML = "";
+
+      const nonMaitrisees = competences.filter((c) => c.statut === "non_maitrisee");
+      vide.hidden = nonMaitrisees.length > 0;
+      if (nonMaitrisees.length === 0) return;
+
+      const evolutionParCode = new Map(evolution.map((e) => [e.code, e]));
+
+      for (const c of nonMaitrisees) {
+        const evo = evolutionParCode.get(c.code);
+
+        const carte = document.createElement("div");
+        carte.className = "carte-competence-resultat";
+
+        const entete = document.createElement("div");
+        entete.className = "entete-competence-resultat";
+        const libelle = document.createElement("span");
+        libelle.className = "libelle-competence-resultat";
+        libelle.textContent = c.libelle;
+        entete.appendChild(libelle);
+
+        if (evo) {
+          const badge = document.createElement("span");
+          const info = LIBELLE_TENDANCE_COMPETENCE[evo.tendance];
+          badge.className = "badge-tendance-competence " + info.classe;
+          badge.textContent = info.texte;
+          entete.appendChild(badge);
+        }
+        carte.appendChild(entete);
+
+        const barre = document.createElement("div");
+        barre.className = "barre-progression-competence";
+        afficherBarreSegmentee(barre, c.segments ?? []);
+        carte.appendChild(barre);
+
+        if (c.explicationEleve) {
+          const p = document.createElement("p");
+          p.className = "explication-competence-resultat";
+          p.textContent = c.explicationEleve;
+          carte.appendChild(p);
+        }
+
+        conteneur.appendChild(carte);
+      }
+    }
+
+    function afficherResumeTachesResultats(historiqueTaches) {
+      const section = document.getElementById("resultats-section-resume");
+      if (historiqueTaches.length === 0) {
+        section.hidden = true;
+        return;
+      }
+      section.hidden = false;
+      const moyenne = Math.round(historiqueTaches.reduce((s, t) => s + t.pourcentage, 0) / historiqueTaches.length);
+      const meilleur = Math.max(...historiqueTaches.map((t) => t.pourcentage));
+      document.getElementById("resultats-resume-nb").textContent = String(historiqueTaches.length);
+      document.getElementById("resultats-resume-moyenne").textContent = `${moyenne}%`;
+      document.getElementById("resultats-resume-meilleur").textContent = `${meilleur}%`;
+    }
+
+    const PANNEAUX_MES_TACHES = [
+      { conteneur: "panneau-mt-en-cours", bouton: "entete-mt-en-cours", corps: "corps-mt-en-cours" },
+      { conteneur: "panneau-mt-effectuees", bouton: "entete-mt-effectuees", corps: "corps-mt-effectuees" },
+      { conteneur: "panneau-mt-anterieures", bouton: "entete-mt-anterieures", corps: "corps-mt-anterieures" },
+    ];
+    for (const p of PANNEAUX_MES_TACHES) {
+      document.getElementById(p.bouton).addEventListener("click", () => {
+        const conteneur = document.getElementById(p.conteneur);
+        const ouvert = !conteneur.classList.contains("ouvert");
+        conteneur.classList.toggle("ouvert", ouvert);
+        document.getElementById(p.corps).hidden = !ouvert;
+        document.getElementById(p.bouton).setAttribute("aria-expanded", String(ouvert));
+      });
+    }
+
+    const RAYON_ANNEAU = 18;
+    const CIRCONFERENCE_ANNEAU = 2 * Math.PI * RAYON_ANNEAU;
+
+    function construireAnneauProgression(repondus, attendus, categorie) {
+      const ratio = categorie === "effectuees" ? 1 : attendus > 0 ? repondus / attendus : 0;
+      const ns = "http://www.w3.org/2000/svg";
+      const svg = document.createElementNS(ns, "svg");
+      svg.setAttribute("class", "anneau-progression anneau-" + categorie);
+      svg.setAttribute("viewBox", "0 0 44 44");
+      svg.setAttribute("width", "44");
+      svg.setAttribute("height", "44");
+      svg.setAttribute("aria-hidden", "true");
+
+      const cercleFond = document.createElementNS(ns, "circle");
+      cercleFond.setAttribute("class", "anneau-fond");
+      cercleFond.setAttribute("cx", "22");
+      cercleFond.setAttribute("cy", "22");
+      cercleFond.setAttribute("r", String(RAYON_ANNEAU));
+      svg.appendChild(cercleFond);
+
+      if (categorie !== "anterieures") {
+        const cercleAvancement = document.createElementNS(ns, "circle");
+        cercleAvancement.setAttribute("class", "anneau-avancement");
+        cercleAvancement.setAttribute("cx", "22");
+        cercleAvancement.setAttribute("cy", "22");
+        cercleAvancement.setAttribute("r", String(RAYON_ANNEAU));
+        cercleAvancement.setAttribute("stroke-dasharray", String(CIRCONFERENCE_ANNEAU));
+        cercleAvancement.setAttribute("stroke-dashoffset", String(CIRCONFERENCE_ANNEAU * (1 - ratio)));
+        svg.appendChild(cercleAvancement);
+      }
+
+      const texte = document.createElementNS(ns, "text");
+      texte.setAttribute("class", "anneau-texte");
+      texte.setAttribute("x", "22");
+      texte.setAttribute("y", "22");
+      texte.setAttribute("text-anchor", "middle");
+      texte.setAttribute("dominant-baseline", "central");
+      texte.textContent = `${repondus}/${attendus}`;
+      svg.appendChild(texte);
+
+      return svg;
+    }
+
+    function libelleCategorie(slug) {
+      // Sans blocs de générateur dans ce fichier (phase 1), aucun `.choix-btn[data-valeur]` n'existe
+      // jamais dans le DOM — retombe systématiquement sur le repli slug ci-dessous, sans erreur.
+      const bouton = document.querySelector(`.choix-btn[data-valeur="${slug}"]`);
+      if (bouton) return bouton.textContent.trim();
+      const sansPrefixe = slug.replace(/^(af_|fc_)/, "");
+      if (sansPrefixe === slug) return slug;
+      const boutonSansPrefixe = document.querySelector(`.choix-btn[data-valeur="${sansPrefixe}"]`);
+      return boutonSansPrefixe ? boutonSansPrefixe.textContent.trim() : slug;
+    }
+
+    function construireCarteTache(tache, categorie) {
+      const li = document.createElement("li");
+      li.className = "item-liste carte-tache";
+
+      li.appendChild(construireAnneauProgression(tache.resume.repondus, tache.resume.attendus, categorie));
+
+      const corps = document.createElement("div");
+      corps.className = "carte-tache-corps";
+
+      const nomLigne = document.createElement("span");
+      nomLigne.className = "carte-tache-nom-ligne";
+      if (tache.chrono_mode !== "aucun") {
+        const iconeChrono = document.createElement("span");
+        iconeChrono.className = "icone-chrono-tache";
+        iconeChrono.setAttribute("role", "img");
+        iconeChrono.setAttribute("aria-label", "Tâche chronométrée");
+        iconeChrono.title = "Tâche chronométrée";
+        iconeChrono.innerHTML =
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>';
+        nomLigne.appendChild(iconeChrono);
+      }
+      const nom = document.createElement("span");
+      nom.className = "carte-tache-nom";
+      nom.textContent = tache.nom_tache;
+      nomLigne.appendChild(nom);
+      corps.appendChild(nomLigne);
+
+      const sousTitre = document.createElement("span");
+      sousTitre.className = "carte-tache-sous-titre";
+      if (categorie === "en_cours") {
+        const echeanceTexte = tache.date_echeance ? new Date(tache.date_echeance).toLocaleString() : "aucune";
+        sousTitre.textContent = `Échéance : ${echeanceTexte}`;
+      } else {
+        sousTitre.textContent = "Consultable";
+      }
+      corps.appendChild(sousTitre);
+
+      if (categorie === "en_cours") {
+        li.classList.add("carte-tache-cliquable");
+        li.addEventListener("click", () => demarrerFluxPasAPas(tache));
+      } else {
+        const ulExercices = document.createElement("ul");
+        ulExercices.className = "carte-tache-exercices";
+        for (const exercice of tache.exercices) {
+          exercicesParId[exercice.id] = exercice;
+          const liExercice = document.createElement("li");
+          const a = document.createElement("a");
+          a.href = "#";
+          a.textContent = libelleCategorie(exercice.variante_id);
+          a.addEventListener("click", (e) => {
+            e.preventDefault();
+            ouvrirExercice(exercice, categorie);
+          });
+          liExercice.appendChild(a);
+          ulExercices.appendChild(liExercice);
+        }
+        corps.appendChild(ulExercices);
+      }
+      li.appendChild(corps);
+
+      const chevron = document.createElement("span");
+      chevron.className = "carte-tache-chevron";
+      chevron.setAttribute("aria-hidden", "true");
+      chevron.textContent = "›";
+      li.appendChild(chevron);
+
+      return li;
+    }
+
+    initSupabaseClient();
+  </script>
+</body>
+</html>
