@@ -1,5 +1,6 @@
 import type { RequeteHttp, ReponseHttp } from "../httpTypes";
 import { avecGestionErreurs } from "../avecGestionErreurs";
+import { lireSupabaseUrl } from "../urlSupabase";
 
 /**
  * GET /api/config — expose au navigateur l'URL du projet Supabase et sa clé publique `anon`
@@ -13,7 +14,7 @@ export const gererConfig = avecGestionErreurs(function handler(req: RequeteHttp,
   }
 
   res.status(200).json({
-    supabaseUrl: process.env.SUPABASE_URL ?? "",
+    supabaseUrl: lireSupabaseUrl(), // le navigateur construit /auth/v1 lui-même : même normalisation que le serveur (RAPPORT §25)
     supabaseAnonKey: process.env.SUPABASE_ANON_KEY ?? "",
   });
 });

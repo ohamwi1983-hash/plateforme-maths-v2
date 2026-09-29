@@ -190,3 +190,11 @@ son `alter table … enable row level security` à `schema.sql` ET `cumulatif.sq
 `scripts/test-rls-schema.ts`. Ne créer une police que pour un accès direct navigateur -> base (aucun aujourd'hui). Après un
 `admin.auth.signInWithPassword`, le MÊME client n'accède plus aux données en `service_role` : aucun `.from(...)` ensuite.
 
+## `SUPABASE_URL` : toujours lue par `lireSupabaseUrl` (RAPPORT §25)
+
+Le client `@supabase/supabase-js` ajoute lui-même `/rest/v1`, `/auth/v1`… à l'URL fournie : une variable d'environnement
+terminée par `/rest/v1/` double le chemin (PGRST125) et fait échouer toutes les requêtes, en silence derrière les messages
+génériques (« Code d'invitation invalide »). Ne jamais lire `process.env.SUPABASE_URL` ailleurs que dans `lib/urlSupabase.ts`
+(`lireSupabaseUrl`, qui retire un suffixe d'API et avertit) ; `scripts/test-url-supabase.ts` le vérifie. La bonne valeur reste
+`https://<ref>.supabase.co`, sans chemin.
+
