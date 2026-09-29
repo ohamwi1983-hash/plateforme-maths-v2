@@ -78,6 +78,14 @@ interface EcranCommun {
    * l'usage côté serveur (pénalité calculée serveur, jamais déclarée par le client).
    */
   aide?: string | AideTypee;
+  /**
+   * Poids de CET écran dans le score de l'exercice (RAPPORT §17) : entier ≥ 1 ; absent = 1. Sert
+   * uniquement à pondérer l'agrégation « champs corrects / champs comptés » (lib/poidsEcran.ts, seule
+   * lecture) ; n'a aucun effet sur le verdict, les tentatives ni `fractionCorrecte` (score d'UN champ).
+   * Statique : ne dépend jamais des réponses de l'élève. Changer un poids réécrit rétroactivement les
+   * pourcentages déjà calculés — voir le risque documenté au RAPPORT §17 (règle `_v2` non tranchée).
+   */
+  poids?: number;
 }
 
 export interface EcranChampExpression extends EcranCommun {

@@ -760,3 +760,46 @@ Décisions validées avant le code (formule + 5 points, dont l'exemple limite «
 - Incongruité d'étiquette différée : un champ `revelee` avec `score > 0` s'affiche « Réponse révélée » (rouge) au récapitulatif ; à traiter avec le récapitulatif, pas ici.
 - « Meilleure tentative » est un choix de conception validé (alternatives écartées : dernière tentative — punit la rechute ; somme pondérée — score potentiellement > réussite).
 - Règle `-0` : l'épuisement/chrono sans partiel renvoie `0` (pas `0 × (1 − pct)`), identique bit à bit à l'ancienne.
+
+
+## §17 : Poids par écran — agrégation pondérée « champs corrects / total » (inerte : aucun poids non défaut)
+
+Mécanique seulement, pas de valeurs de gen7 : `EcranDeclare.poids` (entier ≥ 1, défaut 1) pondère l'agrégation **entre écrans d'un même exercice / d'une même tâche**. Indépendant de `fractionCorrecte` (§16, score d'UN champ) et du poids entre variantes/tâches (hors périmètre). Aucun affichage du poids, aucun temps de réponse touché. Décisions validées : D1 (chaque site garde son dénominateur), D2 (poids transporté par champ dans les JSON + module client unique), D3 (progression, série, segments non pondérés), repli à 1 sur ligne historique ; **D4 non tranchée** (voir E).
+
+### A. Audit exhaustif des points d'agrégation « corrects / total » (grep `lib/`, `api/`, `src/`, `public/`)
+| # | Emplacement | Nature | Dénominateur (conservé) | Traité |
+|---|---|---|---|---|
+| S1 | `lib/routes/eleves/mes-resultats.ts:243-256` | serveur, score d'une tâche notée (`correct`/`total`/`pourcentage`, → `historiqueTaches`, `calculerTendanceScore`, `eleve.html` pourcentage) | tous les `champs_attendus` | oui — `sommePonderee` |
+| C1 | `public/prof.html:4770-4772` `calculerScoreEleve` | client, par élève | champs répondus | oui — `sommeChampsPonderee` |
+| C2 | `public/prof.html:4819-4821` `calculerScoreExercice` | client, par exercice | champs répondus | oui |
+| C3 | `public/eleve.html:563-571` (tuiles « réussite ») | client, tout le tableau de bord | champs répondus **et visibles** (statut `null` ignoré) | oui |
+- **Dérivés, sans logique propre** (héritent de C1/C2, aucune retouche) : `prof.html` tri par score (`:4614`, `:6224`), moyenne / élèves en difficulté (`calculerStatsResultats`), badges `X/Y · Z%` (`construireBadgeScorePourPaire`), somme par tâche (`:5182-5184`), filtre « masquer les vides » (`:6237`), impression (`:6286`, `:6315`). En aval de S1 : `lib/historiqueTaches.ts:34` (moyenne de `correct/total` par tâche : rapport de sommes pondérées, additives).
+- **Examinés, volontairement NON pondérés (D3)** : anneau de progression `resumeExercice`/`resumeTache` (`lib/tableauDeBord.ts:71-78`, compte des champs *répondus*, pas des réussites), série `calculerSerieActuelle` (`:89`, soumissions consécutives), `calculerSegmentsCompetence` (`lib/profilCompetences.ts:261`) et `calculerProfilCompetences` (occurrences de bug).
+- **Aucun autre comptage** : `profs/resultats.ts`, `profs/eleves/profil.ts`, `classes/[id]/profil.ts`, `profs/tableau-de-bord.ts` renvoient statuts/bugs/temps sans pourcentage ; c'est `prof.html` qui agrège les Résultats.
+
+### B. Contrat et lecture unique
+- `lib/contratGenerateur.ts:88` — `poids?: number` sur `EcranCommun` (donc tout `EcranDeclare`), statique, jamais dépendant des réponses.
+- `lib/poidsEcran.ts` — **seule lecture du poids** : `validerPoids` (`:17`, entier ≥ 1 sinon `Error`), `poidsDesEcrans` (`:25`), `poidsDuChamp(generateur, exercice, champ)` (`:30`), `poidsDesChampsDeLigne` (`:39`, pour les routes qui ne régénèrent pas déjà), `poidsDansMap` (`:47`), `sommePonderee` (`:57`). Pas de nouvelle donnée stockée ni de colonne : `ecrans(exercice)` est pure, l'exercice se régénère depuis `exercices_assignes.graine`.
+- **Repli à 1** (nécessaire à la non-régression sur données réelles) : ligne sans graine, variante hors registre, graine invalide, champ inconnu, générateur `null`.
+
+### C. Transport et sites
+- `lib/routes/eleves/mes-resultats.ts:22,70` — `graine` ajoutée au `select` (la route ne régénérait pas) ; `:243-256` somme pondérée.
+- `lib/routes/profs/resultats.ts:23,43,338-341` (+ `select` `:140` et `:176`) — chaque `ChampResultat` porte `poids`.
+- `lib/routes/eleves/tableau-de-bord.ts:134,141` — chaque champ servi porte `poids` (déjà régénéré ici).
+- Le `poids` est une donnée **indépendante des réponses** : rien à masquer sous correction coupée (§13) ; C3 continue d'ignorer les statuts masqués. Alternative écartée : scores pré-calculés côté serveur (nouvel indicateur dérivé des réponses, à exclure tant que la tâche est masquée).
+- `public/moteur/scorePondere.js` — **seule implémentation navigateur** (`sommeChampsPonderee`, poids absent/invalide → 1). Script **classique** (`<script src>` en `prof.html:1161`, `eleve.html:316`), pas un module ES : les scripts inline l'appellent de façon synchrone (tri, badges, impression). Parité avec `sommePonderee` testée (le navigateur ne peut pas importer `lib/`, la production n'importe jamais depuis `public/`).
+
+### D. Preuves
+- `scripts/test-poids-ecran.ts` (`npm run test-poids-ecran`, 42 vérifications) : **1.** copies GELÉES des comptages d'origine (serveur, client prof, client élève) contre les versions pondérées, poids absents ET à 1 : **8 191 listes serveur** (tailles 0..12, tous sous-ensembles) et **87 381 listes client** (statuts ×4, tailles 0..8) — 0 divergence, pourcentage arrondi compris (les nombres de listes sont comptés). **2.** parité serveur/client sur 100 000 tirages à poids 1..5 : 0 divergence. **3.** scénario synthétique à poids 3/1/1/2 : **4/7 = 57 %** (et non 2/4 = 50 %). **4.** repli à 1 et rejets de `validerPoids` (0, −1, 1,5, NaN, ∞, `"2"`, `null`, `undefined`). **5.** route (vrai `api/router.ts`, injection de test de `temoin.ecrans`, restaurée) : `mes-resultats` **8/10 = 80 %** (3/4 = 75 % sans poids), `profs/resultats` et tableau de bord élève servent `poids` par champ, le module client retrouve 8/10, ligne historique sans graine **1/2 = 50 % inchangé**.
+- **Sensibilité vérifiée par mutation** : ignorer le poids en S1, dans `scorePondere.js` ou dans `profs/resultats` fait échouer respectivement 1, 6 et 3 assertions.
+- **Chromium 432/432** (412 + 20) : `scenarioPoids` (`scripts/chromium-temoin-technique.ts`) joue les vraies pages — `eleve.html` : tuile « réussite » = **80 %** ; `prof.html` Résultats : « Réussite moyenne » **80 %**, badge « **8/10 · 80%** » ; 0 erreur JS.
+- **Défaut de harnais trouvé et corrigé** : le pont API du script Chromium **supprimait la query string** (`?classe_id=`, `?tache_id=`) : `GET /api/eleves?classe_id=…` tombait sur la branche authentifiée (401) et **interrompait l'init de `prof.html` après `chargerClasses`** (jamais `chargerTaches`) — invisible tant qu'aucun scénario n'avait besoin des tâches. Corrigé (`query: { path, ...searchParams }`) ; `scripts/support/harnaisRouteur.ts` gagne l'option `query`. Une 2ᵉ particularité de la base en mémoire (première liste de classes sans code : forme de `update().select()`) est contournée en amont dans le scénario, non corrigée.
+- Régression complète et `tsc -b` : voir la PR.
+
+### E. Risque documenté — D4 NON tranchée (règle `_v2` et poids)
+La règle `_v2` (`CLAUDE.md`) protège ce que `generer` produit pour une graine ; `poids` vit dans `ecrans`. **Changer un poids après livraison réécrit rétroactivement tous les pourcentages historiques** (S1 recalcule à chaque appel depuis la graine, sans instantané) sans que la règle `_v2` ne l'impose. Non tranché : la décision (étendre la règle à `poids`, ou non) attend que gen7 fixe ses premiers poids réels. En attendant : aucun générateur réel ne déclare de poids, donc aucun effet.
+
+### F. Non couvert / limites
+- Inerte : aucun poids ≠ 1 en production. `X/Y` affichés deviendront des points pondérés (et non des nombres d'écrans) dès qu'un poids ≠ 1 existera (D3 : assumé).
+- Un poids invalide déclaré par un générateur lève à la lecture (500 sur les routes concernées) — pas de contrôle au chargement du registre (il faudrait générer un exercice) ; couvert par les tests des générateurs.
+- Coût : `mes-resultats` et `profs/resultats` régénèrent désormais chaque exercice (`generer` puis `ecrans`, pur et déterministe) ; à surveiller si les volumes montent (une régénération par exercice affiché).

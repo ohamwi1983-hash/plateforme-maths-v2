@@ -1157,6 +1157,8 @@
   </section>
   </main>
 
+  <!-- Somme pondérée des champs (RAPPORT §17) : script classique, appelé de façon synchrone plus bas. -->
+  <script src="/moteur/scorePondere.js"></script>
   <script>
     let supabaseClient;
     let session;
@@ -4765,15 +4767,8 @@
      * la fiabilité de ce que l'élève a déjà soumis, jamais pénalisé par ce qu'il n'a pas encore fait.
      */
     function calculerScoreEleve(eleve) {
-      let correct = 0;
-      let total = 0;
-      for (const exercice of eleve.exercices) {
-        for (const champ of exercice.champs) {
-          total++;
-          if (champ.statut === "correct") correct++;
-        }
-      }
-      return { correct, total };
+      // Somme PONDÉRÉE par `champ.poids` (RAPPORT §17, /moteur/scorePondere.js) : tous poids à 1 = comptage d'origine.
+      return sommeChampsPonderee(eleve.exercices.flatMap((exercice) => exercice.champs));
     }
 
     /**
@@ -4822,13 +4817,7 @@
 
     /** Score correct/total d'UN SEUL exercice (mêmes champs que `calculerScoreEleve`, sans sommer sur toute la liste). */
     function calculerScoreExercice(exercice) {
-      let correct = 0;
-      let total = 0;
-      for (const champ of exercice.champs) {
-        total++;
-        if (champ.statut === "correct") correct++;
-      }
-      return { correct, total };
+      return sommeChampsPonderee(exercice.champs); // pondéré (RAPPORT §17)
     }
 
     /**

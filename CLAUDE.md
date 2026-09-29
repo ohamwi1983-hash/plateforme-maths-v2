@@ -143,3 +143,13 @@ verdict reste binaire (échec partiel = échec pour `tentativesMax`), seul `scor
 **ne sort jamais d'une réponse HTTP** (règle de révélation ci-dessus). Tout nouveau site qui dérive l'état d'un
 champ depuis `reponses` doit lire la colonne et la transmettre (`etatTentativesAvecChrono`). Le test
 `scripts/test-score-partiel.ts` embarque une copie gelée de l'ancienne formule : ne jamais la modifier.
+
+## Poids par écran (RAPPORT §17)
+
+`EcranDeclare.poids` (entier ≥ 1, défaut 1) pondère les agrégations « corrects / total » — **jamais** lu
+ailleurs que par `lib/poidsEcran.ts` (côté navigateur : `public/moteur/scorePondere.js`, seule
+implémentation, script classique). Tout nouveau site qui compte des champs corrects sur un total doit passer
+par l'un des deux et garder son dénominateur d'origine. Repli à 1 pour toute ligne non exécutable. Le poids est
+statique (jamais dépendant des réponses). Risque ouvert : changer un poids réécrit l'historique des pourcentages
+(la règle `_v2` ne le couvre pas — décision différée, voir RAPPORT §17-E).
+
