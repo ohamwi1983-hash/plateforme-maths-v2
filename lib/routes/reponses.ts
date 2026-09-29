@@ -116,10 +116,12 @@ export const gererReponses = avecGestionErreurs(async function handler(req: Requ
     bug_detecte: joindreBugsDetectes(resultat.codesCompetence),
     indice_utilise: aideUtilisee,
     duree_ecoulee_secondes: calculerDureeEcouleeSecondes(debutChamp, maintenant),
+    // Score partiel (RAPPORT §16) : stockée pour le calcul serveur du score, JAMAIS renvoyée plus bas.
+    fraction_correcte: resultat.statut === "not_equivalent" ? (resultat.fractionCorrecte ?? null) : null,
   });
   if (erreurInsertion) throw new Error(erreurInsertion.message);
 
-  const historiqueApres = [...(donnees.reponsesParChamp.get(champ) ?? []), { exercice_assigne_id, champ, valeur_saisie: reponse_brute, statut: resultat.statut, indice_utilise: aideUtilisee }];
+  const historiqueApres = [...(donnees.reponsesParChamp.get(champ) ?? []), { exercice_assigne_id, champ, valeur_saisie: reponse_brute, statut: resultat.statut, indice_utilise: aideUtilisee, fraction_correcte: resultat.statut === "not_equivalent" ? (resultat.fractionCorrecte ?? null) : null }];
   donnees.reponsesParChamp.set(champ, historiqueApres);
   const apres = calculerEtatExercice(regenere, donnees, contexte, maintenant);
   const champApres = apres.champs.find((c) => c.champ === champ)!;

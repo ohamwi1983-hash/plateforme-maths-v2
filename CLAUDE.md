@@ -135,3 +135,11 @@ ni verdict, ni solution, ni `revele`, ni message d'erreur — avant que la tâch
 un nouvel indicateur dérivé des réponses d'un élève (série, compétences, score, badge…) impose de l'exclure
 tant que la tâche est masquée (`revelationFinDeTache`, `lib/etatExercice.ts` ; voir `RAPPORT.md` §13).
 
+## Score partiel `fractionCorrecte` (RAPPORT §16)
+
+`ResultatVerification` peut porter `fractionCorrecte` (0 ≤ φ < 1) **sur `not_equivalent` seulement** ; le
+verdict reste binaire (échec partiel = échec pour `tentativesMax`), seul `score` (`calculerEtatChampTentatives`,
+`lib/moteurTentatives.ts`) en tient compte. La fraction est stockée dans `reponses.fraction_correcte` et
+**ne sort jamais d'une réponse HTTP** (règle de révélation ci-dessus). Tout nouveau site qui dérive l'état d'un
+champ depuis `reponses` doit lire la colonne et la transmettre (`etatTentativesAvecChrono`). Le test
+`scripts/test-score-partiel.ts` embarque une copie gelée de l'ancienne formule : ne jamais la modifier.

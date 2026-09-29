@@ -217,7 +217,12 @@ create table reponses (
   -- moment de la soumission (signal `POST /api/reponses/debut-ecran` jamais reçu). Purement
   -- informatif ici (jamais utilisé pour la notation) — `chronoExpire` (lib/moteurTentatives.ts)
   -- est dérivé indépendamment, directement depuis `debuts_ecran`, jamais depuis cette colonne.
-  duree_ecoulee_secondes int
+  duree_ecoulee_secondes int,
+  -- Score partiel (RAPPORT §16) : `ResultatVerification.fractionCorrecte` d'un `not_equivalent`
+  -- (0 ≤ φ < 1), nullable — `null` = pas de fraction (toutes les lignes historiques, tous les statuts
+  -- autres que `not_equivalent`, tous les générateurs actuels). Lue UNIQUEMENT par
+  -- `calculerEtatChampTentatives` ; jamais renvoyée par une réponse HTTP (règle de révélation).
+  fraction_correcte double precision check (fraction_correcte is null or (fraction_correcte >= 0 and fraction_correcte < 1))
 );
 
 -- Correctif "Chrono de réponse" (révision "horodatage de départ côté serveur") : horodatage de

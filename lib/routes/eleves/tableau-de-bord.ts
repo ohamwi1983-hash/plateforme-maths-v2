@@ -63,7 +63,7 @@ export const gererElevesTableauDeBord = avecGestionErreurs(async function handle
   if (exerciceIds.length > 0) {
     reponsesToutes.push(
       ...(await recupererToutesLesLignes<LigneReponse & { horodatage: string }>(() =>
-        admin.from("reponses").select("exercice_assigne_id, champ, valeur_saisie, statut, indice_utilise, horodatage").in("exercice_assigne_id", exerciceIds).order("horodatage", { ascending: true }),
+        admin.from("reponses").select("exercice_assigne_id, champ, valeur_saisie, statut, indice_utilise, fraction_correcte, horodatage").in("exercice_assigne_id", exerciceIds).order("horodatage", { ascending: true }),
       )),
     );
     const debuts = await recupererToutesLesLignes<LigneDebutEcran & { exercice_assigne_id: string }>(() => admin.from("debuts_ecran").select("exercice_assigne_id, champ, horodatage_debut").in("exercice_assigne_id", exerciceIds));

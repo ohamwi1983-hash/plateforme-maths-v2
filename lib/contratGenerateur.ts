@@ -203,7 +203,17 @@ export interface EtatActuel {
 
 export type ResultatVerification =
   | { statut: "correct"; codesCompetence: string[] }
-  | { statut: "not_equivalent"; codesCompetence: string[] }
+  | {
+      statut: "not_equivalent";
+      codesCompetence: string[];
+      /**
+       * Optionnel : part de la réponse déjà juste, 0 ≤ φ < 1 (jamais 1 : une réponse entièrement juste est
+       * `correct`). Le verdict reste binaire — un échec partiel compte pour `tentativesMax`, ne débloque
+       * rien —, seul `score` (lib/moteurTentatives.ts, RAPPORT §16) en tient compte. Absent = comportement
+       * inchangé. Jamais exposé par une réponse HTTP (règle de révélation). Contrôlé par `verifierAvecControle`.
+       */
+      fractionCorrecte?: number;
+    }
   | {
       statut: "parse_error";
       codesCompetence: string[];

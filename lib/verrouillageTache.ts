@@ -61,11 +61,11 @@ export async function categorieTachePourEleve(admin: AdminClient, tacheId: strin
   const exercicesDeLaTache = exercices ?? [];
   const exerciceIds = exercicesDeLaTache.map((e) => e.id as string);
 
-  let reponses: { exercice_assigne_id: string; champ: string; statut: StatutVerification; indice_utilise: boolean }[] = [];
+  let reponses: { exercice_assigne_id: string; champ: string; statut: StatutVerification; indice_utilise: boolean; fraction_correcte: number | null }[] = [];
   if (exerciceIds.length > 0) {
     const { data, error: erreurReponses } = await admin
       .from("reponses")
-      .select("exercice_assigne_id, champ, statut, indice_utilise")
+      .select("exercice_assigne_id, champ, statut, indice_utilise, fraction_correcte")
       .in("exercice_assigne_id", exerciceIds)
       .order("horodatage", { ascending: true });
     if (erreurReponses) throw new Error(erreurReponses.message);
@@ -75,11 +75,11 @@ export async function categorieTachePourEleve(admin: AdminClient, tacheId: strin
   // Historique chronologique croissant par (exercice_assigne_id, champ) — même construction que
   // `historiqueParCle` dans lib/routes/eleves/tableau-de-bord.ts, nécessaire à
   // `calculerEtatChampTentatives` (compte les tentatives ratées dans l'ordre où elles ont eu lieu).
-  const historiqueParCle = new Map<string, { statut: StatutVerification; indice_utilise: boolean }[]>();
+  const historiqueParCle = new Map<string, { statut: StatutVerification; indice_utilise: boolean; fraction_correcte: number | null }[]>();
   for (const r of reponses) {
     const cle = `${r.exercice_assigne_id}:${r.champ}`;
     if (!historiqueParCle.has(cle)) historiqueParCle.set(cle, []);
-    historiqueParCle.get(cle)!.push({ statut: r.statut, indice_utilise: r.indice_utilise });
+    historiqueParCle.get(cle)!.push({ statut: r.statut, indice_utilise: r.indice_utilise, fraction_correcte: r.fraction_correcte });
   }
 
   const champsTermineParExercice = new Map<string, Set<string>>();
@@ -88,7 +88,7 @@ export async function categorieTachePourEleve(admin: AdminClient, tacheId: strin
     for (const champ of champsAttendus) {
       const historique = historiqueParCle.get(`${ex.id}:${champ}`) ?? [];
       const aideUtilisee = historique.some((h) => h.indice_utilise);
-      const etat = calculerEtatChampTentatives(historique.map((h) => h.statut), tentativesMax, aideUtilisee, aidePenalitePourcent);
+      const etat = calculerEtatChampTentatives(historique.map((h) => h.statut), tentativesMax, aideUtilisee, aidePenalitePourcent, false, historique.map((h) => h.fraction_correcte));
       if (etat.terminee) {
         if (!champsTermineParExercice.has(ex.id as string)) champsTermineParExercice.set(ex.id as string, new Set());
         champsTermineParExercice.get(ex.id as string)!.add(champ);

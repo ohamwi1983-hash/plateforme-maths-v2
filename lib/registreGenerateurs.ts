@@ -88,5 +88,16 @@ export function verifierAvecControle(generateur: Generateur<any>, exercice: unkn
   if (resultat.statut === "parse_error" && !resultat.messageErreur) {
     throw new Error(`${generateur.variante_id} : parse_error sans messageErreur pédagogique`);
   }
+  // Lu comme `unknown` : le type n'autorise `fractionCorrecte` que sur `not_equivalent`, ce contrôle
+  // attrape aussi un générateur qui contournerait le typage (cast, JS).
+  const f: unknown = (resultat as { fractionCorrecte?: unknown }).fractionCorrecte;
+  if (f !== undefined) {
+    if (resultat.statut !== "not_equivalent") {
+      throw new Error(`${generateur.variante_id} : fractionCorrecte n'est admise que sur not_equivalent (reçu sur ${resultat.statut})`);
+    }
+    if (typeof f !== "number" || !Number.isFinite(f) || f < 0 || f >= 1) {
+      throw new Error(`${generateur.variante_id} : fractionCorrecte doit être un nombre fini avec 0 ≤ φ < 1 (reçu ${String(f)})`);
+    }
+  }
   return resultat;
 }

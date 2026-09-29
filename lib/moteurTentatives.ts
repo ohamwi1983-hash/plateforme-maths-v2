@@ -116,6 +116,21 @@ export function calculerDureeEcouleeSecondes(debut: Date | null, maintenant: Dat
  * tentative ratée — le contrat booléen `verifier` de la référence ne distingue que correct/incorrect,
  * voir src/moteur/statutVerification.ts) incrémente le compteur ; au tentativesMax-ième échec sans
  * succès, le champ est révélé (score 0), sans jamais lire au-delà dans l'historique.
+ *
+ * Score partiel (RAPPORT §16) — `fractionsChronologiques` : fraction `fractionCorrecte` de chaque
+ * soumission, même ordre et même longueur que `statutsChronologiques` (`null`/`undefined` = pas de
+ * fraction). Elle n'est lue QUE sur un `not_equivalent` (jamais sur `correct` ni `parse_error`).
+ * Le verdict reste binaire : un échec partiel compte pour `tentativesMax` et ne termine rien ;
+ * seuls `score` (jamais `terminee`/`reussie`/`revelee`/`tentativesUtilisees`) en est modifié.
+ *   p = 100 / tentativesMax
+ *   valeur d'un échec de rang i (échecs_avant = échecs antérieurs) = φ_i × max(0, 100 − échecs_avant × p)
+ *   meilleur_partiel = max des valeurs des échecs
+ *   réussite au rang r  : score_brut = max(max(0, 100 − (r−1)·p), meilleur_partiel)
+ *   épuisement          : score_brut = meilleur_partiel   (0 sans fraction)
+ *   chrono expiré       : score_brut = meilleur_partiel sur les soumissions faites (0 sans fraction)
+ *   score = aide utilisée ? score_brut × (1 − pct/100) : score_brut   (toute valeur > 0)
+ * Sans AUCUNE fraction strictement positive, le chemin d'origine ci-dessous est exécuté tel quel :
+ * les scores sont identiques au bit près (`scripts/test-score-partiel.ts`, comparaison exhaustive).
  */
 export function calculerEtatChampTentatives(
   statutsChronologiques: readonly StatutVerification[],
@@ -123,7 +138,11 @@ export function calculerEtatChampTentatives(
   aideUtilisee: boolean,
   aidePenalitePourcent: number,
   chronoExpire: boolean = false,
+  fractionsChronologiques?: readonly (number | null | undefined)[],
 ): EtatChampTentatives {
+  if (aUneFractionPositive(statutsChronologiques, fractionsChronologiques)) {
+    return calculerEtatAvecFractions(statutsChronologiques, tentativesMax, aideUtilisee, aidePenalitePourcent, chronoExpire, fractionsChronologiques!);
+  }
   // Correctif "Chrono de réponse" : expiration = même révélation qu'un épuisement de tentatives
   // ("chrono par écran couvre toutes les tentatives cumulées... l'écran se termine quand même"),
   // vérifiée AVANT la boucle ci-dessous — court-circuite volontairement le calcul normal, y compris
@@ -142,6 +161,55 @@ export function calculerEtatChampTentatives(
     tentativesRatees++;
     if (tentativesRatees >= tentativesMax) {
       return { tentativesUtilisees: tentativesRatees, terminee: true, reussie: false, revelee: true, score: 0 };
+    }
+  }
+  return { tentativesUtilisees: tentativesRatees, terminee: false, reussie: false, revelee: false, score: null };
+}
+
+/** Vrai si au moins une soumission `not_equivalent` porte une fraction strictement positive. */
+function aUneFractionPositive(
+  statuts: readonly StatutVerification[],
+  fractions: readonly (number | null | undefined)[] | undefined,
+): boolean {
+  if (!fractions) return false;
+  return statuts.some((statut, i) => statut === "not_equivalent" && typeof fractions[i] === "number" && (fractions[i] as number) > 0);
+}
+
+/** Chemin « score partiel » : mêmes champs de progression que le chemin d'origine, seul `score` diffère. */
+function calculerEtatAvecFractions(
+  statuts: readonly StatutVerification[],
+  tentativesMax: number,
+  aideUtilisee: boolean,
+  aidePenalitePourcent: number,
+  chronoExpire: boolean,
+  fractions: readonly (number | null | undefined)[],
+): EtatChampTentatives {
+  const penalitePourTentative = 100 / tentativesMax;
+  const avecAide = (brut: number): number => (aideUtilisee ? brut * (1 - aidePenalitePourcent / 100) : brut);
+  const valeurPartielle = (i: number, echecsAvant: number): number => {
+    const f = fractions[i];
+    return statuts[i] === "not_equivalent" && typeof f === "number" ? f * Math.max(0, 100 - echecsAvant * penalitePourTentative) : 0;
+  };
+  let meilleurPartiel = 0;
+  if (chronoExpire) {
+    let echecs = 0;
+    for (let i = 0; i < statuts.length; i++) {
+      if (statuts[i] === "correct") continue;
+      meilleurPartiel = Math.max(meilleurPartiel, valeurPartielle(i, echecs));
+      echecs++;
+    }
+    return { tentativesUtilisees: statuts.length, terminee: true, reussie: false, revelee: true, score: meilleurPartiel === 0 ? 0 : avecAide(meilleurPartiel) };
+  }
+  let tentativesRatees = 0;
+  for (let i = 0; i < statuts.length; i++) {
+    if (statuts[i] === "correct") {
+      const scoreSiCorrect = Math.max(0, 100 - tentativesRatees * penalitePourTentative);
+      return { tentativesUtilisees: tentativesRatees, terminee: true, reussie: true, revelee: false, score: avecAide(Math.max(scoreSiCorrect, meilleurPartiel)) };
+    }
+    meilleurPartiel = Math.max(meilleurPartiel, valeurPartielle(i, tentativesRatees));
+    tentativesRatees++;
+    if (tentativesRatees >= tentativesMax) {
+      return { tentativesUtilisees: tentativesRatees, terminee: true, reussie: false, revelee: true, score: meilleurPartiel === 0 ? 0 : avecAide(meilleurPartiel) };
     }
   }
   return { tentativesUtilisees: tentativesRatees, terminee: false, reussie: false, revelee: false, score: null };

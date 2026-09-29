@@ -717,3 +717,46 @@ La règle protège les exercices déjà assignés. Les `af_*` sont au catalogue 
 - La géométrie des croquis n'est vérifiée que par assertions DOM et captures (pas de test unitaire numérique de la géométrie).
 - Émulation Chromium seulement (pas de vrai mobile ni de lecteur d'écran) ; `aria-label` présents mais non audités avec un lecteur d'écran ; le runtime Node de Vercel n'est pas épinglé (`package.json` sans `engines`), d'où la règle « la production n'importe rien depuis `public/` ».
 - Croquis de l'allure : la courbe peut sortir du cadre (comportement qualitatif hérité du pilote).
+
+
+## §16 : Score partiel — `fractionCorrecte` dans le moteur de tentatives (inerte : aucun consommateur livré)
+
+Décisions validées avant le code (formule + 5 points, dont l'exemple limite « 0,9 puis réussite »). Aucun `verifier()` réel n'émet de fraction (témoin compris), aucun dictionnaire ni code d'émission n'a bougé : la fonctionnalité est **livrée dormante**.
+
+### ⚠ MIGRATION À EXÉCUTER SUR LA VRAIE BASE **AVANT toute fusion** (`schema.sql` ET `cumulatif.sql` touchés)
+- `supabase/schema.sql:225` — colonne `reponses.fraction_correcte double precision check (fraction_correcte is null or (fraction_correcte >= 0 and fraction_correcte < 1))`.
+- `supabase/migrations/cumulatif.sql:132` — instruction idempotente équivalente `alter table reponses add column if not exists fraction_correcte double precision check (…)` (même commit, pas de nouveau fichier). **Sans elle, tous les `select` de `reponses` ci-dessous échouent** (colonne inconnue) : c'est la raison pour laquelle elle précède la fusion. Lignes existantes : `NULL` = comportement d'origine.
+
+### A. Contrat et contrôle
+- `lib/contratGenerateur.ts:215` — `fractionCorrecte?: number` typé **uniquement** sur la variante `not_equivalent` de `ResultatVerification` (un `correct`/`parse_error` avec fraction ne compile pas). Absent = comportement inchangé.
+- `lib/registreGenerateurs.ts:91-101` (`verifierAvecControle`) — contrôle d'exécution, qui attrape aussi un contournement du typage : fraction sur autre chose que `not_equivalent`, ou non-nombre / non fini / `< 0` / `≥ 1` → `Error` (500 via `avecGestionErreurs`, comme un code de compétence non déclaré). φ = 1 est interdit : une réponse entièrement juste est `correct`.
+
+### B. Formule (`lib/moteurTentatives.ts:105-145` doc + aiguillage, `:179-` chemin partiel)
+`p = 100 / tentativesMax`. Un échec de rang *i* (échecs_avant = échecs antérieurs) vaut `φ_i × max(0, 100 − échecs_avant × p)` (φ absent ⇒ 0) ; `meilleur_partiel` = max de ces valeurs.
+- **Réussite au rang r** : `max( max(0, 100 − (r−1)·p) , meilleur_partiel )`.
+- **Épuisement** : `meilleur_partiel` (0 sans fraction). **Chrono expiré** : `meilleur_partiel` des soumissions faites (0 sans fraction).
+- **Aide** : `× (1 − pct/100)` sur toute valeur > 0.
+- `terminee`, `reussie`, `revelee`, `tentativesUtilisees` **ne dépendent jamais** de φ : le verdict reste binaire, un échec partiel compte pour `tentativesMax` et ne débloque rien.
+- **Non-régression par construction** : sans aucune fraction strictement positive lue sur un `not_equivalent` (`aUneFractionPositive`, `:170`), le corps d'origine (`:146-166`) s'exécute **tel quel**, expressions comprises ; le chemin partiel n'est emprunté que si une fraction > 0 existe.
+- Pourquoi « meilleure tentative » et non « dernière » : ne pas punir l'élève d'avoir tenté mieux ensuite puis rechuté ; pourquoi une pénalité de rang **multiplicative** : une 3ᵉ tentative à 90 % ne doit pas valoir autant qu'une 1ʳᵉ ; pourquoi φ < 1 strict : `correct` est le seul chemin vers 100.
+- **Conséquences assumées** (validées) : (1) un champ peut être `revelee = true` avec `score > 0` ; (2) le score d'une réussite peut dépasser celui de la tentative réussie elle-même — **0,9 puis réussite à tentativesMax = 2 donne 90, pas 50** (l'ancienne formule) : conséquence directe de « meilleure tentative », pas un bug.
+
+### C. Stockage et câblage (une seule dérivation partout)
+- `lib/routes/reponses.ts:120` — insertion `fraction_correcte` (`null` hors `not_equivalent`) ; `:124` — l'historique en mémoire porte la fraction (état recalculé avec la soumission courante).
+- Lecture : `lib/etatExercice.ts:93` (`LigneReponse.fraction_correcte`), `:107` (select), `:146-160` (`etatTentativesAvecChrono`, 7ᵉ paramètre transmis aux **deux** appels, normal et chrono), `:166` (`calculerEtatChamp`) ; `lib/routes/eleves/tableau-de-bord.ts:66` (select paginé) ; `lib/verrouillageTache.ts:68,82,91` ; `lib/routes/eleves/mes-resultats.ts:133,169` + transmission au moteur. Le **pourcentage** de `mes-resultats` reste fondé sur les statuts (inchangé) : pas de consommateur du score.
+- **Règle de révélation (§13)** : la fraction n'est renvoyée par **aucune** réponse HTTP (elle trahirait « presque juste » sous correction coupée). Vérifié sur 15 réponses (POST réponse, aide, GET exercice ×4, tableau de bord élève, mes-resultats, tableau de bord prof, profil élève prof) : aucune n'expose `fraction_correcte`/`fractionCorrecte`.
+
+### D. Preuves (`scripts/test-score-partiel.ts`, `npm run test-score-partiel`, 65 vérifications)
+- **1. Non-régression EXHAUSTIVE** (`:80`) : copie **gelée** de l'ancienne fonction (`:35`, mot pour mot @ `dc64fb3`) contre la réelle sur **toutes** les séquences de statuts de longueur 0..8 (9 841) × tentativesMax 1..6 × aide × 6 pourcentages × chrono = **1 417 104 configurations × 5 formes d'appel** (sans fraction, `undefined`, toutes `null`, toutes égales à 0, fractions positives posées sur des lignes jamais lues `correct`/`parse_error`) : **0 divergence**, score comparé par `Object.is` (bit à bit). Le nombre de configurations est compté (une boucle vide ne passerait pas).
+- **2. Propriétés** (`:113`) : 200 000 tirages déterministes (77 091 avec fraction positive) — progression identique à l'ancienne, nullité du score identique, score ∈ [0,100], jamais sous l'ancienne formule, croissant en φ, plafonné par l'aide : **0 violation** de chaque propriété.
+- **3. Scénarios synthétiques** (`:155`, valeurs calculées à la main, tm = 3 sauf mention) : 2/3 puis correct → 66,67 ; 1/3, 2/3 puis correct → 44,44 ; épuisement 2/3×3 → révélé, 66,67 ; fractions 0 → 0 ; aide 50 % → 33,33 ; tm 1 : 66,67 (53,33 avec aide 20 %) ; chrono après un essai à 2/3 → 66,67, sans essai → 0 ; parse_error compte comme échec ; **0,9 puis correct (tm 2) → 90**, 0 puis correct → 50 ; un échec à 0,99 ne termine rien ; fraction ignorée sur `parse_error`/`correct`.
+- **4. `verifierAvecControle`** (`:206`) : 0, 0,5, 0,999 passent ; 1, 1,5, −0,1, NaN, ±∞, `"0.5"`, `null`, `true`, et toute fraction sur `correct`/`parse_error` sont rejetés.
+- **5. Route** (`:228`, vrai `api/router.ts`, base en mémoire ; injection **de test** d'une fraction par enveloppe de `temoin.verifier`, restaurée dans `finally` — le vrai `verifier` du témoin n'est jamais modifié) : fraction stockée puis relue par la vraie dérivation (`chargerDonneesExercice` + `calculerEtatChamp`) : 0,6 / NULL / parse_error à tm 3 → révélé, score 60 ; 0,9 puis aide puis réussite (tm 2, aide 50 %) → 45 ; ligne héritée sans colonne → 50 comme avant ; correction coupée → rien révélé.
+- **Sensibilité du test vérifiée par mutation** : une retouche d'un ulp de l'expression d'origine → divergences détectées ; retrait du `max` de la réussite → scénarios rouges. Fichier restauré.
+- **Régression complète** : `tsc -b` propre ; 21 scripts (`smoke-test` — dont `smoke-test.ts:427-456` **inchangé** — et `scripts/test-*.ts`) passent ; `test-temoin-technique` 4 726 = 137 (Section A) + 4 589 ; **Chromium 412/412**.
+
+### E. Non couvert / limites
+- **Inerte** : aucun générateur n'émet de fraction et aucun écran ne lit `EtatChampTentatives.score` ; l'effet n'existera qu'avec un consommateur et un `verifier()` qui émet φ (chaque futur émetteur devra justifier sa φ : 1ʳᵉ implémentation, donc pas de `_v2`).
+- Incongruité d'étiquette différée : un champ `revelee` avec `score > 0` s'affiche « Réponse révélée » (rouge) au récapitulatif ; à traiter avec le récapitulatif, pas ici.
+- « Meilleure tentative » est un choix de conception validé (alternatives écartées : dernière tentative — punit la rechute ; somme pondérée — score potentiellement > réussite).
+- Règle `-0` : l'épuisement/chrono sans partiel renvoie `0` (pas `0 × (1 − pct)`), identique bit à bit à l'ancienne.
