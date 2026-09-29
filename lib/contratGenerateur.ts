@@ -86,6 +86,14 @@ interface EcranCommun {
    * pourcentages déjà calculés — voir le risque documenté au RAPPORT §17 (règle `_v2` non tranchée).
    */
   poids?: number;
+  /**
+   * Cascade (RAPPORT §18) : champs dont la valeur CONFIRMÉE par l'élève alimente cet écran (énoncé, aide,
+   * solution, vérification). Chaque champ cité précède cet écran dans `ecrans()` (pas de cycle, pas
+   * d'auto-référence). Un écran dépendant n'est servi (`GET /api/exercices/:id`) et son aide n'est
+   * délivrée qu'une fois TOUS ces champs terminés : avant, son texte (bâti sur la vraie valeur) ne doit
+   * jamais quitter le serveur. Absent = écran indépendant (comportement inchangé). Exige `projeter`.
+   */
+  dependDe?: string[];
 }
 
 export interface EcranChampExpression extends EcranCommun {
@@ -204,6 +212,11 @@ export interface ReponseConfirmee {
   statut: StatutVerification;
 }
 
+/** Réglage statique de la tâche transmis à `Generateur.projeter` (RAPPORT §18). */
+export interface ContexteProjection {
+  correctionImmediate: boolean;
+}
+
 export interface EtatActuel {
   /** Champ à afficher maintenant, ou `null` si la séquence est épuisée. */
   champCourant: string | null;
@@ -255,6 +268,20 @@ export interface Generateur<TExercice = unknown> {
   /** Dérivé uniquement de `exercice` et des réponses confirmées — jamais d'une saisie en cours. */
   etatActuel(exercice: TExercice, reponsesConfirmees: ReponseConfirmee[]): EtatActuel;
   verifier(exercice: TExercice, champ: string, reponseBrute: string): ResultatVerification;
+  /**
+   * Cascade (RAPPORT §18) : « exercice effectif » vu par l'élève. Remplace, dans l'exercice, toute donnée
+   * dérivée d'un écran précédent par la valeur que l'élève a CONFIRMÉE (`reponsesConfirmees` = champs
+   * terminés, dernière soumission) — JAMAIS par la vraie valeur : une méthode juste appliquée à une donnée
+   * de départ fausse doit réussir l'écran. `ecrans`, `verifier`, `solutionAttendue` et l'aide reçoivent
+   * ensuite cet exercice effectif (jamais l'exercice brut) : point de substitution UNIQUE.
+   * Pure et déterministe ; ne dépend que des confirmations des champs de `dependDe` de chaque écran.
+   * Valeur inexploitable (non analysable, hors domaine, ou champ terminé sans réponse — chrono) : repli.
+   * `correctionImmediate` (réglage STATIQUE de la tâche, jamais `revele`) : `true` → repli sur la vraie
+   * valeur (elle vient d'être révélée) ; `false` → donnée de repli DÉCLARÉE par le générateur, distincte de
+   * la vraie valeur (sous correction coupée rien n'est révélé avant la fin de la tâche : la vraie valeur ne
+   * doit pas fuiter par l'énoncé suivant). Absente : aucun écran ne peut déclarer `dependDe`.
+   */
+  projeter?(exercice: TExercice, reponsesConfirmees: ReponseConfirmee[], contexte: ContexteProjection): TExercice;
   /** Solution lisible d'un champ (affichée seulement si le réglage de tâche ou la révélation le permet). */
   solutionAttendue(exercice: TExercice, champ: string): string;
 }

@@ -153,3 +153,14 @@ par l'un des deux et garder son dénominateur d'origine. Repli à 1 pour toute l
 statique (jamais dépendant des réponses). Risque ouvert : changer un poids réécrit l'historique des pourcentages
 (la règle `_v2` ne le couvre pas — décision différée, voir RAPPORT §17-E).
 
+## Cascade de réponses entre écrans (RAPPORT §18)
+
+Une donnée affichée qui dépend d'un écran précédent vient de la réponse **confirmée** par l'élève, jamais de
+l'exercice brut, et la vérification suivante se fait sur cette même valeur. Contrat : `EcranDeclare.dependDe`
++ `Generateur.projeter` (point de substitution UNIQUE ; `projeterExercice`, `lib/etatExercice.ts`) ; tout site
+qui lit `ecrans`, `verifier`, `solutionAttendue` ou l'aide doit recevoir l'exercice projeté (six sites, dont
+`POST /reponses/aide`). Un écran dépendant n'est servi qu'une fois ses prédécesseurs terminés (filtrage
+serveur). Repli quand la valeur confirmée est inexploitable : vraie valeur si `feedback_immediat`, donnée de
+repli déclarée si correction coupée — choisi sur le réglage STATIQUE de la tâche, jamais sur `revele`. Ne
+jamais coller la chaîne brute de l'élève dans un texte d'auteur : décoder puis re-sérialiser.
+

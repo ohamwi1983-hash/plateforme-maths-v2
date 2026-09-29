@@ -2,7 +2,7 @@ import type { RequeteHttp, ReponseHttp } from "../../httpTypes";
 import { avecGestionErreurs } from "../../avecGestionErreurs";
 import { eleveAuthentifie, supabaseAdmin } from "../../supabaseAdmin";
 import { recupererToutesLesLignes } from "../../supabasePagination";
-import { calculerEtatExercice, chargerContexteTache, COLONNES_EXERCICE_ASSIGNE, regenererExercice, revelationFinDeTache, type ContexteTache, type DonneesExercice, type LigneExerciceAssigne, type LigneReponse } from "../../etatExercice";
+import { calculerEtatExercice, chargerContexteTache, COLONNES_EXERCICE_ASSIGNE, projeterExercice, regenererExercice, revelationFinDeTache, type ContexteTache, type DonneesExercice, type LigneExerciceAssigne, type LigneReponse } from "../../etatExercice";
 import { poidsDansMap, poidsDesEcrans } from "../../poidsEcran";
 import { calculerSerieActuelle, classifierTache, construireChampVue, REGLAGES_FORCEES_ANTERIEURES, resumeExercice, resumeTache, tacheEstComplete, type CategorieTableauDeBord, type ResumeProgression } from "../../tableauDeBord";
 import type { LigneDebutEcran } from "../../moteurTentatives";
@@ -131,6 +131,7 @@ export const gererElevesTableauDeBord = avecGestionErreurs(async function handle
     for (const { ligne, regenere, contexte, etat } of etats) {
       const reglages = reveleTout ? REGLAGES_FORCEES_ANTERIEURES : contexte.reglages;
       const champsTermines = new Set(etat.champs.filter((c) => c.verrouille).map((c) => c.champ));
+      const projete = projeterExercice(regenere, etat.reponsesConfirmees, contexte); // cascade (RAPPORT §18) : solutions bâties sur les réponses confirmées
       const poidsParChamp = poidsDesEcrans(regenere.ecrans); // RAPPORT §17 : donnée pour l'agrégation client, indépendante des réponses (rien à masquer)
       vuesExercices.push({
         id: ligne.id,
@@ -138,7 +139,7 @@ export const gererElevesTableauDeBord = avecGestionErreurs(async function handle
         libelle: labelPourVariante(ligne.variante_id),
         termine: etat.termine,
         resume: resumeExercice(regenere.ecrans.map((e) => e.champ), champsTermines),
-        champs: etat.champs.map((c) => ({ ...construireChampVue(c.champ, c.derniere, regenere.generateur.solutionAttendue(regenere.exercice, c.champ), reglages, reveleTout, c.etat), verrouille: c.verrouille, poids: poidsDansMap(poidsParChamp, c.champ) })),
+        champs: etat.champs.map((c) => ({ ...construireChampVue(c.champ, c.derniere, regenere.generateur.solutionAttendue(projete.exercice, c.champ), reglages, reveleTout, c.etat), verrouille: c.verrouille, poids: poidsDansMap(poidsParChamp, c.champ) })),
       });
     }
 
