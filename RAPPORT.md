@@ -920,3 +920,25 @@ Tout objet littéral « contient » `constructor`, `toString`, `valueOf`, `hasOw
 ### E. Non couvert / limites
 - Grep par motif : un accès indirect (clé calculée à travers plusieurs fonctions) a pu m'échapper ; la recherche a porté sur les tables d'objets littéraux **déclarées** et leurs lectures.
 - Aucune règle de lint ne verrouille le motif : une nouvelle lecture `TABLE[cle]` non protégée serait possible. Règle écrite dans `CLAUDE.md`.
+
+
+## §21 : Chromium — contrôle des réponses HTTP >= 400 inattendues
+
+Petite tâche de harnais (`scripts/chromium-temoin-technique.ts`), proposée après le défaut du pont d'API (§ précédentes : la chaîne de requête `?tache_id=` était perdue depuis `d360c35`, des appels de `prof.html` échouaient sans qu'aucune assertion ne le voie). Aucun code de production touché, aucune migration SQL.
+
+### A. Ce qui est livré
+- `scripts/chromium-temoin-technique.ts:166` : chaque page ouverte par `preparerPage` journalise toute réponse HTTP >= 400 (statut, méthode, chemin) dans `journal.reponsesEnErreur` (type `Journal`, `:96`), qu'un test l'attende ou non.
+- `:118` `evaluerReponsesHttp` (pure) et `:133` `controlerReponsesHttp(étiquette, attendues?)`, appelé après **chacun des 7 scénarios × 2 largeurs** (`main`). Une réponse >= 400 non déclarée fait échouer avec « statut, méthode, chemin, jeton de la page » ; une réponse déclarée attendue (`ReponseHttpAttendue`, `pourquoi` obligatoire, `:105`) mais jamais vue échoue aussi, pour que la liste d'attendus ne se périme pas en silence.
+- `:140` `temoinControleHttp` (appelé en tête de `main`, `:942`) : un vrai 404 est journalisé ; non déclaré → refusé ; déclaré → accepté ; statut différent → « inattendue » ET « périmée » ; attendu jamais observé → signalé (5 vérifications).
+- `:964` : si un scénario **plante** (timeout d'attente) avant son contrôle, les réponses >= 400 déjà vues sont affichées avant l'erreur.
+
+### B. Résultat mesuré
+Sur le harnais actuel : **aucune réponse >= 400 dans les 14 scénarios** ; la liste d'attendus est donc vide (aucun scénario ne provoque de 4xx par l'interface). 432 → **451** vérifications (+5 témoin, +14 contrôles).
+
+### C. Mutation, et un constat honnête
+Retrait de `...Object.fromEntries(url.searchParams)` du pont d'API (le défaut d'origine) : **le contrôle seul ne suffisait pas** — le scénario `poids` plante sur un timeout *avant* d'atteindre son contrôle, donc le verdict de `controlerReponsesHttp` n'est jamais rendu. C'est pourquoi le diagnostic de plantage (`:964`) a été ajouté : la mutation affiche alors `401 GET /api/eleves (prof:prof-1)` avant le timeout. Le contrôle apporte donc (1) un échec net avec l'URL en cause pour un 4xx silencieux qui ne bloque pas le scénario, (2) un diagnostic pour ceux qui le bloquent ; il ne remplace pas les assertions fonctionnelles.
+
+### D. Limites
+- Seules les réponses vues par `page.on("response")` : une requête avortée (`requestfailed`, ex. polices `fonts.gstatic.com`, interceptées volontairement) n'est pas une réponse et n'est pas contrôlée.
+- Les 4xx que le navigateur reçoit d'un `fetch` sont vus ; ceux des appels directs `appeler(...)` du harnais (sans navigateur) ne passent pas par ce contrôle — ils sont déjà assertés par leur statut.
+- Un scénario qui devra un jour provoquer un 4xx par l'interface devra le DÉCLARER (`attendues`), avec sa raison.

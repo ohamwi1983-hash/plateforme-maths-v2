@@ -93,15 +93,79 @@ function verifier(condition: boolean, message: string): void {
   if (!condition) echecs.push(message);
 }
 
+interface Journal {
+  erreursConsole: string[];
+  pageerrors: string[];
+  requetes: { methode: string; url: string; corps: string | null }[];
+  reponsesEnErreur: { statut: number; methode: string; url: string }[];
+}
+const journauxOuverts: { journal: Journal; jeton: string }[] = [];
+
+/** Réponse >= 400 qu'un scénario PROVOQUE volontairement : `motif` sur « MÉTHODE chemin », `pourquoi` obligatoire. */
+interface ReponseHttpAttendue {
+  statut: number;
+  motif: RegExp;
+  pourquoi: string;
+}
+
+/**
+ * Contrôle des réponses HTTP >= 400 de toutes les pages ouvertes depuis le dernier appel (une page qui ne
+ * ferme pas son contexte est contrôlée aussi). Une réponse d'erreur non déclarée fait échouer le scénario ;
+ * une réponse déclarée attendue mais jamais vue aussi (sinon la liste d'attendus se périme sans bruit).
+ * Origine : un `?tache_id=` perdu par le pont d'API du harnais faisait échouer des appels de `prof.html`
+ * sans qu'aucune assertion ne le voie (RAPPORT §21).
+ */
+function evaluerReponsesHttp(etiquette: string, journaux: { journal: Journal; jeton: string }[], attendues: ReponseHttpAttendue[]): string[] {
+  const problemes: string[] = [];
+  const vues = new Set<ReponseHttpAttendue>();
+  for (const { journal, jeton } of journaux) {
+    for (const r of journal.reponsesEnErreur) {
+      const cle = `${r.methode} ${r.url}`;
+      const attendue = attendues.find((a) => a.statut === r.statut && a.motif.test(cle));
+      if (attendue) vues.add(attendue);
+      else problemes.push(`${etiquette} (${jeton}) : réponse HTTP inattendue ${r.statut} sur ${cle}`);
+    }
+  }
+  for (const a of attendues) if (!vues.has(a)) problemes.push(`${etiquette} : réponse ${a.statut} attendue (${a.pourquoi}) jamais observée — liste d'attendus périmée ?`);
+  return problemes;
+}
+
+function controlerReponsesHttp(etiquette: string, attendues: ReponseHttpAttendue[] = []): void {
+  const problemes = evaluerReponsesHttp(etiquette, journauxOuverts.splice(0), attendues);
+  for (const m of problemes) verifier(false, m);
+  verifier(problemes.length === 0, `${etiquette} : réponses HTTP >= 400 conformes aux attendus déclarés`);
+}
+
+/** Le contrôle lui-même doit voir un 404 réel, refuser un 404 non déclaré, accepter un déclaré, signaler un attendu périmé. */
+async function temoinControleHttp(navigateur: any, base: string) {
+  const { page, contexte, journal } = await preparerPage(navigateur, base, 1280, 900, "eleve:eleve-1", "e1@x");
+  await page.goto(base + "/page-inexistante.html");
+  await contexte.close();
+  const journaux = [{ journal, jeton: "temoin" }];
+  journauxOuverts.splice(0);
+  verifier(journal.reponsesEnErreur.length === 1 && journal.reponsesEnErreur[0].statut === 404 && journal.reponsesEnErreur[0].url === "/page-inexistante.html", `témoin du contrôle : un vrai 404 doit être journalisé (${JSON.stringify(journal.reponsesEnErreur)})`);
+  const declaree: ReponseHttpAttendue = { statut: 404, motif: /^GET \/page-inexistante\.html$/, pourquoi: "témoin" };
+  verifier(evaluerReponsesHttp("t", journaux, []).length === 1, "témoin du contrôle : un 404 non déclaré doit être refusé");
+  verifier(evaluerReponsesHttp("t", journaux, [declaree]).length === 0, "témoin du contrôle : un 404 déclaré doit être accepté");
+  verifier(evaluerReponsesHttp("t", journaux, [{ ...declaree, statut: 409 }]).length === 2, "témoin du contrôle : un statut différent = réponse inattendue ET attendu périmé");
+  verifier(evaluerReponsesHttp("t", [{ journal: { ...journal, reponsesEnErreur: [] }, jeton: "t" }], [declaree]).length === 1, "témoin du contrôle : un attendu jamais observé doit être signalé");
+}
+
 async function preparerPage(navigateur: any, url: string, largeur: number, hauteur: number, jeton: string, email: string, avantChargement?: string) {
   const contexte = await navigateur.newContext({ viewport: { width: largeur, height: hauteur }, hasTouch: largeur < 600 });
   const page = await contexte.newPage();
-  const journal = { erreursConsole: [] as string[], pageerrors: [] as string[], requetes: [] as { methode: string; url: string; corps: string | null }[] };
+  const journal: Journal = { erreursConsole: [], pageerrors: [], requetes: [], reponsesEnErreur: [] };
+  journauxOuverts.push({ journal, jeton });
   page.on("pageerror", (e: Error) => journal.pageerrors.push(e.message));
   page.on("console", (m: any) => {
     if (m.type() === "error") journal.erreursConsole.push(m.text());
   });
   page.on("request", (r: any) => journal.requetes.push({ methode: r.method(), url: r.url(), corps: r.postData() }));
+  // Toute réponse HTTP >= 400 est notée (URL, méthode, statut), qu'un test l'attende ou non : c'est
+  // `controlerReponsesHttp` qui tranche, en fin de scénario, contre une liste d'attendus DÉCLARÉE.
+  page.on("response", (r: any) => {
+    if (r.status() >= 400) journal.reponsesEnErreur.push({ statut: r.status(), methode: r.request().method(), url: new URL(r.url()).pathname });
+  });
   await page.route("**/unpkg.com/@supabase/supabase-js**", (r: any) => r.fulfill({ contentType: "text/javascript", body: stubSupabase(jeton, email) }));
   await page.route("**/fonts.googleapis.com/**", (r: any) => r.fulfill({ contentType: "text/css", body: "" }));
   await page.route("**/fonts.gstatic.com/**", (r: any) => r.abort());
@@ -875,15 +939,30 @@ async function main() {
   const { serveur, url } = await demarrerServeur();
   const navigateur = await chromium.launch();
   try {
+    await temoinControleHttp(navigateur, url);
     for (const largeur of [390, 1280]) {
+      // Chaque scénario est suivi du contrôle de ses réponses HTTP >= 400 (attendus déclarés à part, s'il y en a).
       await scenarioEleve(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} élève`);
       await scenarioSansCorrection(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} sans correction`);
       await matriceVisuelle(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} matrice visuelle`);
       await scenarioRetentative(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} retentative`);
       await scenarioEtendu(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} étendu`);
       await scenarioProf(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} prof`);
       await scenarioPoids(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} poids`);
     }
+  } catch (e) {
+    // Un scénario qui plante (timeout d'attente d'un élément) ne passe jamais par `controlerReponsesHttp` :
+    // les réponses >= 400 déjà vues sont donc affichées ici, c'est souvent la vraie cause du plantage.
+    const vues = journauxOuverts.flatMap(({ journal, jeton }) => journal.reponsesEnErreur.map((r) => `${r.statut} ${r.methode} ${r.url} (${jeton})`));
+    if (vues.length > 0) console.error(`Réponses HTTP >= 400 observées avant le plantage :\n - ${vues.join("\n - ")}`);
+    throw e;
   } finally {
     await navigateur.close();
     serveur.close();
