@@ -608,6 +608,33 @@ async function scenarioProf(navigateur: any, base: string, largeur: number) {
   t = await lireTentatives();
   verifier(!t.inputDesactive && t.boutonsDesactives.every((d) => !d), `${l} prof : recocher la correction immédiate déverrouille les tentatives`);
 
+  // Un champ DÉSACTIVÉ doit se voir : le grisage était écrit champ par champ (`#aide-penalite-pourcent:disabled`), le champ
+  // « Durée (secondes) » du chrono en était resté dépourvu (RAPPORT §29). On vérifie ici les deux états sur le rendu réel.
+  {
+    const style = async (id: string) => (await page.evaluate(`(() => { const e = document.getElementById(${JSON.stringify(id)}); const c = getComputedStyle(e); return { desactive: e.disabled, opacite: Number(c.opacity), curseur: c.cursor }; })()`)) as { desactive: boolean; opacite: number; curseur: string };
+    await page.locator("#chrono-mode").selectOption("aucun");
+    await page.locator("#aide-activee").uncheck({ force: true });
+    const [dureeOff, penaliteOff] = [await style("chrono-duree-secondes"), await style("aide-penalite-pourcent")];
+    verifier(dureeOff.desactive && penaliteOff.desactive, `${l} prof : durée du chrono et pénalité d'aide désactivées (chrono « aucun », aide décochée)`);
+    verifier(penaliteOff.opacite < 1 && penaliteOff.curseur === "not-allowed", `${l} prof : la pénalité d'aide désactivée est grisée (${JSON.stringify(penaliteOff)})`);
+    verifier(dureeOff.opacite < 1 && dureeOff.curseur === "not-allowed", `${l} prof : la durée du chrono désactivée est GRISÉE comme la pénalité d'aide (${JSON.stringify(dureeOff)})`);
+    await page.locator("#chrono-mode").selectOption("global");
+    await page.locator("#aide-activee").check({ force: true });
+    const [dureeOn, penaliteOn] = [await style("chrono-duree-secondes"), await style("aide-penalite-pourcent")];
+    verifier(!dureeOn.desactive && !penaliteOn.desactive && dureeOn.opacite === 1 && penaliteOn.opacite === 1, `${l} prof : réactivés, les deux champs retrouvent l'aspect normal (${JSON.stringify([dureeOn, penaliteOn])})`);
+    // Garde générale : AUCUN champ désactivé du formulaire de tâche ne doit avoir l'aspect d'un champ actif.
+    await page.locator("#chrono-mode").selectOption("aucun");
+    await page.locator("#aide-activee").uncheck({ force: true });
+    await page.locator("#feedback-immediat").uncheck({ force: true });
+    const invisibles = (await page.evaluate(`[...document.querySelectorAll("#onglet-taches input:disabled")].filter((e) => Number(getComputedStyle(e).opacity) >= 1 && getComputedStyle(e).cursor !== "not-allowed").map((e) => e.id || e.className)`)) as string[];
+    verifier(invisibles.length === 0, `${l} prof : champs désactivés SANS aucun signe visuel : ${JSON.stringify(invisibles)}`);
+    await page.locator("#ligne-chrono-duree").scrollIntoViewIfNeeded();
+    await page.screenshot({ path: join(CAPTURES, `${l}-17-prof-champs-desactives-grises.png`), fullPage: false });
+    await page.locator("#feedback-immediat").check({ force: true });
+    await page.locator("#aide-activee").check({ force: true });
+    await page.locator("#chrono-mode").selectOption("aucun");
+  }
+
   await page.locator("#comp-recherche").fill("second degré");
   await page.waitForTimeout(300);
   await page.evaluate(`document.querySelectorAll("#composition-dynamique details").forEach((d) => { if (!d.hidden) d.open = true; })`);

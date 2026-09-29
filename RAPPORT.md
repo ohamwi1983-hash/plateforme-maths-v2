@@ -1181,3 +1181,23 @@ delete from invitations_prof where code = '…';
 ```
 ### E. Non traité (proposition inchangée)
 `inscription-prof.ts` répond toujours « Code d'invitation invalide » (404) quand la requête à la base ÉCHOUE (`erreurInvitation || !invitation`) : une panne de configuration comme celle du §25 reste indiscernable d'un code faux. Corriger = répondre 500 journalisé sur `erreurInvitation` seule. À décider séparément.
+
+
+## §29 : « Durée (secondes) » du chrono désactivée mais non grisée (défaut visuel du formulaire de tâche)
+
+Aucun SQL, aucun changement de comportement : seul le style change.
+
+### A. Cause
+Le grisage des champs verrouillés était écrit **champ par champ** : `#aide-penalite-pourcent:disabled { opacity: 0.5; cursor: not-allowed }` (règle nommée par identifiant), plus des règles par composant pour les interrupteurs (`.toggle-natif:disabled`), les steppers (`.ligne-reglage .stepper-bouton:disabled`, `input.stepper-valeur:disabled`) et `.champ-chrono-variante:disabled`. `#chrono-duree-secondes` est désactivé par le même `appliquerVerrouReglages` (`public/prof.html:2438`) mais **aucune règle ne le visait** : il n'existe pas de règle générique `input:disabled` ni `input[type="number"]:disabled` dans `style.css`. Ce n'était donc ni un problème de `disabled` (correct) ni d'héritage : un champ désactivé sans règle dédiée garde exactement l'apparence d'un champ actif.
+
+### B. Reproduit avant de corriger (Chromium, rendu réel)
+Chrono « Aucun » + aide décochée : `#aide-penalite-pourcent` → `opacity 0.5, cursor not-allowed` ; `#chrono-duree-secondes` → **`opacity 1, cursor default`** (identique à un champ actif). Une garde générale — « aucun `input:disabled` de l'onglet Tâches n'a l'apparence d'un champ actif » — ne trouvait que ce champ : **c'est le seul** du formulaire (les autres champs désactivés ont déjà leur règle).
+
+### C. Correctif (`public/style.css:1104`)
+La règle par identifiant est remplacée par une règle **par ligne de réglage** : `.ligne-reglage input:disabled, .ligne-reglage select:disabled { opacity: 0.5; cursor: not-allowed }`. Un futur champ verrouillé est grisé sans qu'on y pense. **Volontairement limitée à `.ligne-reglage`** : un `input:disabled` global grisé aussi les réponses verrouillées du moteur élève ; `.ligne-reglage` n'apparaît ni dans `eleve.html`, ni dans `index.html`, ni dans `public/moteur/` (0 occurrence).
+
+### D. Vérification
+`scripts/chromium-temoin-technique.ts` (scénario `prof`, 390 et 1280 px) : les deux champs désactivés sont grisés (`opacity < 1`, curseur `not-allowed`), réactivés ils retrouvent `opacity 1`, et la garde générale ne trouve aucun champ désactivé sans signe visuel. Avec l'ancien CSS : 4 échecs explicites (2 par largeur) ; avec le correctif : 508/508. Capture : `captures-chromium/{390,1280}-17-prof-champs-desactives-grises.png`.
+
+### E. Limite
+La garde ne parcourt que `#onglet-taches` dans l'état « chrono aucun, aide décochée, correction immédiate décochée » : un champ désactivé par un autre état ou dans un autre onglet n'est pas vu.
