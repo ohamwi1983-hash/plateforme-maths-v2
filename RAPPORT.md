@@ -1046,3 +1046,31 @@ Le formulaire n'a aucune validation côté client (`public/prof.html:174-190`, `
 | `TROUVE` | la recherche réussit ; le 404 vient d'ailleurs (la réponse serait alors 400 « déjà utilisé » ou 500, à recouper avec le corps de la réponse) |
 
 À compléter (cause, correctif, retrait du diagnostic) une fois les logs lus.
+
+
+## §25 : `SUPABASE_URL` terminée par `/rest/v1/` — cause du « Code d'invitation invalide » ; normalisation défensive
+
+Aucun SQL. Cause trouvée grâce au diagnostic du §24 et à `GET /api/config` (rapporté par le professeur) : la variable d'environnement `SUPABASE_URL` de la production valait `https://<ref>.supabase.co/rest/v1/`.
+
+### A. Le client Supabase ajoute BIEN son propre chemin — confirmé dans le code et par mesure
+- Code (`@supabase/supabase-js` 2.115.0, `node_modules/@supabase/supabase-js/dist/index.cjs`) : `validateSupabaseUrl` (l. 378-387) ne fait qu'ajouter une barre finale ; le constructeur fait `new URL("auth/v1", baseUrl)` (l. 628), `"storage/v1"`, `"realtime/v1"`, `"functions/v1"` (l. 626-630) et `new PostgrestClient(new URL("rest/v1", baseUrl).href, …)` (l. 660).
+- Mesure (vrai client, `fetch` simulé, `from("invitations_prof").select().eq().maybeSingle()` puis `auth.signInWithPassword`) :
+
+| `SUPABASE_URL` | chemins émis |
+|---|---|
+| `https://abc.supabase.co` et `https://abc.supabase.co/` | `/rest/v1/invitations_prof` · `/auth/v1/token` |
+| `https://abc.supabase.co/rest/v1/` (le cas réel) | **`/rest/v1/rest/v1/invitations_prof`** · **`/rest/v1/auth/v1/token`** |
+| `https://abc.supabase.co/rest/v1` (sans barre) | idem, doublé |
+
+`/rest/v1/rest/v1/…` : PostgREST répond `PGRST125 Invalid path`. Deuxième conséquence, plus large que l'inscription : l'authentification (`/rest/v1/auth/v1/token`) échouait aussi, côté serveur (`signInWithPassword`, `getUser`) ET côté navigateur (`prof.html:1318`, `eleve.html:331`, `index.html:185` construisent leur client avec la valeur servie par `/api/config`). Aucun compte n'avait pu se connecter sur cette base neuve, ce qui explique que le défaut n'ait pas été vu avant. Le message « Code d'invitation invalide » venait de la ligne 73 de `lib/routes/inscription-prof.ts` (`erreurInvitation || !invitation`), qui jetait l'erreur PostgREST.
+
+### B. Ce qui est livré
+- `lib/urlSupabase.ts` : `normaliserUrlSupabase` (retire un suffixe final `/rest|auth|storage|realtime|functions/v1` avec ou sans barre, insensible à la casse, plus les barres/espaces finaux ; un chemin de proxy avant le suffixe est conservé) et `lireSupabaseUrl` (**avertit dans les logs, une fois par valeur brute**, nommant le suffixe retiré et la valeur utilisée). Seule lecture de `process.env.SUPABASE_URL` du dépôt (hors le diagnostic temporaire du §24).
+- `lib/supabaseAdmin.ts` (`supabaseAdmin`) et `lib/routes/config.ts` (`GET /api/config`, donc le navigateur) passent par `lireSupabaseUrl`. Règle ajoutée à `CLAUDE.md`.
+- `scripts/test-url-supabase.ts` (28 vérifications) : 16 cas de normalisation ; avertissement unique ; **vraies requêtes du vrai client** via `supabaseAdmin()` avec la variable fautive (`/rest/v1/`, `/rest/v1`, `/auth/v1/`, `/`, correcte) → toujours `/rest/v1/invitations_prof` puis `/auth/v1/token` ; `GET /api/config` renvoie l'URL corrigée ; **témoin** : le client brut avec l'URL fautive double bien les chemins (si supabase-js le corrigeait un jour, ce témoin le dirait) ; erreur d'origine conservée si la variable manque ; aucun autre fichier de `lib/`, `api/`, `src/` ne lit `SUPABASE_URL`. Mutations vérifiées : `supabaseAdmin` sans normalisation (3 échecs), `config` sans normalisation (1), sans avertissement (2).
+
+### C. Limites
+- **Corriger la variable sur Vercel reste la bonne réponse** (`https://<ref>.supabase.co`, sans chemin) ; la normalisation évite seulement l'échec silencieux et prévient dans les logs (visible dans les logs Vercel, pas dans l'interface).
+- Ne traite que cette famille de suffixes : une URL d'un autre projet, une clé d'un autre projet, ou une faute de frappe dans l'hôte ne sont pas détectées.
+- **Non traité (proposition)** : `inscription-prof.ts` répond « invalide » (404) même quand la requête à la base échoue (`erreurInvitation`). Une erreur de requête devrait être un 500 journalisé, pas un message qui accuse l'utilisateur ; le diagnostic §24 la rend visible mais ne la corrige pas. À décider à part.
+- Le diagnostic DIAG-INVITATION (§24) est toujours en place : à retirer après confirmation que l'inscription fonctionne avec la variable corrigée.

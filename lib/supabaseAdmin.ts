@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { lireSupabaseUrl } from "./urlSupabase";
 
 /**
  * Client serveur uniquement (clé service_role) — jamais exposé au navigateur. Contourne RLS : les 13 tables
@@ -10,7 +11,7 @@ import { createClient } from "@supabase/supabase-js";
  * `scripts/test-rls-schema.ts` le vérifie statiquement.
  */
 export function supabaseAdmin() {
-  const url = process.env.SUPABASE_URL;
+  const url = lireSupabaseUrl(); // sans suffixe /rest/v1 : le client ajoute le sien (RAPPORT §25)
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) {
     throw new Error("SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY manquants dans l'environnement");
