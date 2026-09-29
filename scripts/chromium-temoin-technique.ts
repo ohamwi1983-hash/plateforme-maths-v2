@@ -49,8 +49,9 @@ function demarrerServeur(): Promise<{ serveur: Server; url: string }> {
         const { default: routeur } = require("../api/router");
         let statut = 200;
         let charge: unknown = null;
+        // Les paramètres d'URL (`?classe_id=`, `?tache_id=`) atteignent le routeur comme sur Vercel.
         await routeur(
-          { method: req.method, headers: req.headers, query: { path: url.pathname.slice(5) }, body: corpsBrut ? JSON.parse(corpsBrut) : {} },
+          { method: req.method, headers: req.headers, query: { path: url.pathname.slice(5), ...Object.fromEntries(url.searchParams) }, body: corpsBrut ? JSON.parse(corpsBrut) : {} },
           {
             status(c: number) {
               statut = c;
@@ -813,6 +814,63 @@ async function scenarioEtendu(navigateur: any, base: string, largeur: number) {
   await contexte.close();
 }
 
+/**
+ * Poids par écran (RAPPORT §17) dans les DEUX pages qui agrègent côté navigateur : `eleve.html` (tuile
+ * « réussite ») et `prof.html` (Résultats : badge de l'élève et « Réussite moyenne »). Poids injectés par
+ * enveloppe de test de `temoin.ecrans` (restaurée) : somme 3 ✔, parité 2 ✘, diviseurs 1 ✔, signes 4 ✔ →
+ * 8/10 = 80 % pondéré (le comptage d'origine donnerait 3/4 = 75 %).
+ */
+async function scenarioPoids(navigateur: any, base: string, largeur: number) {
+  imposerProfilAssignation("base");
+  const s: Scenario = creerScenario();
+  installerBase(s.base);
+  const l = `${largeur}`;
+  const POIDS: Record<string, number> = { [CHAMP_SOMME]: 3, [CHAMP_PARITE]: 2, [CHAMP_DIVISEURS]: 1, [CHAMP_SIGNES]: 4 };
+  const ecransOrigine = temoin.ecrans;
+  temoin.ecrans = (ex) => ecransOrigine.call(temoin, ex).map((e) => ({ ...e, poids: POIDS[e.champ] }));
+  try {
+    const tacheId = creerTache(s, { nom: "Tâche pondérée", variantes: [{ variante_id: VARIANTE_TEMOIN, nombre_exercices: 1 }] });
+    const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tacheId, classe_id: s.classeId } });
+    verifier(a.statut === 201, `${l} poids : assignation ${a.statut}`);
+    const ligne = s.base.table("exercices_assignes").find((x) => x.eleve_id === "eleve-1")!;
+    const ex = temoin.generer(Number(ligne.graine));
+    const fausseParite = reponseBruteCorrecte(ex, CHAMP_PARITE) === "pair" ? "impair" : "pair";
+    for (const [champ, brute] of [[CHAMP_SOMME, reponseBruteCorrecte(ex, CHAMP_SOMME)], [CHAMP_PARITE, fausseParite], [CHAMP_DIVISEURS, reponseBruteCorrecte(ex, CHAMP_DIVISEURS)], [CHAMP_SIGNES, reponseBruteCorrecte(ex, CHAMP_SIGNES)]]) {
+      const r = await appeler("reponses", "POST", { jeton: "eleve:eleve-1", corps: { exercice_assigne_id: ligne.id, champ, reponse_brute: brute } });
+      verifier(r.statut === 200, `${l} poids : POST ${champ} ${r.statut}`);
+    }
+
+    // ── eleve.html : tuile « réussite » pondérée ──
+    const eleve = await preparerPage(navigateur, base, largeur, largeur < 600 ? 800 : 900, "eleve:eleve-1", "e1@x", `localStorage.setItem("eleve-profil-cache", JSON.stringify({ affichage: "Test eleve-1", prenom: "Test", nom: "eleve-1" }));`);
+    await eleve.page.goto(base + "/eleve.html");
+    await eleve.page.waitForFunction(`/%/.test(document.getElementById("tdb-eleve-stat-reussite")?.textContent ?? "")`);
+    const tuile = (await eleve.page.evaluate(`document.getElementById("tdb-eleve-stat-reussite").textContent`)) as string;
+    verifier(tuile === "80%", `${l} poids : tuile « réussite » de eleve.html : 80% attendus (3/4 = 75 % sans poids), obtenu « ${tuile} »`);
+    verifier(eleve.journal.pageerrors.length === 0, `${l} poids : erreurs JS eleve.html : ${eleve.journal.pageerrors.join(" | ")}`);
+    await eleve.contexte.close();
+
+    // ── prof.html : Résultats (badge de l'élève + réussite moyenne) ──
+    // Un premier GET /api/classes génère le code de classe (branche paresseuse de la base en mémoire) : fait ICI, hors page.
+    await appeler("classes", "GET", { jeton: `prof:${s.profId}` });
+    const prof = await preparerPage(navigateur, base, largeur, largeur < 600 ? 800 : 900, `prof:${s.profId}`, "p@x");
+    await prof.page.goto(base + "/prof.html");
+    await prof.page.waitForSelector('button[data-onglet="resultats"]:visible');
+    await prof.page.locator('button[data-onglet="resultats"]').click();
+    await prof.page.waitForFunction(`[...document.querySelectorAll("#resultats-select-tache option")].some((o) => o.value === ${JSON.stringify(tacheId)})`);
+    await prof.page.selectOption("#resultats-select-tache", tacheId);
+    await prof.page.waitForFunction(`document.getElementById("resultats-stat-reussite").textContent.includes("%")`);
+    const moyenne = (await prof.page.evaluate(`document.getElementById("resultats-stat-reussite").textContent`)) as string;
+    verifier(moyenne.replace(/\s/g, "") === "80%", `${l} poids : « Réussite moyenne » de prof.html : 80 % attendus (75 % sans poids), obtenu « ${moyenne} »`);
+    const badges = (await prof.page.evaluate(`[...document.querySelectorAll("#resultats-vue-eleve .badge")].map((b) => b.textContent.replace(/\s+/g, " ").trim())`)) as string[];
+    verifier(badges.some((b) => b.includes("8/10") && b.includes("80%")), `${l} poids : badge de l'élève « 8/10 · 80% » attendu, obtenu ${JSON.stringify(badges)}`);
+    verifier(prof.journal.pageerrors.length === 0, `${l} poids : erreurs JS prof.html : ${prof.journal.pageerrors.join(" | ")}`);
+    await prof.page.screenshot({ path: join(CAPTURES, `${l}-13-prof-resultats-ponderes.png`), fullPage: false });
+    await prof.contexte.close();
+  } finally {
+    temoin.ecrans = ecransOrigine;
+  }
+}
+
 async function main() {
   const { serveur, url } = await demarrerServeur();
   const navigateur = await chromium.launch();
@@ -824,6 +882,7 @@ async function main() {
       await scenarioRetentative(navigateur, url, largeur);
       await scenarioEtendu(navigateur, url, largeur);
       await scenarioProf(navigateur, url, largeur);
+      await scenarioPoids(navigateur, url, largeur);
     }
   } finally {
     await navigateur.close();

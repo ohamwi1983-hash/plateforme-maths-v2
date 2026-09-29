@@ -56,7 +56,7 @@ export function imposerProfilAssignation(profil: ProfilTemoin | "aleatoire", for
 export async function appeler(
   chemin: string,
   methode: string,
-  options: { jeton?: string; corps?: unknown } = {},
+  options: { jeton?: string; corps?: unknown; query?: Record<string, string> } = {},
 ): Promise<{ statut: number | null; corps: any }> {
   const { default: routeur } = require("../../api/router");
   // À l'assignation, la seule source d'aléa est `tirerGraine()` (`Math.random`, lib/prng.ts) : on la
@@ -68,7 +68,7 @@ export async function appeler(
   const req = {
     method: methode,
     headers: options.jeton ? { authorization: `Bearer ${options.jeton}` } : {},
-    query: { path: chemin },
+    query: { path: chemin, ...options.query },
     body: options.corps ?? {},
   };
   let statut: number | null = null;

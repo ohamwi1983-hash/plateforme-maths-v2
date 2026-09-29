@@ -760,3 +760,83 @@ Décisions validées avant le code (formule + 5 points, dont l'exemple limite «
 - Incongruité d'étiquette différée : un champ `revelee` avec `score > 0` s'affiche « Réponse révélée » (rouge) au récapitulatif ; à traiter avec le récapitulatif, pas ici.
 - « Meilleure tentative » est un choix de conception validé (alternatives écartées : dernière tentative — punit la rechute ; somme pondérée — score potentiellement > réussite).
 - Règle `-0` : l'épuisement/chrono sans partiel renvoie `0` (pas `0 × (1 − pct)`), identique bit à bit à l'ancienne.
+
+
+## §17 : Poids par écran — agrégation pondérée « champs corrects / total » (inerte : aucun poids non défaut)
+
+Mécanique seulement, pas de valeurs de gen7 : `EcranDeclare.poids` (entier ≥ 1, défaut 1) pondère l'agrégation **entre écrans d'un même exercice / d'une même tâche**. Indépendant de `fractionCorrecte` (§16, score d'UN champ) et du poids entre variantes/tâches (hors périmètre). Aucun affichage du poids, aucun temps de réponse touché. Décisions validées : D1 (chaque site garde son dénominateur), D2 (poids transporté par champ dans les JSON + module client unique), D3 (progression, série, segments non pondérés), repli à 1 sur ligne historique ; **D4 non tranchée** (voir E).
+
+### A. Audit exhaustif des points d'agrégation « corrects / total » (grep `lib/`, `api/`, `src/`, `public/`)
+| # | Emplacement | Nature | Dénominateur (conservé) | Traité |
+|---|---|---|---|---|
+| S1 | `lib/routes/eleves/mes-resultats.ts:243-256` | serveur, score d'une tâche notée (`correct`/`total`/`pourcentage`, → `historiqueTaches`, `calculerTendanceScore`, `eleve.html` pourcentage) | tous les `champs_attendus` | oui — `sommePonderee` |
+| C1 | `public/prof.html:4770-4772` `calculerScoreEleve` | client, par élève | champs répondus | oui — `sommeChampsPonderee` |
+| C2 | `public/prof.html:4819-4821` `calculerScoreExercice` | client, par exercice | champs répondus | oui |
+| C3 | `public/eleve.html:563-571` (tuiles « réussite ») | client, tout le tableau de bord | champs répondus **et visibles** (statut `null` ignoré) | oui |
+- **Dérivés, sans logique propre** (héritent de C1/C2, aucune retouche) : `prof.html` tri par score (`:4614`, `:6224`), moyenne / élèves en difficulté (`calculerStatsResultats`), badges `X/Y · Z%` (`construireBadgeScorePourPaire`), somme par tâche (`:5182-5184`), filtre « masquer les vides » (`:6237`), impression (`:6286`, `:6315`). En aval de S1 : `lib/historiqueTaches.ts:34` (moyenne de `correct/total` par tâche : rapport de sommes pondérées, additives).
+- **Examinés, volontairement NON pondérés (D3)** : anneau de progression `resumeExercice`/`resumeTache` (`lib/tableauDeBord.ts:71-78`, compte des champs *répondus*, pas des réussites), série `calculerSerieActuelle` (`:89`, soumissions consécutives), `calculerSegmentsCompetence` (`lib/profilCompetences.ts:261`) et `calculerProfilCompetences` (occurrences de bug).
+- **Aucun autre comptage** : `profs/resultats.ts`, `profs/eleves/profil.ts`, `classes/[id]/profil.ts`, `profs/tableau-de-bord.ts` renvoient statuts/bugs/temps sans pourcentage ; c'est `prof.html` qui agrège les Résultats.
+
+### B. Contrat et lecture unique
+- `lib/contratGenerateur.ts:88` — `poids?: number` sur `EcranCommun` (donc tout `EcranDeclare`), statique, jamais dépendant des réponses.
+- `lib/poidsEcran.ts` — **seule lecture du poids** : `validerPoids` (`:17`, entier ≥ 1 sinon `Error`), `poidsDesEcrans` (`:25`), `poidsDuChamp(generateur, exercice, champ)` (`:30`), `poidsDesChampsDeLigne` (`:39`, pour les routes qui ne régénèrent pas déjà), `poidsDansMap` (`:47`), `sommePonderee` (`:57`). Pas de nouvelle donnée stockée ni de colonne : `ecrans(exercice)` est pure, l'exercice se régénère depuis `exercices_assignes.graine`.
+- **Repli à 1** (nécessaire à la non-régression sur données réelles) : ligne sans graine, variante hors registre, graine invalide, champ inconnu, générateur `null`.
+
+### C. Transport et sites
+- `lib/routes/eleves/mes-resultats.ts:22,70` — `graine` ajoutée au `select` (la route ne régénérait pas) ; `:243-256` somme pondérée.
+- `lib/routes/profs/resultats.ts:23,43,338-341` (+ `select` `:140` et `:176`) — chaque `ChampResultat` porte `poids`.
+- `lib/routes/eleves/tableau-de-bord.ts:134,141` — chaque champ servi porte `poids` (déjà régénéré ici).
+- Le `poids` est une donnée **indépendante des réponses** : rien à masquer sous correction coupée (§13) ; C3 continue d'ignorer les statuts masqués. Alternative écartée : scores pré-calculés côté serveur (nouvel indicateur dérivé des réponses, à exclure tant que la tâche est masquée).
+- `public/moteur/scorePondere.js` — **seule implémentation navigateur** (`sommeChampsPonderee`, poids absent/invalide → 1). Script **classique** (`<script src>` en `prof.html:1161`, `eleve.html:316`), pas un module ES : les scripts inline l'appellent de façon synchrone (tri, badges, impression). Parité avec `sommePonderee` testée (le navigateur ne peut pas importer `lib/`, la production n'importe jamais depuis `public/`).
+
+### D. Preuves
+- `scripts/test-poids-ecran.ts` (`npm run test-poids-ecran`, 42 vérifications) : **1.** copies GELÉES des comptages d'origine (serveur, client prof, client élève) contre les versions pondérées, poids absents ET à 1 : **8 191 listes serveur** (tailles 0..12, tous sous-ensembles) et **87 381 listes client** (statuts ×4, tailles 0..8) — 0 divergence, pourcentage arrondi compris (les nombres de listes sont comptés). **2.** parité serveur/client sur 100 000 tirages à poids 1..5 : 0 divergence. **3.** scénario synthétique à poids 3/1/1/2 : **4/7 = 57 %** (et non 2/4 = 50 %). **4.** repli à 1 et rejets de `validerPoids` (0, −1, 1,5, NaN, ∞, `"2"`, `null`, `undefined`). **5.** route (vrai `api/router.ts`, injection de test de `temoin.ecrans`, restaurée) : `mes-resultats` **8/10 = 80 %** (3/4 = 75 % sans poids), `profs/resultats` et tableau de bord élève servent `poids` par champ, le module client retrouve 8/10, ligne historique sans graine **1/2 = 50 % inchangé**.
+- **Sensibilité vérifiée par mutation** : ignorer le poids en S1, dans `scorePondere.js` ou dans `profs/resultats` fait échouer respectivement 1, 6 et 3 assertions.
+- **Chromium 432/432** (412 + 20) : `scenarioPoids` (`scripts/chromium-temoin-technique.ts`) joue les vraies pages — `eleve.html` : tuile « réussite » = **80 %** ; `prof.html` Résultats : « Réussite moyenne » **80 %**, badge « **8/10 · 80%** » ; 0 erreur JS.
+- **Défaut de harnais trouvé et corrigé** : le pont API du script Chromium **supprimait la query string** (`?classe_id=`, `?tache_id=`) : `GET /api/eleves?classe_id=…` tombait sur la branche authentifiée (401) et **interrompait l'init de `prof.html` après `chargerClasses`** (jamais `chargerTaches`) — invisible tant qu'aucun scénario n'avait besoin des tâches. Corrigé (`query: { path, ...searchParams }`) ; `scripts/support/harnaisRouteur.ts` gagne l'option `query`. Une 2ᵉ particularité de la base en mémoire (première liste de classes sans code : forme de `update().select()`) est contournée en amont dans le scénario, non corrigée.
+- Régression complète et `tsc -b` : voir la PR.
+
+### E. Risque documenté — D4 NON tranchée (règle `_v2` et poids)
+La règle `_v2` (`CLAUDE.md`) protège ce que `generer` produit pour une graine ; `poids` vit dans `ecrans`. **Changer un poids après livraison réécrit rétroactivement tous les pourcentages historiques** (S1 recalcule à chaque appel depuis la graine, sans instantané) sans que la règle `_v2` ne l'impose. Non tranché : la décision (étendre la règle à `poids`, ou non) attend que gen7 fixe ses premiers poids réels. En attendant : aucun générateur réel ne déclare de poids, donc aucun effet.
+
+### F. Non couvert / limites
+- Inerte : aucun poids ≠ 1 en production. `X/Y` affichés deviendront des points pondérés (et non des nombres d'écrans) dès qu'un poids ≠ 1 existera (D3 : assumé).
+- Un poids invalide déclaré par un générateur lève à la lecture (500 sur les routes concernées) — pas de contrôle au chargement du registre (il faudrait générer un exercice) ; couvert par les tests des générateurs.
+- Coût : `mes-resultats` et `profs/resultats` régénèrent désormais chaque exercice (`generer` puis `ecrans`, pur et déterministe) ; à surveiller si les volumes montent (une régénération par exercice affiché).
+
+
+## §18 : Cascade de réponses entre écrans — la donnée affichée vient de `reponsesConfirmees`, jamais de l'exercice brut
+
+Règle (demande explicite) : quand un écran affiche une valeur dépendant d'un écran précédent, elle vient de ce que l'élève a **confirmé**, et la vérification de l'écran suivant se fait sur cette même valeur — une méthode juste sur une donnée de départ fausse **réussit** l'écran, sans échec en cascade. Valable sous correction immédiate active. Aucun générateur réel n'a d'écran dépendant (gen7 arrivera) : **livré dormant**, éprouvé par un générateur de test.
+
+### A. Décisions validées
+- **(a) Projection unique** : `Generateur.projeter?(exercice, reponsesConfirmees, { correctionImmediate })` renvoie l'« exercice effectif ». `ecrans`, `verifier`, `solutionAttendue` et l'aide ne reçoivent que lui (`lib/contratGenerateur.ts:284`, `ContexteProjection` `:216`) — un seul point de substitution au lieu de quatre signatures modifiées.
+- **(b) Repli à deux régimes, choisi sur `feedback_immediat` STATIQUE de la tâche, jamais sur `revele`** : quand la valeur confirmée est inexploitable (non analysable, hors domaine, champ terminé sans réponse — chrono) : **correction immédiate active → la vraie valeur** ; **correction coupée → une donnée de repli déclarée par le générateur, distincte de la vraie valeur**.
+  - *Justification (à ne pas perdre)* : sous correction ACTIVE, ces cas impliquent `revelee = true` **et** la solution du champ est montrée à l'élève au même instant (`lib/tableauDeBord.ts:156`, `revele = revelee && (feedback_immediat || …)`) : la vraie valeur ne fuit rien. Sous correction COUPÉE la même équivalence est **fausse** : `revelee` est un état interne, rien n'est montré avant la fin de la TÂCHE (§13), et avec `tentativesMax = 1` une simple faute de frappe (`parse_error`) termine déjà le champ — un repli sur la vraie valeur ferait fuiter la réponse du champ précédent par l'énoncé suivant. Le choix sur `revele` est écarté : il bascule à la fin de la tâche et **changerait après coup l'énoncé déjà vu** par l'élève.
+  - Pour l'écran 3 d'une chaîne, la « vraie valeur » de l'écran 2 est celle que sa solution PROJETÉE donne (méthode correcte sur la donnée affichée), pas la valeur brute.
+- **Point 5 — écrans à venir** : `public/moteur/moteur.js:102` saute les écrans non courants et non verrouillés, mais `GET /api/exercices/:id` envoyait **tous** les `ecrans` (consignes comprises) : masquer dans le navigateur ne protège pas la charge utile. `EcranDeclare.dependDe?: string[]` (`lib/contratGenerateur.ts:96`) + filtrage **serveur** : un écran dépendant n'est servi qu'une fois ses prédécesseurs terminés (`ecransServis`, `lib/cascadeEcrans.ts:41` ; tâche antérieure : tout est servi). Un écran sans `dependDe` est servi comme avant (l'assertion de Section A `ecrans.length === 4` reste vraie : le profil `base` n'a aucun écran dépendant). `champs` (état de chaque champ) reste complet, sans texte.
+
+### B. Sites de projection — **six**, pas cinq (défaut trouvé à la vérification demandée)
+Le premier inventaire listait 5 sites en supposant l'aide couverte par `ecrans`. **`POST /api/reponses/aide` lisait `regenere.ecrans` (vraie valeur)** : l'aide d'un écran dépendant aurait été bâtie sur la vraie valeur, et délivrée même avant que ses prédécesseurs soient terminés. Corrigé, avec un 409 qui ne compte aucun usage d'aide.
+1. `lib/routes/exercices/[id].ts:62` (projection), `:96` (écrans filtrés), solutions du champ ;
+2. `lib/routes/reponses.ts:113` (409 si prédécesseurs non terminés), `:117` (`verifier` sur l'exercice projeté) et la solution renvoyée ;
+3. `lib/routes/reponses-aide.ts:57-61` (409 + aide de l'écran **projeté**, validée avant tout comptage) ;
+4. `lib/routes/eleves/tableau-de-bord.ts:134` (solutions relues).
+- `lib/etatExercice.ts:70` `projeterExercice` : sans `projeter`, renvoie l'exercice brut **par référence** (zéro coût, zéro régression) ; **échec bruyant** si `dependDe` est mal formé (champ inconnu, écran qui ne précède pas, doublon), déclaré sans `projeter`, ou si la projection change la liste des champs (`champs_attendus` est figé à l'assignation par `lib/routes/assignations.ts:142` sur l'exercice brut : les identifiants ne doivent jamais dépendre des confirmations).
+- Hors périmètre car sans texte d'écran : `mes-resultats`, `profs/resultats` (le poids §17 est statique, non projeté).
+
+### C. Texte d'élève et balisage
+Un générateur qui affiche la donnée confirmée **ne colle jamais la chaîne brute de l'élève** dans un texte d'auteur (le `$` tapé par l'élève casserait le rendu ou y injecterait des commandes) : il la décode (`lib/reponsesEcran.ts`) et **re-sérialise** lui-même la valeur (`verifierBalisageMath`). Le générateur de test n'accepte que des entiers relus par expression régulière (`|v| ≤ 10 000`).
+
+### D. Preuves (`scripts/test-cascade.ts`, `npm run test-cascade`, 62 vérifications)
+- **Générateur de test** `scripts/support/generateurCascade.ts` (dans `scripts/`, jamais `src/`, ajouté au registre le temps du test) : 3 étapes chaînées + 1 écran indépendant, uniquement des `champ_expression`. **Pas dans le témoin technique** : ce mécanisme n'ajoute aucun type d'écran, et un 3ᵉ profil du témoin aurait déplacé les graines de centaines d'assertions.
+- **1. Contrat exhaustif** : 100 graines × 91 valeurs confirmées (−30..60, dont la vraie) × 2 régimes = **18 200 projections** : énoncé, aide et solution bâtis sur la valeur confirmée ; **la méthode juste sur la donnée confirmée réussit** ; la chaîne officielle n'est acceptée que si la donnée confirmée est la vraie ; chaîne à 3 écrans ; indépendance vis-à-vis des confirmations suivantes ; liste des champs constante ; repli (5 formes de valeur inexploitable) : vraie valeur si correction active, donnée de repli ≠ vraie valeur si coupée. 0 violation.
+- **2.** validation des déclarations (auto-référence, écran suivant, champ inconnu, liste vide, doublon) et filtrage des écrans servis. **3.** sans `projeter` : même référence ; `dependDe` sans `projeter` et projection qui change les champs lèvent.
+- **4. Route** (vrai `api/router.ts`) : **correction active** — GET initial sans texte dépendant, aide/POST d'un écran dépendant avant ses prédécesseurs = 409 (aucun usage compté), donnée fausse confirmée puis méthode juste = **RÉUSSITE** (puis chaîne complète), chaîne officielle **rejetée** avec solution projetée, `parse_error` → énoncé suivant sur la vraie valeur (déjà révélée), solutions relues et tableau de bord cohérents ; **correction coupée** — repli sur la donnée déclarée, aide bâtie dessus, **aucune charge utile avant la fin de la tâche ne contient la vraie valeur**, tout révélé à la fin sans que l'énoncé déjà vu change, une seule erreur ne produit **pas** de cascade d'échecs.
+- **Sensibilité par mutation** : aide lue sur l'écran brut (3 assertions rouges), `verifier` sur l'exercice brut (4), écrans non filtrés (2), régime de repli toujours « vraie valeur » (8). Fichiers restaurés.
+
+### E. Non couvert / limites
+- Inerte tant qu'aucun générateur ne déclare `dependDe` (gen7). Chaque futur générateur doit fournir un `projeter` **et** sa donnée de repli, dans le domaine valide de son écran (un Δ faux négatif ou `a = 0` ne laissent pas de problème bien posé : hors domaine = inexploitable = repli).
+- Une réussite sur donnée fausse compte pour la compétence de l'écran suivant ; l'erreur initiale reste attribuée à son écran, sans propagation de `codesCompetence` (comportement voulu, non codé).
+- `POST /api/reponses/aide` ne vérifie toujours pas que le champ est l'écran COURANT (préexistant, hors périmètre) ; seul le cas « dépendance non terminée » est refusé.
+- Les sites clients n'ont rien à changer (le moteur ignore déjà les écrans non servis) ; non vérifié en Chromium avec un générateur dépendant (aucun réel n'existe).

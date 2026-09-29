@@ -10,6 +10,7 @@ import { EXPLICATIONS_COMPETENCES } from "../../explicationsCompetences";
 import { ORDRE_CATEGORIES } from "../../categoriesCompetences";
 import { recupererToutesLesLignes } from "../../supabasePagination";
 import { tempsTotalExerciceDepuisReponses, type LigneReponseTemps } from "../../tempsExercice";
+import { poidsDansMap, poidsDesChampsDeLigne } from "../../poidsEcran";
 
 type AdminClient = ReturnType<typeof supabaseAdmin>;
 
@@ -19,6 +20,8 @@ interface ExerciceBrut {
   eleve_id: string;
   variante_id: string;
   champs_attendus: string[] | null;
+  /** Pour retrouver le poids de chaque écran (RAPPORT §17) ; `null` = ligne historique, poids 1. */
+  graine: number | null;
 }
 
 interface EleveBrut {
@@ -32,6 +35,12 @@ interface ChampResultat {
   champ: string;
   statut: string;
   bug_detecte: string | null;
+  /**
+   * Poids de l'écran dans le score (RAPPORT §17, `lib/poidsEcran.ts`) : donnée pour les agrégations
+   * côté client (`public/moteur/scorePondere.js`), jamais affichée. Ne dépend pas des réponses de
+   * l'élève (rien à masquer). 1 sans poids déclaré / ligne historique.
+   */
+  poids: number;
 }
 
 interface ExerciceResultat {
@@ -128,7 +137,7 @@ async function exercicesEtElevesParTache(
 
   const { data: exercicesBruts, error } = await admin
     .from("exercices_assignes")
-    .select("id, tache_id, eleve_id, variante_id, champs_attendus")
+    .select("id, tache_id, eleve_id, variante_id, champs_attendus, graine")
     .eq("tache_id", tacheId)
     .returns<ExerciceBrut[]>();
   if (error) throw new Error(error.message);
@@ -164,7 +173,7 @@ async function exercicesEtElevesParClasse(
   const exercicesBruts = await recupererToutesLesLignes<ExerciceBrut>(() =>
     admin
       .from("exercices_assignes")
-      .select("id, tache_id, eleve_id, variante_id, champs_attendus")
+      .select("id, tache_id, eleve_id, variante_id, champs_attendus, graine")
       .in("eleve_id", eleveIds.length > 0 ? eleveIds : [""]),
   );
 
@@ -326,9 +335,10 @@ export const gererProfsResultats = avecGestionErreurs(async function handler(req
     const competences = calculerProfilCompetences(bugsDetectesParEleve.get(eleve.id) ?? []);
     const exercices: ExerciceResultat[] = (exercicesParEleve.get(eleve.id) ?? []).map((ex) => {
       const champsRepondus = champsReponduParExercice.get(ex.id) ?? new Set<string>();
+      const poidsParChamp = poidsDesChampsDeLigne(ex);
       const champs: ChampResultat[] = [...champsRepondus].map((champ) => {
         const soumission = derniereSoumissionParCle.get(`${ex.id}:${champ}`)!;
-        return { champ, statut: soumission.statut, bug_detecte: soumission.bug_detecte };
+        return { champ, statut: soumission.statut, bug_detecte: soumission.bug_detecte, poids: poidsDansMap(poidsParChamp, champ) };
       });
       return {
         id: ex.id,

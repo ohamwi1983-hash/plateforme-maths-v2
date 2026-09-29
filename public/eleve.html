@@ -312,6 +312,8 @@
   <section id="conteneur-moteur" hidden></section>
   </main>
 
+  <!-- Somme pondérée des champs (RAPPORT §17) : script classique, appelé de façon synchrone plus bas. -->
+  <script src="/moteur/scorePondere.js"></script>
   <script>
     // Session élève courante — variable JS en mémoire uniquement ; le SDK Supabase persiste déjà
     // la session par défaut (`persistSession: true`, localStorage), `getSession()` ci-dessous en
@@ -558,19 +560,15 @@
       document.getElementById("stat-taches-faites").textContent = String((donnees.effectuees ?? []).length);
       document.getElementById("stat-serie-actuelle").textContent = String(serieActuelle);
 
-      let champsCorrects = 0;
-      let champsRepondus = 0;
+      // Somme PONDÉRÉE par `champ.poids` (RAPPORT §17, /moteur/scorePondere.js) ; statuts masqués ignorés
+      // comme avant. `champsRepondus` / `champsCorrects` portent désormais des poids (tous à 1 = comptage d'origine).
+      const champsVisibles = [];
       for (const categorie of Object.keys(NOMS_SECTIONS)) {
         for (const tache of donnees[categorie] ?? []) {
-          for (const exercice of tache.exercices ?? []) {
-            for (const champ of exercice.champs ?? []) {
-              if (champ.statut === null) continue;
-              champsRepondus++;
-              if (champ.statut === "correct") champsCorrects++;
-            }
-          }
+          for (const exercice of tache.exercices ?? []) champsVisibles.push(...(exercice.champs ?? []));
         }
       }
+      const { correct: champsCorrects, total: champsRepondus } = sommeChampsPonderee(champsVisibles, { ignorerSansStatut: true });
       document.getElementById("tdb-eleve-stat-reussite").textContent = champsRepondus > 0 ? `${Math.round((champsCorrects / champsRepondus) * 100)}%` : "–";
       document.getElementById("tdb-eleve-stat-serie").textContent = serieActuelle > 0 ? `⚡${serieActuelle}` : "0";
       document.getElementById("tdb-eleve-stat-encours").textContent = String(nEnCours);

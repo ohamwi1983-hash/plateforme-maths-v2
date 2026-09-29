@@ -4,6 +4,7 @@ import { eleveAuthentifie, supabaseAdmin } from "../../supabaseAdmin";
 import { classifierTache, tacheEstComplete, exerciceEstComplet, type CategorieOuNonCommencee } from "../../tableauDeBord";
 import { chargerContexteTache, etatTentativesAvecChrono, type ContexteTache } from "../../etatExercice";
 import { recupererToutesLesLignes } from "../../supabasePagination";
+import { poidsDansMap, poidsDesChampsDeLigne, sommePonderee } from "../../poidsEcran";
 import type { LigneDebutEcran } from "../../moteurTentatives";
 import { calculerProfilCompetences, calculerEvolutionCompetences, calculerSegmentsCompetence, type ReponsePourSegmentsCompetence } from "../../profilCompetences";
 import { calculerTendanceScore, type ScoreTache } from "../../historiqueTaches";
@@ -18,6 +19,8 @@ interface ExerciceBrut {
   champs_attendus: string[] | null;
   variante_id: string;
   date_creation: string;
+  /** Pour retrouver le poids de chaque écran (RAPPORT §17) ; `null` = ligne historique, poids 1. */
+  graine: number | null;
 }
 
 interface ReponseBrute {
@@ -67,7 +70,7 @@ export const gererElevesMesResultats = avecGestionErreurs(async function handler
 
   const { data: exercicesBruts, error: erreurExercices } = await admin
     .from("exercices_assignes")
-    .select("id, tache_id, champs_attendus, variante_id, date_creation")
+    .select("id, tache_id, champs_attendus, variante_id, date_creation, graine")
     .eq("eleve_id", eleve.id)
     .returns<ExerciceBrut[]>();
   if (erreurExercices) {
@@ -235,17 +238,19 @@ export const gererElevesMesResultats = avecGestionErreurs(async function handler
     if (feedbackCoupe && !complete && categorie !== "anterieures") tachesMasquees.add(tacheId);
     if (categorie !== "effectuees" && categorie !== "anterieures") continue; // ni "en_cours" (pas encore noté) ni "pas_commencee"
 
-    let correct = 0;
-    let total = 0;
+    // Somme PONDÉRÉE par le poids de chaque écran (RAPPORT §17, `lib/poidsEcran.ts`) ; tous poids à 1 =
+    // le comptage d'origine. Dénominateur inchangé : tous les `champs_attendus`.
+    const compte: { correct: boolean; poids: number }[] = [];
     for (const ex of exercicesDeLaTache) {
+      const poidsParChamp = poidsDesChampsDeLigne(ex);
       for (const champ of ex.champs_attendus ?? []) {
         // Tâche notée = tous ses champs terminés : un champ sans aucune réponse est alors un champ
         // révélé par le chrono — il compte comme raté (score 0), jamais ignoré du total.
         const statut = derniereStatutParCle.get(`${ex.id}:${champ}`);
-        total++;
-        if (statut === "correct") correct++;
+        compte.push({ correct: statut === "correct", poids: poidsDansMap(poidsParChamp, champ) });
       }
     }
+    const { correct, total } = sommePonderee(compte);
     if (total === 0) continue;
     historiqueTaches.push({
       tacheId,

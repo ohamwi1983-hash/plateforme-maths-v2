@@ -2,11 +2,12 @@ import type { RequeteHttp, ReponseHttp } from "../httpTypes";
 import { avecGestionErreurs } from "../avecGestionErreurs";
 import { eleveAuthentifie, supabaseAdmin } from "../supabaseAdmin";
 import { verifierAvecControle } from "../registreGenerateurs";
-import { calculerEtatExercice, chargerContexteTache, chargerDonneesExercice, COLONNES_EXERCICE_ASSIGNE, regenererExercice, revelationFinDeTache, tacheEstCompletePourEleve, type LigneExerciceAssigne } from "../etatExercice";
+import { calculerEtatExercice, chargerContexteTache, chargerDonneesExercice, COLONNES_EXERCICE_ASSIGNE, projeterExercice, regenererExercice, revelationFinDeTache, tacheEstCompletePourEleve, type LigneExerciceAssigne } from "../etatExercice";
 import { calculerDureeEcouleeSecondes, horodatageDebutPertinent } from "../moteurTentatives";
 import { construireChampVue, REGLAGES_FORCEES_ANTERIEURES } from "../tableauDeBord";
 import { joindreBugsDetectes } from "../profilCompetences";
 import { categorieTachePourEleve } from "../verrouillageTache";
+import { dependancesTerminees } from "../cascadeEcrans";
 
 /**
  * POST /api/reponses — enregistre et vérifie UNE réponse confirmée (dispatcher générique, phase 2).
@@ -105,7 +106,16 @@ export const gererReponses = avecGestionErreurs(async function handler(req: Requ
     return;
   }
 
-  const resultat = verifierAvecControle(regenere.generateur, regenere.exercice, champ, reponse_brute);
+  // Cascade (RAPPORT §18) : la vérification se fait sur l'exercice PROJETÉ (données issues des réponses
+  // confirmées), jamais sur la chaîne officiellement correcte. Un écran dépendant n'existe pas avant que ses
+  // prédécesseurs soient terminés.
+  const champsTerminesAvant = new Set(avant.reponsesConfirmees.map((r) => r.champ));
+  if (!dependancesTerminees(regenere.ecrans.find((e) => e.champ === champ)!, champsTerminesAvant)) {
+    res.status(409).json({ erreur: "Cet écran dépend d'écrans précédents pas encore terminés", champ_courant: avant.champCourant });
+    return;
+  }
+  const projete = projeterExercice(regenere, avant.reponsesConfirmees, contexte);
+  const resultat = verifierAvecControle(regenere.generateur, projete.exercice, champ, reponse_brute);
   const debutChamp = horodatageDebutPertinent("par_ecran", champ, donnees.debuts);
   const aideUtilisee = donnees.champsAvecAide.has(champ);
   const { error: erreurInsertion } = await admin.from("reponses").insert({
@@ -134,7 +144,7 @@ export const gererReponses = avecGestionErreurs(async function handler(req: Requ
   // consulte via GET /api/exercices/:id, qui révèle tout à ce moment-là).
   const tacheTerminee = apres.termine && (await tacheEstCompletePourEleve(admin, ligne.tache_id as string, eleve.id, maintenant));
   const reveleTout = revelationFinDeTache(contexte, tacheTerminee);
-  const vue = construireChampVue(champ, { valeur_saisie: reponse_brute, statut: resultat.statut }, regenere.generateur.solutionAttendue(regenere.exercice, champ), reveleTout ? REGLAGES_FORCEES_ANTERIEURES : contexte.reglages, reveleTout, champApres.etat);
+  const vue = construireChampVue(champ, { valeur_saisie: reponse_brute, statut: resultat.statut }, regenere.generateur.solutionAttendue(projete.exercice, champ), reveleTout ? REGLAGES_FORCEES_ANTERIEURES : contexte.reglages, reveleTout, champApres.etat);
   res.status(200).json({
     ...(vue.statut !== null ? { statut: vue.statut } : {}),
     ...(vue.solution_attendue !== null ? { solution_attendue: vue.solution_attendue } : {}),

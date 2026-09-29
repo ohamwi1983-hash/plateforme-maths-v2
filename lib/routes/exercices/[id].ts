@@ -1,7 +1,8 @@
 import type { RequeteHttp, ReponseHttp } from "../../httpTypes";
 import { avecGestionErreurs } from "../../avecGestionErreurs";
 import { eleveAuthentifie, supabaseAdmin } from "../../supabaseAdmin";
-import { calculerEtatExercice, chargerContexteTache, chargerDonneesExercice, COLONNES_EXERCICE_ASSIGNE, regenererExercice, revelationFinDeTache, tacheEstCompletePourEleve, type LigneExerciceAssigne } from "../../etatExercice";
+import { ecransServis } from "../../cascadeEcrans";
+import { calculerEtatExercice, chargerContexteTache, chargerDonneesExercice, COLONNES_EXERCICE_ASSIGNE, projeterExercice, regenererExercice, revelationFinDeTache, tacheEstCompletePourEleve, type LigneExerciceAssigne } from "../../etatExercice";
 import { aidePresente } from "../../aideTypee";
 import { construireChampVue, REGLAGES_FORCEES_ANTERIEURES } from "../../tableauDeBord";
 import { categorieTachePourEleve } from "../../verrouillageTache";
@@ -56,6 +57,9 @@ export const gererExercicesId = avecGestionErreurs(async function handler(req: R
   }
   const donnees = await chargerDonneesExercice(admin, id);
   const etat = calculerEtatExercice(regenere, donnees, contexte, new Date());
+  // Cascade (RAPPORT §18) : énoncés, solutions et aides bâtis sur les réponses CONFIRMÉES ; un écran dépendant
+  // n'est envoyé qu'une fois ses prédécesseurs terminés (tâche antérieure : consultation, tout est servi).
+  const projete = projeterExercice(regenere, etat.reponsesConfirmees, contexte);
 
   const anterieure = categorie === "anterieures";
   // Sous correction immédiate coupée : rien n'est révélé avant la fin de la TÂCHE entière, puis tout l'est.
@@ -63,7 +67,7 @@ export const gererExercicesId = avecGestionErreurs(async function handler(req: R
   const reveleTout = anterieure || finDeTache;
   const reglages = reveleTout ? REGLAGES_FORCEES_ANTERIEURES : contexte.reglages;
   const champs = etat.champs.map((c) => {
-    const vue = construireChampVue(c.champ, c.derniere, regenere.generateur.solutionAttendue(regenere.exercice, c.champ), reglages, reveleTout, c.etat);
+    const vue = construireChampVue(c.champ, c.derniere, regenere.generateur.solutionAttendue(projete.exercice, c.champ), reglages, reveleTout, c.etat);
     return {
       champ: c.champ,
       valeur_saisie: vue.valeur_saisie,
@@ -89,7 +93,7 @@ export const gererExercicesId = avecGestionErreurs(async function handler(req: R
       chrono_duree_secondes: contexte.chronoDureeSecondes,
     },
     saisie_possible: !anterieure,
-    ecrans: regenere.ecrans.map((ecran) => {
+    ecrans: ecransServis(projete.ecrans, new Set(etat.reponsesConfirmees.map((r) => r.champ)), anterieure).map((ecran) => {
       const { aide, ...publics } = ecran;
       return { ...publics, aide_disponible: contexte.aideActivee && aidePresente(aide) };
     }),

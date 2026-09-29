@@ -1,5 +1,6 @@
 import type { supabaseAdmin } from "./supabaseAdmin";
-import type { EcranDeclare, Generateur } from "./contratGenerateur";
+import type { EcranDeclare, Generateur, ReponseConfirmee } from "./contratGenerateur";
+import { validerDependances } from "./cascadeEcrans";
 import { chercherGenerateur } from "./registreGenerateurs";
 import { estGraineValide } from "./prng";
 import {
@@ -50,6 +51,35 @@ export function regenererExercice(ligne: LigneExerciceAssigne): ExerciceRegenere
   if (!generateur || graine === null || !estGraineValide(graine)) return null;
   const exercice = generateur.generer(graine);
   return { ligne, generateur, exercice, ecrans: generateur.ecrans(exercice) };
+}
+
+/** Exercice tel que l'ÉLÈVE le voit (RAPPORT §18) : les données dérivées d'un écran précédent viennent de ses réponses confirmées. */
+export interface ExerciceProjete {
+  exercice: unknown;
+  ecrans: EcranDeclare[];
+}
+
+/**
+ * Point UNIQUE de projection de la cascade : `ecrans`, `verifier`, `solutionAttendue` et l'aide (les six
+ * sites : GET exercice, POST réponse ×2, POST aide, tableau de bord) reçoivent l'exercice projeté, jamais
+ * `regenere.exercice`. Sans `projeter` (tous les générateurs sans écran dépendant) : l'exercice brut,
+ * inchangé et sans coût. Le réglage utilisé est `feedback_immediat` de la TÂCHE (statique), jamais l'état
+ * de révélation d'un champ (qui bascule à la fin de la tâche et changerait l'énoncé déjà vu).
+ * Une déclaration incohérente (`dependDe` mal formé, ou sans `projeter`) est un bug de générateur : échec bruyant.
+ */
+export function projeterExercice(regenere: ExerciceRegenere, reponsesConfirmees: readonly ReponseConfirmee[], contexte: { reglages: { feedback_immediat: boolean } }): ExerciceProjete {
+  const problemes = validerDependances(regenere.ecrans);
+  if (problemes.length > 0) throw new Error(`${regenere.generateur.variante_id} : dépendances d'écrans invalides : ${problemes.join(" ; ")}`);
+  if (!regenere.generateur.projeter) {
+    if (regenere.ecrans.some((e) => e.dependDe !== undefined)) throw new Error(`${regenere.generateur.variante_id} : un écran déclare dependDe mais le générateur n'a pas de projeter()`);
+    return { exercice: regenere.exercice, ecrans: regenere.ecrans };
+  }
+  const exercice = regenere.generateur.projeter(regenere.exercice, [...reponsesConfirmees], { correctionImmediate: contexte.reglages.feedback_immediat });
+  const ecrans = regenere.generateur.ecrans(exercice);
+  if (ecrans.map((e) => e.champ).join("\u0000") !== regenere.ecrans.map((e) => e.champ).join("\u0000")) {
+    throw new Error(`${regenere.generateur.variante_id} : la projection ne doit jamais changer la liste des champs (champs_attendus est figé à l'assignation)`);
+  }
+  return { exercice, ecrans };
 }
 
 export interface ContexteTache {

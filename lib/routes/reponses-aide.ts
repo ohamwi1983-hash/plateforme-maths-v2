@@ -2,7 +2,8 @@ import type { RequeteHttp, ReponseHttp } from "../httpTypes";
 import { avecGestionErreurs } from "../avecGestionErreurs";
 import { eleveAuthentifie, supabaseAdmin } from "../supabaseAdmin";
 import { validerAide } from "../aideTypee";
-import { calculerEtatExercice, chargerContexteTache, chargerDonneesExercice, COLONNES_EXERCICE_ASSIGNE, regenererExercice, type LigneExerciceAssigne } from "../etatExercice";
+import { calculerEtatExercice, chargerContexteTache, chargerDonneesExercice, COLONNES_EXERCICE_ASSIGNE, projeterExercice, regenererExercice, type LigneExerciceAssigne } from "../etatExercice";
+import { dependancesTerminees } from "../cascadeEcrans";
 
 /**
  * POST /api/reponses/aide — sert le texte d'aide d'un écran ET en enregistre l'usage côté serveur
@@ -49,18 +50,25 @@ export const gererReponsesAide = avecGestionErreurs(async function handler(req: 
     res.status(403).json({ erreur: "L'aide n'est pas activée pour cette tâche" });
     return;
   }
-  if (!ecran.aide) {
+  // Cascade (RAPPORT §18) : l'aide est celle de l'écran PROJETÉ (bâtie sur les réponses confirmées), jamais celle
+  // de la vraie valeur ; et l'aide d'un écran dépendant n'est pas délivrée avant que ses prédécesseurs soient terminés.
+  const donnees = await chargerDonneesExercice(admin, exercice_assigne_id);
+  const etat = calculerEtatExercice(regenere, donnees, contexte, new Date());
+  if (!dependancesTerminees(ecran, new Set(etat.reponsesConfirmees.map((r) => r.champ)))) {
+    res.status(409).json({ erreur: "Cet écran dépend d'écrans précédents pas encore terminés" });
+    return;
+  }
+  const ecranProjete = projeterExercice(regenere, etat.reponsesConfirmees, contexte).ecrans.find((e) => e.champ === champ)!;
+  if (!ecranProjete.aide) {
     res.status(404).json({ erreur: "Pas d'aide pour cet écran" });
     return;
   }
   // Aide typée : validée AVANT tout enregistrement d'usage. Une aide invalide n'est ni servie ni comptée
   // (échec bruyant : c'est un défaut du générateur, jamais de l'élève — la pénalité ne doit pas le payer).
-  if (typeof ecran.aide !== "string") {
-    const problemes = validerAide(ecran.aide);
+  if (typeof ecranProjete.aide !== "string") {
+    const problemes = validerAide(ecranProjete.aide);
     if (problemes.length > 0) throw new Error(`Aide invalide pour ${ligne.variante_id} / ${champ} : ${problemes.join(" ; ")}`);
   }
-  const donnees = await chargerDonneesExercice(admin, exercice_assigne_id);
-  const etat = calculerEtatExercice(regenere, donnees, contexte, new Date());
   if (etat.champs.find((c) => c.champ === champ)?.verrouille) {
     res.status(409).json({ erreur: "Ce champ est déjà terminé" });
     return;
@@ -68,5 +76,5 @@ export const gererReponsesAide = avecGestionErreurs(async function handler(req: 
 
   const { error: erreurUpsert } = await admin.from("aides_utilisees").upsert({ exercice_assigne_id, champ }, { onConflict: "exercice_assigne_id,champ", ignoreDuplicates: true });
   if (erreurUpsert) throw new Error(erreurUpsert.message);
-  res.status(200).json({ aide: ecran.aide, penalite_pourcent: contexte.aidePenalitePourcent });
+  res.status(200).json({ aide: ecranProjete.aide, penalite_pourcent: contexte.aidePenalitePourcent });
 });
