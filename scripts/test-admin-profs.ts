@@ -137,8 +137,6 @@ async function main() {
     const r = await appeler("admin/profs/inviter", "POST", { jeton: jA, corps });
     verifier(r.statut === 400, `invitation « ${nom} » : 400 attendu, obtenu ${r.statut}`);
   }
-  const journalOrigine = console.log;
-  console.log = () => {}; // le diagnostic DIAG-INVITATION (temporaire) écrit dans console.log
   const inscrire = (code: string, email: string) => appeler("inscription-prof", "POST", { corps: { codeInvitation: code, email, motDePasse: "secret12", nom: "Invitee" } });
   const mauvais = await inscrire(inv.corps.code, "intrus@ecole.be");
   verifier(mauvais.statut === 404 && mauvais.corps.erreur === "Code d'invitation invalide", `inscription avec un AUTRE e-mail : 404 générique attendu, obtenu ${mauvais.statut} ${JSON.stringify(mauvais.corps)}`);
@@ -158,7 +156,6 @@ async function main() {
   b.inserer("invitations_prof", { code: "CODE-HISTORIQUE", utilise: false });
   const historique = await inscrire("CODE-HISTORIQUE", "n-importe-qui@ecole.be");
   verifier(historique.statut === 201, `code historique sans e-mail lié : utilisable par n'importe qui (201), obtenu ${historique.statut}`);
-  console.log = journalOrigine;
 
   // ---------- 6. Désactivation ----------
   const ordinaireAvant = await appeler("classes", "GET", { jeton: jBob });

@@ -12,7 +12,6 @@
     "test-verification-racines": "tsx scripts/test-verification-racines.ts",
     "test-durcissement-prototype": "tsx scripts/test-durcissement-prototype.ts",
     "test-rls-schema": "tsx scripts/test-rls-schema.ts",
-    "test-diag-invitation": "tsx scripts/test-diag-invitation.ts",
     "test-url-supabase": "tsx scripts/test-url-supabase.ts",
     "test-admin-profs": "tsx scripts/test-admin-profs.ts",
     "test-texte-math": "tsx scripts/test-texte-math.ts",
