@@ -33,14 +33,20 @@ export function decoderTableauSignes(reponseBrute: string): Decodage<CasesTablea
     return { ok: false, message: "Le tableau de signes n'a pas pu être lu." };
   }
   if (typeof brut !== "object" || brut === null || Array.isArray(brut)) return { ok: false, message: "Le tableau de signes n'a pas pu être lu." };
-  const cases: CasesTableauSignes = {};
+  // Les clés (id de ligne, id de colonne) viennent de l'ÉLÈVE : `JSON.parse` crée une vraie clé « __proto__ »,
+  // et `cases["__proto__"] = {}` sur un objet littéral CHANGERAIT SON PROTOTYPE (les lignes lues ensuite
+  // seraient héritées, jamais propres). Objets SANS prototype + rejet explicite de « __proto__ » (RAPPORT.md §20).
+  const illisible = { ok: false as const, message: "Le tableau de signes n'a pas pu être lu." };
+  const cases: CasesTableauSignes = Object.create(null);
   for (const [ligne, colonnes] of Object.entries(brut as Record<string, unknown>)) {
-    if (typeof colonnes !== "object" || colonnes === null || Array.isArray(colonnes)) return { ok: false, message: "Le tableau de signes n'a pas pu être lu." };
-    cases[ligne] = {};
+    if (ligne === "__proto__") return illisible;
+    if (typeof colonnes !== "object" || colonnes === null || Array.isArray(colonnes)) return illisible;
+    const ligneCases: Record<string, string> = Object.create(null);
     for (const [colonne, signe] of Object.entries(colonnes as Record<string, unknown>)) {
-      if (typeof signe !== "string") return { ok: false, message: "Le tableau de signes n'a pas pu être lu." };
-      cases[ligne][colonne] = signe;
+      if (colonne === "__proto__" || typeof signe !== "string") return illisible;
+      ligneCases[colonne] = signe;
     }
+    cases[ligne] = ligneCases;
   }
   return { ok: true, valeur: cases };
 }
