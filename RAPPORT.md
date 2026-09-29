@@ -942,3 +942,29 @@ Retrait de `...Object.fromEntries(url.searchParams)` du pont d'API (le défaut d
 - Seules les réponses vues par `page.on("response")` : une requête avortée (`requestfailed`, ex. polices `fonts.gstatic.com`, interceptées volontairement) n'est pas une réponse et n'est pas contrôlée.
 - Les 4xx que le navigateur reçoit d'un `fetch` sont vus ; ceux des appels directs `appeler(...)` du harnais (sans navigateur) ne passent pas par ce contrôle — ils sont déjà assertés par leur statut.
 - Un scénario qui devra un jour provoquer un 4xx par l'interface devra le DÉCLARER (`attendues`), avec sa raison.
+## §22 : RLS activé (sans police) sur `invitations_prof` et `profs`
+
+Petite PR de sécurité, née de la question « comment amorcer le premier professeur » : `schema.sql:4-6` note que RLS est absent, et aucune instruction `enable row level security` ni `create policy` n'existait dans le dépôt. **Migration SQL : OUI** — deux instructions idempotentes, dans le même commit que `schema.sql` (règle de `CLAUDE.md`) : `supabase/migrations/cumulatif.sql:171-172` (à EXÉCUTER sur la vraie base) et `supabase/schema.sql:270-271`.
+
+### A. Pourquoi ces deux tables
+- `invitations_prof` : lisible ⇒ codes d'invitation volés ; **inscriptible ⇒ un code forgé = un compte professeur sans invitation** (`lib/routes/inscription-prof.ts:68-72` ne vérifie que l'existence de la ligne).
+- `profs` : identifiants des comptes professeurs (et `eleve_apercu_id`).
+- RLS activé **sans aucune police** : `anon` et `authenticated` n'ont accès à aucune ligne ; `service_role` (le seul client serveur, `lib/supabaseAdmin.ts:9-14`) contourne RLS. Le navigateur n'utilise la clé `anon` que pour `auth` (`createClient` dans `prof.html:1318`, `eleve.html:331`, `index.html:185` ; aucun `.from(` dans `public/`) : **l'application n'est pas affectée**.
+
+### B. Ce qui est livré
+- `supabase/migrations/cumulatif.sql:171-172`, `supabase/schema.sql:270-271` (+ commentaire d'avertissement « aucune police sans décision explicite », `schema.sql:263-269`, et renvoi en tête de fichier `schema.sql:7-8`).
+- `scripts/test-rls-schema.ts` (15 vérifications, npm `test-rls-schema`) : les deux fichiers activent RLS sur exactement ces deux tables, aucune `create policy`, aucun `disable`, mêmes tables créées dans les deux fichiers, liste figée des 11 tables sans RLS (§D). Mutations vérifiées : retrait de la ligne dans `schema.sql` (2 échecs), dans `cumulatif.sql` (2), ajout d'une police (1).
+
+### C. Vérification sur un vrai PostgreSQL 16 (cluster local jetable, rôles `anon`/`authenticated`/`service_role` ÉMULÉS avec les privilèges par défaut de Supabase — ce n'est PAS la vraie plateforme)
+1. AVANT (état de `main`) : `cumulatif.sql` sur base vide OK ; `anon` **lit** `SECRET-SERVICE` dans `invitations_prof` et **insère** `FORGE-PAR-ANON` (total 2 lignes).
+2. APRÈS, migration rejouée deux fois sur cette base (idempotence OK) : `relrowsecurity = true` sur `invitations_prof` et `profs` ; `anon` et `authenticated` : 0 ligne visible ; `anon` insère → `ERROR: new row violates row-level security policy for table "invitations_prof"` ; `service_role` lit toujours les lignes (y compris celle forgée avant la migration).
+3. `schema.sql` sur base neuve : même résultat.
+**Non vérifié : la vraie base Supabase.** Contrôle à y faire après exécution :
+`select relname, relrowsecurity from pg_class where relname in ('invitations_prof','profs');` (attendu : `true, true`) ; puis, avec la clé `anon` du projet, `GET {SUPABASE_URL}/rest/v1/invitations_prof?select=code` doit renvoyer `[]`. **Un code forgé AVANT cette migration reste dans la table** : la vider ou la relire (`select * from invitations_prof`) est un contrôle à faire, et `select * from profs` pour repérer un compte inattendu.
+
+### D. Étendue (question posée séparément, NON traitée ici)
+Même mécanisme sur les 11 autres tables — `aides_utilisees, classes, debuts_ecran, eleves, exercices_assignes, inscriptions, reponses, taches, taches_assignations, taches_assignations_eleves, taches_composition` : RLS absent, privilèges `anon` par défaut. Mesuré sur le cluster local : `anon` lit une ligne de `classes` et de `eleves` et **modifie** `eleves` (`update … returning` → `PIRATÉ`). Liste figée dans `scripts/test-rls-schema.ts` : y ajouter RLS devra la modifier.
+
+### E. Limites
+- Test statique : il ne prouve pas le comportement de la base, seulement que le SQL reste présent ; la preuve de comportement est le §C (émulation).
+- Sans police, la lecture d'un client `authenticated` est aussi vide : si un futur écran lit ces tables depuis le navigateur, il faudra une police, décision explicite.

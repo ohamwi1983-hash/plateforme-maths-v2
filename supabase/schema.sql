@@ -4,7 +4,8 @@
 -- RLS complet volontairement hors scope pour ce pilote — voir le rapport de fin pour l'endroit
 -- exact où RLS devra être ajouté avant tout usage à plusieurs profs/classes réelles. Ce constat
 -- pèse davantage depuis l'ajout des comptes élèves (RLS absent = n'importe quel titulaire d'une
--- clé anon peut, en théorie, requêter d'autres tables que les siennes) — noté, non traité ici.
+-- clé anon peut, en théorie, requêter d'autres tables que les siennes) — noté, non traité ici, SAUF
+-- `invitations_prof` et `profs` (RLS activé, RAPPORT §22 — voir la fin de ce fichier).
 
 create table profs (
   id uuid primary key references auth.users(id),
@@ -258,3 +259,13 @@ create table invitations_prof (
   utilise boolean not null default false,
   cree_le timestamptz not null default now()
 );
+
+-- Sécurité (RAPPORT §22) : RLS ACTIVÉ, volontairement SANS AUCUNE police, sur les deux tables dont
+-- l'exposition permet de devenir professeur. Sans police, les rôles `anon` et `authenticated` de
+-- PostgREST n'ont accès à aucune ligne (lecture vide, écriture refusée) ; le serveur (clé
+-- `service_role`, lib/supabaseAdmin.ts) contourne RLS et n'est pas affecté. Le navigateur n'utilise
+-- la clé `anon` que pour l'authentification (aucun `.from(...)` dans public/). N'ajouter AUCUNE police
+-- sur ces deux tables sans décision explicite : une police `select` sur `invitations_prof` rouvrirait
+-- la lecture des codes d'invitation, une `insert` permettrait d'en forger un.
+alter table invitations_prof enable row level security;
+alter table profs enable row level security;
