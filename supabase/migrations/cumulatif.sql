@@ -170,3 +170,17 @@ create table if not exists aides_utilisees (
 -- no-op si RLS est déjà activé. Les 11 autres tables n'ont PAS RLS (décision différée, RAPPORT §22-D).
 alter table invitations_prof enable row level security;
 alter table profs enable row level security;
+
+-- Sécurité (RAPPORT §23) : RLS activé, sans AUCUNE police, sur les 11 autres tables (voir supabase/schema.sql
+-- pour la justification). Idempotent : `enable row level security` est un no-op si RLS est déjà activé.
+alter table aides_utilisees enable row level security;
+alter table classes enable row level security;
+alter table debuts_ecran enable row level security;
+alter table eleves enable row level security;
+alter table exercices_assignes enable row level security;
+alter table inscriptions enable row level security;
+alter table reponses enable row level security;
+alter table taches enable row level security;
+alter table taches_assignations enable row level security;
+alter table taches_assignations_eleves enable row level security;
+alter table taches_composition enable row level security;

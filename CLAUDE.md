@@ -182,3 +182,11 @@ tout texte ou toute clé JSON venant de l'ÉLÈVE) : `lirePropre(table, cle)` (`
 une `Map` pour un compteur, `Object.create(null)` pour un objet construit avec des clés d'élève (et rejet de
 `__proto__`, comme `decoderTableauSignes`). Un test doit reproduire l'entrée hostile (`scripts/test-durcissement-prototype.ts`).
 
+## RLS : toute table a RLS activé, sans police (RAPPORT §22-§23)
+
+Les 13 tables ont `enable row level security` **sans aucune police** : `anon`/`authenticated` n'ont accès à rien, le serveur
+passe par `supabaseAdmin()` (`service_role`, contourne RLS). Toute nouvelle `create table` doit, dans le même commit, ajouter
+son `alter table … enable row level security` à `schema.sql` ET `cumulatif.sql` et sa ligne à la liste figée de
+`scripts/test-rls-schema.ts`. Ne créer une police que pour un accès direct navigateur -> base (aucun aujourd'hui). Après un
+`admin.auth.signInWithPassword`, le MÊME client n'accède plus aux données en `service_role` : aucun `.from(...)` ensuite.
+
