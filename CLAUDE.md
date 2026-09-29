@@ -60,9 +60,16 @@ sait exécuter) et leur cohérence est vérifiée au chargement du registre (éc
 
 - Un générateur (`lib/contratGenerateur.ts`) déclare des écrans (données) ; il n'écrit jamais de
   HTML/CSS. Un nouveau type d'écran = une interface dans le contrat + un composant dans
-  `public/moteur/ecrans/` (enregistré dans `index.js`) + un écran dans le témoin technique
-  (`src/generateurs/_temoinTechnique/`, `variante_id` `_temoin_technique_v1`, permanent, jamais dans le
-  catalogue affiché) ; `npm run chromium-temoin` doit alors passer.
+  `public/moteur/ecrans/` (enregistré dans `index.js`) + un décodeur dans `lib/reponsesEcran.ts` + un
+  écran dans le témoin technique UNIQUE — `src/generateurs/_temoinTechnique/` (`variante_id`
+  `_temoin_technique_v1`, permanent, jamais dans le catalogue affiché ni assignable par l'API :
+  `validerComposition` rejette toute variante hors catalogue). Il a deux profils d'exercice tirés de la
+  graine : `base` (les 4 écrans d'origine, dont les 137 assertions de la « Section A » de
+  `scripts/test-temoin-technique.ts` ne bougent pas : leur nombre est compté) et `etendu` (les écrans
+  ajoutés depuis la phase 3b-1, « Section B ») ; un nouveau type d'écran s'ajoute au profil `etendu`. Le
+  profil des exercices assignés par la route se DÉCLARE dans les tests (`imposerProfilAssignation`,
+  `scripts/support/harnaisRouteur.ts`). `npm run chromium-temoin` doit passer. Tout texte d'auteur d'un
+  composant passe par `rendreTexte(…, { math: true })`, jamais par `textContent`.
 - **État local d'édition ≠ réponse.** Ce que l'élève compose (texte tapé, lignes ajoutées, cases
   cochées, choix non confirmé) ne quitte jamais le composant ; seule une réponse confirmée (« Valider »)
   est envoyée, sous forme d'UNE chaîne `reponse_brute`. `POST /api/reponses` rejette toute clé autre que
@@ -72,8 +79,36 @@ sait exécuter) et leur cohérence est vérifiée au chargement du registre (éc
   L'exercice n'est pas stocké : il est régénéré depuis `exercices_assignes.graine`. **Toute
   modification qui change ce que `generer` produit pour une graine donnée impose un NOUVEAU
   `variante_id` (`_v2`…)**, sinon les exercices déjà assignés changent sous les pieds des élèves.
-- Le texte d'aide n'est jamais envoyé avec l'écran : `POST /api/reponses/aide` le sert et enregistre
-  l'usage côté serveur (`aides_utilisees`).
+  Précision : la règle protège des exercices DÉJÀ ASSIGNÉS. Une variante du catalogue qui n'a pas encore
+  de générateur au registre (les `af_*` de gen7 avant leur livraison) ne peut pas être assignée : sa
+  première implémentation garde l'identifiant du catalogue tel quel (`verifierCoherenceRegistre`
+  l'exige). La règle ne s'applique qu'à un changement ULTÉRIEUR de `generer()`, une fois la variante livrée.
+- L'aide n'est jamais envoyée avec l'écran : `POST /api/reponses/aide` la sert et enregistre l'usage
+  côté serveur (`aides_utilisees`) — **après** l'avoir validée (`validerAide`) : une aide invalide n'est
+  ni servie ni comptée. Une aide est une chaîne (texte d'auteur) ou une **aide typée à EXACTEMENT deux
+  formes** (`lib/aideTypee.ts` : `formule_coloree`, `croquis_parabole`) ; une troisième forme est une
+  décision de contrat, pas un fichier de plus.
+
+## Balisage mathématique (phase 3b-1)
+
+- **Trois sortes de texte.** Texte d'AUTEUR (consigne, libellés de choix/colonnes/lignes/sous-champs,
+  étiquettes, aide en chaîne, solution attendue, message d'erreur) : peut contenir du balisage.
+  Texte d'ÉLÈVE (`valeur_saisie`, ce qu'il tape, aperçus de sa saisie) : **jamais interprété** — un `$`
+  tapé reste un `$`. Texte d'INTERFACE : brut. Un attribut (`placeholder`, `aria-label`) passe par
+  `versTexteBrut`.
+- **Grammaire** (`public/moteur/texteMath.js`, l'unique implémentation) : `$…$` inline ; `\$` = `$`
+  littéral hors mathématiques ; `$$`, `$` non fermé ou contenu vide → **le texte entier** est rendu en
+  texte brut, jamais d'exception. Contenu = LaTeX (sous-ensemble KaTeX).
+- **Une couleur n'est jamais dans un texte servi.** Les commandes de couleur, de style, de lien et
+  d'image sont interdites (`lib/balisageMath.ts`, **seul** endroit où la liste existe : ne jamais la
+  recopier, ni dans `public/`, ni ailleurs). Seule couleur admise : le RÔLE a/b/c de `formule_coloree`.
+- **`public/moteur/rendreTexte.js` est le seul point d'écriture d'un texte dans le DOM.**
+  `rendreTexte(el, texte, { math: true })` pour un texte d'auteur ; sans option, texte brut. `rendreMath`
+  est la seule fonction que la 3c remplacera par KaTeX.
+- **La production (`lib/`, `api/`, `src/`) n'importe jamais depuis `public/`** (hors `include` de
+  `tsconfig.json`, runtime Node non épinglé). Les tests chargent le module client par
+  `scripts/support/texteMath.ts` (enveloppe typée) ; chaque texte servi par un générateur de test doit passer
+  `verifierBalisageMath`.
 - Nouveau générateur curriculaire : l'ajouter à `REGISTRE_GENERATEURS` **et** au catalogue **et** à
   `CORRESPONDANCE_JSON_VERS_PILOTE` (discipline de câblage ci-dessus) ; ses codes de compétence
   doivent exister dans `lib/dictionnaireCompetences.ts`.
@@ -83,11 +118,13 @@ sait exécuter) et leur cohérence est vérifiée au chargement du registre (éc
 
 ## Design system (phase 2)
 
-Les 32 tokens de `:root` (`public/style.css`) sont documentés dans `docs/design-system.md`
+Les 35 tokens de `:root` (`public/style.css`) sont documentés dans `docs/design-system.md`
 (`scripts/test-design-system.ts` vérifie qu'ils restent identiques, et que `public/moteur/ecrans.css`
 n'utilise que des `var(--token)`). Ne jamais ajouter de valeur en dur (couleur, police, espacement,
 rayon) dans un composant d'écran ; ne jamais inventer un token sans mettre à jour le document (et le compte attendu par le test). Ombre de carte :
-`var(--ombre-carte)`, jamais recopiée littéralement.
+`var(--ombre-carte)`, jamais recopiée littéralement. Les 3 tokens `--coef-a|b|c` (surbrillance d'un
+coefficient) sont **réservés** à `.moteur-coef-*` — jamais un verdict — et leur contraste (≥ 4,5:1 sur tous
+les fonds de carte) est calculé par le test.
 
 ## Correction immédiate coupée (règle de révélation)
 

@@ -1,4 +1,9 @@
-/** Composant d'écran « qcm » : choix fermé, un seul retenu. `reponseBrute` = `id` du choix. */
+import { rendreTexte } from "../rendreTexte.js";
+
+/**
+ * Composant d'écran « qcm » : choix fermé, un seul retenu. `reponseBrute` = `id` du choix. Le libellé
+ * d'un choix est un texte d'AUTEUR (balisage `$…$` admis) : rendu par `rendreTexte(…, { math: true })`.
+ */
 export default {
   type: "qcm",
 
@@ -18,7 +23,7 @@ export default {
       bouton.value = choix.id;
       bouton.addEventListener("change", () => surChangement());
       const texte = document.createElement("span");
-      texte.textContent = choix.libelle;
+      rendreTexte(texte, choix.libelle, { math: true });
       etiquette.append(bouton, texte);
       element.appendChild(etiquette);
       boutons.push(bouton);
@@ -40,6 +45,7 @@ export default {
 
   resumer(ecran, valeurSaisie) {
     const choix = ecran.choix.find((c) => c.id === valeurSaisie);
-    return choix ? choix.libelle : valeurSaisie;
+    // Le libellé du choix est un texte d'AUTEUR (rendu avec le balisage) ; repli sur l'`id` brut = texte d'élève.
+    return choix ? [{ texte: choix.libelle, auteur: true }] : valeurSaisie;
   },
 };

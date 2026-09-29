@@ -450,3 +450,286 @@
   flex-direction: column;
   gap: var(--espace-3);
 }
+
+/* ══ Phase 3b-1 ══════════════════════════════════════════════════════════════════════════════════════
+   Balisage mathématique, champs multiples, intervalle, tableau étendu, aides typées, croquis. Mêmes
+   règles : uniquement des tokens (aucune couleur, épaisseur ou espacement en dur). ═══════════════ */
+
+/* Segment mathématique d'un texte d'auteur (repli de la phase 3b-1 ; la 3c y branchera KaTeX). */
+.moteur-math {
+  font-family: var(--font-corps);
+}
+
+/* ── Champs multiples ── */
+.moteur-champs-multiples {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+}
+
+.moteur-sous-champ-texte {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--espace-2);
+}
+
+.moteur-sous-champ-libelle {
+  flex: none;
+  margin: 0; /* neutralise `label { margin-bottom }` (style.css) */
+  font-family: var(--font-corps); /* `legend` (style.css) prend la police de marque */
+  font-size: inherit;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.moteur-sous-champ-texte .moteur-champ {
+  flex: 1 1 calc(var(--espace-5) * 2);
+  width: auto;
+  min-width: 0;
+}
+
+.moteur-sous-champ-choix {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent; /* neutralise `fieldset` (style.css : fond en creux, filet, marge) */
+}
+
+.moteur-sous-champ-choix .moteur-sous-champ-libelle {
+  padding: 0;
+  margin: 0 0 var(--espace-2);
+}
+
+.moteur-illustration {
+  display: flex;
+  justify-content: center;
+}
+
+/* ── Liste de valeurs avec « aucune valeur » ── */
+.moteur-choix-mode {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-2);
+}
+
+.moteur-bouton.moteur-mode-retenu {
+  background: var(--violet-clair);
+  box-shadow: inset 0 0 0 1px var(--violet-vif);
+}
+
+.moteur-liste-zone {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+  align-items: flex-start;
+  width: 100%;
+}
+
+.moteur-liste-zone[hidden] {
+  display: none;
+}
+
+/* ── Intervalle ── */
+.moteur-intervalle {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+}
+
+.moteur-intervalle-ligne {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--espace-2);
+}
+
+.moteur-champ-borne {
+  flex: 1 1 calc(var(--espace-5) * 3);
+  width: auto;
+  min-width: 0;
+}
+
+.moteur-bouton.moteur-bouton-crochet {
+  flex: none;
+  min-width: calc(var(--espace-5) + var(--espace-1));
+  padding: var(--espace-2);
+  font-size: 1.2em;
+}
+
+.moteur-bouton.moteur-bouton-infini {
+  flex: none;
+  padding: var(--espace-2);
+}
+
+.moteur-bouton.moteur-infini-actif {
+  background: var(--violet-clair);
+  box-shadow: inset 0 0 0 1px var(--violet-vif);
+}
+
+.moteur-intervalle-separateur {
+  flex: none;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.moteur-apercu {
+  margin: 0;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* Après verrouillage : ce que l'élève a choisi prend la couleur du verdict (violet tant que le serveur
+   n'a rien dit) ; `button:disabled` (style.css) applique `opacity: 0.55`, qui délaverait cette couleur. */
+.moteur-bouton.moteur-bouton-crochet:disabled,
+.moteur-bouton.moteur-infini-actif:disabled,
+.moteur-bouton.moteur-mode-retenu:disabled {
+  opacity: 1;
+  color: var(--etat-texte);
+  background: var(--etat-fond);
+  border-color: var(--etat-bordure);
+  box-shadow: inset 0 0 0 1px var(--etat-bordure);
+}
+
+/* ── Tableau de signes étendu ── */
+.moteur-sous-libelle {
+  display: block;
+  font-size: 0.85em;
+  font-weight: 600;
+}
+
+.moteur-table-signes .moteur-borne {
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+}
+
+.moteur-symbole {
+  width: 1.5em;
+  height: 1.5em;
+  vertical-align: middle;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ── Aides typées ── */
+.moteur-aide-texte.moteur-aide-typee {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.moteur-aide-visuelle {
+  display: flex;
+  justify-content: center;
+}
+
+.moteur-formule {
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0;
+  font-size: 1.15em;
+}
+
+.moteur-formule > span {
+  white-space: pre-wrap;
+}
+
+/* Surbrillance d'un coefficient : SEULS emplois autorisés des tokens --coef-* (vérifié par le test). */
+.moteur-coef-a {
+  color: var(--coef-a);
+  font-weight: 600;
+}
+
+.moteur-coef-b {
+  color: var(--coef-b);
+  font-weight: 600;
+}
+
+.moteur-coef-c {
+  color: var(--coef-c);
+  font-weight: 600;
+}
+
+/* ── Croquis SVG (croquis.js) : classes uniquement ; couleurs et épaisseurs par tokens ── */
+.moteur-croquis {
+  display: block;
+  width: 100%;
+  max-width: calc(var(--espace-5) * 8);
+  height: auto;
+  font-family: var(--font-corps);
+}
+
+.croquis-axe {
+  stroke: var(--text-muted);
+  stroke-width: 2px;
+  fill: none;
+}
+
+.croquis-fleche {
+  fill: var(--text-muted);
+}
+
+.croquis-courbe {
+  fill: none;
+  stroke: var(--violet-vif);
+  stroke-width: var(--espace-1);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.croquis-courbe-neutre {
+  stroke: var(--text-muted);
+}
+
+.croquis-surlignage {
+  stroke: var(--vert-vif);
+  stroke-width: var(--espace-2);
+  stroke-linecap: round;
+}
+
+.croquis-point {
+  fill: var(--text);
+}
+
+.croquis-point-neutre {
+  fill: var(--text-muted);
+}
+
+.croquis-sommet {
+  fill: var(--violet-vif);
+}
+
+.croquis-etiquette {
+  fill: var(--text);
+  font-size: 0.8em;
+  /* Halo de la couleur du fond : lisible même quand la courbe passe derrière. */
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: var(--espace-1);
+  stroke-linejoin: round;
+}
+
+.croquis-etiquette-forte {
+  font-weight: 600;
+}
+
+.croquis-etiquette-petite {
+  font-size: 0.7em;
+}
+
+.croquis-etiquette-sommet {
+  fill: var(--violet-vif);
+  font-weight: 600;
+  font-size: 0.85em;
+}
+
+.croquis-indice {
+  font-size: 0.7em;
+}

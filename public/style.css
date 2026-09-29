@@ -33,7 +33,7 @@
  * (h2/h3/legend/summary) pour une cohérence de marque, pas seulement ce seul élément).
  */
 :root {
-  /* ── Design system (phase 2) — 32 tokens, documentés dans docs/design-system.md (le test
+  /* ── Design system (phase 2, +3 tokens en phase 3b-1) — 35 tokens, documentés dans docs/design-system.md (le test
      scripts/test-design-system.ts vérifie que ce bloc et ce document restent identiques). Aucune
      valeur n'a été ajoutée ni modifiée par rapport au système visuel v3 : ce bloc n'est que
      réorganisé par famille. Toute nouvelle règle CSS s'appuie sur ces tokens, jamais sur une valeur
@@ -60,6 +60,14 @@
   --bleu-clair: #E7EEFC;
   --jaune: #CA8A04;
   --jaune-clair: #FEF9C3;
+
+  /* Surbrillance d'un coefficient (a, b, c) dans l'aide `formule_coloree` : RÉSERVÉS à cet usage, jamais
+     un verdict (ni rouge, ni vert, ni ambre : ces teintes ont déjà un sens). Valeurs choisies par calcul
+     (ratios WCAG ≥ 4,80:1 sur tous les fonds de carte, distinction ΔE ≥ 48 sous simulation
+     protanopie/deutéranopie/tritanopie) — voir docs/design-system.md. */
+  --coef-a: #BF2280;
+  --coef-b: #1137D0;
+  --coef-c: #795B15;
 
   /* Neutres : fonds, texte, filets. */
   --bg: #FAF9FC;
