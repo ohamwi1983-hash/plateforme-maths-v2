@@ -1094,7 +1094,15 @@ button:disabled {
   cursor: not-allowed;
 }
 
-#aide-penalite-pourcent:disabled {
+/*
+ * Tout champ de saisie DÉSACTIVÉ d'une ligne de réglage est grisé. Cette règle était écrite pour UN identifiant
+ * (`#aide-penalite-pourcent:disabled`) : « Durée (secondes) » du chrono (`#chrono-duree-secondes`), désactivé par le
+ * même `appliquerVerrouReglages`, n'avait aucune règle équivalente et restait identique à un champ actif (RAPPORT §29).
+ * Sélecteur par LIGNE, non par identifiant : un futur champ verrouillé est grisé sans y penser. Volontairement limité à
+ * `.ligne-reglage` — un `input:disabled` global grisserait aussi les réponses verrouillées du moteur élève.
+ */
+.ligne-reglage input:disabled,
+.ligne-reglage select:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
