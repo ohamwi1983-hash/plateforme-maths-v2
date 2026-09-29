@@ -217,6 +217,8 @@
       <button type="button" class="onglet-bouton" data-onglet="classes"><span class="nav-icone" aria-hidden="true">🏫</span>Classes</button>
       <button type="button" class="onglet-bouton" data-onglet="taches"><span class="nav-icone" aria-hidden="true">📝</span>Tâches</button>
       <button type="button" class="onglet-bouton" data-onglet="resultats"><span class="nav-icone" aria-hidden="true">📊</span>Résultats</button>
+      <!-- Rôle admin-prof (RAPPORT §26) : masqué tant que GET /api/profs/moi n'a pas répondu est_admin = true (information du SERVEUR, jamais déduite côté client ; les routes /api/admin/* re-vérifient de toute façon). -->
+      <button type="button" class="onglet-bouton" data-onglet="admin" id="onglet-bouton-admin" hidden><span class="nav-icone" aria-hidden="true">🛡️</span>Admin</button>
     </nav>
 
     <!--
@@ -490,6 +492,55 @@
         "Modifier" de chaque élève (crayon ✏️, voir construireFormulaireEditionEleve), qui expose
         désormais un champ mot de passe facultatif appelant le même POST /api/profs/reset-mdp-eleve.
       -->
+    </div>
+
+    <!--
+      Rôle admin-prof (RAPPORT §26) : gestion des comptes professeurs, au même niveau que la gestion des élèves
+      (mêmes composants : `.item-eleve`/`.ligne-eleve`/`.icone-action`, `.carte-formulaire`, `.bouton-ajouter-eleve`).
+      Panneau et bouton d'onglet restent `hidden` sauf réponse serveur `est_admin = true`.
+    -->
+    <div id="onglet-admin" class="onglet-panneau" hidden>
+      <h2>Professeurs</h2>
+      <ul id="liste-profs-admin"></ul>
+      <p id="statut-liste-profs-admin"></p>
+
+      <button type="button" id="btn-toggle-creer-prof" class="bouton-ajouter-eleve"><span class="emoji-inline" aria-hidden="true">+</span>Créer un professeur</button>
+      <div class="carte-formulaire" id="carte-creer-prof" hidden>
+        <div class="zone-edition">
+          <h3 class="zone-titre">Créer un professeur</h3>
+          <div class="grille-2col">
+            <div><label class="champ-label" for="creer-prof-nom">Nom</label><input class="champ-input" id="creer-prof-nom" type="text" autocomplete="off" /></div>
+            <div><label class="champ-label" for="creer-prof-email">Email</label><input class="champ-input" id="creer-prof-email" type="email" autocomplete="off" autocapitalize="off" /></div>
+          </div>
+          <div><label class="champ-label" for="creer-prof-mdp">Mot de passe (6 caractères minimum)</label><input class="champ-input" id="creer-prof-mdp" type="password" autocomplete="new-password" /></div>
+        </div>
+        <div class="zone-pied">
+          <button id="btn-creer-prof" disabled><span class="emoji-inline" aria-hidden="true">+</span>Créer</button>
+        </div>
+      </div>
+      <p id="statut-creer-prof"></p>
+
+      <button type="button" id="btn-toggle-inviter-prof" class="bouton-ajouter-eleve"><span class="emoji-inline" aria-hidden="true">✉</span>Générer un code d'invitation</button>
+      <div class="carte-formulaire" id="carte-inviter-prof" hidden>
+        <div class="zone-edition">
+          <h3 class="zone-titre">Code d'invitation</h3>
+          <div><label class="champ-label" for="inviter-prof-email">Email de la personne invitée</label><input class="champ-input" id="inviter-prof-email" type="email" autocomplete="off" autocapitalize="off" /></div>
+          <p class="meta-item">Le code n'est utilisable qu'avec cet email, une seule fois.</p>
+        </div>
+        <div class="zone-pied">
+          <button id="btn-inviter-prof" disabled>Générer</button>
+        </div>
+      </div>
+      <p id="statut-inviter-prof"></p>
+      <div class="carte-formulaire" id="resultat-invitation" hidden>
+        <div class="zone-edition">
+          <h3 class="zone-titre">Code généré</h3>
+          <p class="meta-item" id="resultat-invitation-consigne"></p>
+          <div class="code-invitation" id="resultat-invitation-code" role="textbox" aria-readonly="true" aria-label="Code d'invitation généré"></div>
+          <div class="actions-item"><button type="button" id="btn-copier-invitation" class="bouton-secondaire">Copier</button></div>
+          <p class="meta-item">Affiché une seule fois : notez-le ou transmettez-le maintenant.</p>
+        </div>
+      </div>
     </div>
 
     <div id="onglet-taches" class="onglet-panneau" hidden>
@@ -1169,7 +1220,7 @@
      * formulaire en cours en changeant d'onglet. Pas de routage d'URL, pas de rechargement (Portée
      * explicite).
      */
-    const ONGLETS = ["tableau-de-bord", "classes", "taches", "resultats"];
+    const ONGLETS = ["tableau-de-bord", "classes", "taches", "resultats", "admin"];
 
     function afficherOnglet(nom) {
       for (const o of ONGLETS) {
@@ -1298,6 +1349,9 @@
       document.getElementById("compte-avatar").hidden = false;
       document.getElementById("composition").hidden = false;
       afficherOnglet("classes");
+      // Rôle admin-prof (RAPPORT §26) : AVANT les autres chargements — `chargerIdentiteProf` a son propre try/catch et ne
+      // dépend d'aucun d'eux ; l'onglet « Admin » ne doit pas disparaître parce qu'un chargement sans rapport a échoué.
+      await chargerIdentiteProf();
       await chargerCatalogue();
       await chargerClasses();
       await chargerTaches();
@@ -4082,6 +4136,266 @@
     });
 
     /**
+     * Rôle admin-prof (RAPPORT §26). `est_admin` vient UNIQUEMENT de GET /api/profs/moi (serveur) ; il ne fait
+     * qu'afficher ou masquer l'onglet « Admin » : chaque route /api/admin/* re-vérifie côté serveur (403 sinon).
+     */
+    let profsAdmin = [];
+    let profEnReinitialisationId = null;
+    let idProfConnecte = null;
+
+    function masquerAdministration() {
+      document.getElementById("onglet-bouton-admin").hidden = true;
+      document.getElementById("onglet-admin").hidden = true;
+      document.getElementById("liste-profs-admin").innerHTML = "";
+      document.getElementById("resultat-invitation").hidden = true;
+      document.getElementById("resultat-invitation-code").textContent = "";
+      profsAdmin = [];
+      profEnReinitialisationId = null;
+      idProfConnecte = null;
+    }
+
+    async function chargerIdentiteProf() {
+      masquerAdministration();
+      try {
+        const reponse = await fetch("/api/profs/moi", { headers: { Authorization: "Bearer " + session.access_token } });
+        if (!reponse.ok) return;
+        const moi = await reponse.json();
+        idProfConnecte = moi.id;
+        if (moi.est_admin !== true) return;
+        document.getElementById("onglet-bouton-admin").hidden = false;
+        await chargerProfsAdmin();
+      } catch (e) {
+        /* Sans réponse fiable du serveur, l'administration reste masquée. */
+      }
+    }
+
+    const enteteAdmin = () => ({ "Content-Type": "application/json", Authorization: "Bearer " + session.access_token });
+
+    async function chargerProfsAdmin() {
+      const statut = document.getElementById("statut-liste-profs-admin");
+      const reponse = await fetch("/api/admin/profs", { headers: enteteAdmin() });
+      const corps = await reponse.json();
+      if (!reponse.ok) {
+        statut.textContent = formaterErreur(corps);
+        return;
+      }
+      statut.textContent = "";
+      profsAdmin = corps.profs;
+      rendreProfsAdmin();
+    }
+
+    function initialesProf(nom) {
+      const mots = String(nom || "").trim().split(/\s+/).filter(Boolean);
+      return ((mots[0] || "?")[0] + (mots.length > 1 ? mots[mots.length - 1][0] : "")).toUpperCase();
+    }
+
+    function rendreProfsAdmin() {
+      const liste = document.getElementById("liste-profs-admin");
+      liste.innerHTML = "";
+      for (const prof of profsAdmin) liste.appendChild(construireLigneProfAdmin(prof));
+    }
+
+    async function actionProfAdmin(chemin, prof, corps, messageEnCours) {
+      const statut = document.getElementById("statut-liste-profs-admin");
+      statut.textContent = messageEnCours;
+      try {
+        const reponse = await fetch(`/api/admin/profs/${encodeURIComponent(prof.id)}/${chemin}`, { method: "POST", headers: enteteAdmin(), body: JSON.stringify(corps || {}) });
+        const retour = await reponse.json();
+        if (!reponse.ok) {
+          statut.textContent = formaterErreur(retour);
+          return false;
+        }
+        statut.textContent = "";
+        await chargerProfsAdmin();
+        return true;
+      } catch (e) {
+        statut.textContent = "Erreur inattendue : " + e.message;
+        return false;
+      }
+    }
+
+    function construireFormulaireReinitialisationProf(prof) {
+      const conteneur = document.createElement("div");
+      conteneur.className = "groupe-champ";
+      const etiquette = document.createElement("label");
+      etiquette.className = "champ-label";
+      etiquette.textContent = `Nouveau mot de passe pour ${prof.nom} (6 caractères minimum)`;
+      const champ = document.createElement("input");
+      champ.className = "champ-input";
+      champ.type = "password";
+      champ.autocomplete = "new-password";
+      champ.id = "reset-prof-mdp";
+      etiquette.htmlFor = champ.id;
+      const statut = document.createElement("p");
+      const pied = document.createElement("div");
+      pied.className = "actions-item";
+      const enregistrer = document.createElement("button");
+      enregistrer.type = "button";
+      enregistrer.textContent = "Enregistrer";
+      enregistrer.disabled = true;
+      champ.addEventListener("input", () => {
+        enregistrer.disabled = champ.value.length < 6;
+      });
+      enregistrer.addEventListener("click", async () => {
+        statut.textContent = "Enregistrement…";
+        const reponse = await fetch(`/api/admin/profs/${encodeURIComponent(prof.id)}/reset-mdp`, { method: "POST", headers: enteteAdmin(), body: JSON.stringify({ nouveauMotDePasse: champ.value }) });
+        const corps = await reponse.json();
+        if (!reponse.ok) {
+          statut.textContent = formaterErreur(corps);
+          return;
+        }
+        profEnReinitialisationId = null;
+        document.getElementById("statut-liste-profs-admin").textContent = `Mot de passe de ${prof.nom} réinitialisé.`;
+        rendreProfsAdmin();
+      });
+      const annuler = document.createElement("button");
+      annuler.type = "button";
+      annuler.className = "bouton-secondaire";
+      annuler.textContent = "Annuler";
+      annuler.addEventListener("click", () => {
+        profEnReinitialisationId = null;
+        rendreProfsAdmin();
+      });
+      pied.append(enregistrer, annuler);
+      conteneur.append(etiquette, champ, pied, statut);
+      return conteneur;
+    }
+
+    /** Une ligne = un prof (mêmes composants que la liste des élèves). Aucune action sur un compte administrateur : le serveur les refuse (403), l'interface ne les propose pas. */
+    function construireLigneProfAdmin(prof) {
+      const li = document.createElement("li");
+      if (profEnReinitialisationId === prof.id) {
+        li.className = "item-liste";
+        li.appendChild(construireFormulaireReinitialisationProf(prof));
+        return li;
+      }
+      li.className = "item-eleve";
+      const ligne = document.createElement("div");
+      ligne.className = "ligne-eleve";
+      const avatar = document.createElement("span");
+      avatar.className = "avatar-mini-liste";
+      avatar.textContent = initialesProf(prof.nom);
+      ligne.appendChild(avatar);
+      const nom = document.createElement("span");
+      nom.className = "nom-eleve-liste";
+      nom.textContent = prof.nom + (prof.id === idProfConnecte ? " (vous)" : "");
+      ligne.appendChild(nom);
+
+      const actions = document.createElement("div");
+      actions.className = "actions-eleve-compact";
+      const boutonIcone = (emoji, titre, danger) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = danger ? "icone-action danger" : "icone-action";
+        b.title = titre;
+        b.setAttribute("aria-label", titre);
+        b.textContent = emoji;
+        return b;
+      };
+      if (!prof.est_admin) {
+        const reset = boutonIcone("🔑", "Réinitialiser le mot de passe");
+        reset.addEventListener("click", () => {
+          profEnReinitialisationId = prof.id;
+          rendreProfsAdmin();
+        });
+        actions.appendChild(reset);
+        if (prof.actif) {
+          const desactiver = boutonIcone("🚷", "Désactiver", true);
+          desactiver.addEventListener("click", async () => {
+            if (!window.confirm(`Désactiver le compte de ${prof.nom} ? Ses classes, tâches et données seront conservées, mais il ne pourra plus se connecter.`)) return;
+            await actionProfAdmin("desactiver", prof, {}, "Désactivation…");
+          });
+          actions.appendChild(desactiver);
+        } else {
+          const reactiver = boutonIcone("↩", "Réactiver");
+          reactiver.addEventListener("click", () => actionProfAdmin("reactiver", prof, {}, "Réactivation…"));
+          actions.appendChild(reactiver);
+        }
+      }
+      ligne.appendChild(actions);
+      li.appendChild(ligne);
+
+      const meta = document.createElement("div");
+      meta.className = "stats-ligne-eleve";
+      const badges = [prof.email || "email inconnu", prof.est_admin ? "Administrateur" : null, prof.actif ? null : "Compte désactivé"].filter(Boolean);
+      meta.textContent = badges.join(" · ");
+      li.appendChild(meta);
+      return li;
+    }
+
+    document.getElementById("btn-toggle-creer-prof").addEventListener("click", () => {
+      const carte = document.getElementById("carte-creer-prof");
+      carte.hidden = !carte.hidden;
+    });
+    function verifierValiditeCreerProf() {
+      const ok = document.getElementById("creer-prof-nom").value.trim() !== "" && document.getElementById("creer-prof-email").value.includes("@") && document.getElementById("creer-prof-mdp").value.length >= 6;
+      document.getElementById("btn-creer-prof").disabled = !ok;
+    }
+    for (const id of ["creer-prof-nom", "creer-prof-email", "creer-prof-mdp"]) document.getElementById(id).addEventListener("input", verifierValiditeCreerProf);
+    document.getElementById("btn-creer-prof").addEventListener("click", async () => {
+      const statut = document.getElementById("statut-creer-prof");
+      statut.textContent = "Création…";
+      try {
+        const corps = { nom: document.getElementById("creer-prof-nom").value.trim(), email: document.getElementById("creer-prof-email").value.trim(), motDePasse: document.getElementById("creer-prof-mdp").value };
+        const reponse = await fetch("/api/admin/profs/creer", { method: "POST", headers: enteteAdmin(), body: JSON.stringify(corps) });
+        const retour = await reponse.json();
+        if (!reponse.ok) {
+          statut.textContent = formaterErreur(retour);
+          return;
+        }
+        statut.textContent = `Compte créé pour ${retour.nom} (${retour.email}).`;
+        for (const id of ["creer-prof-nom", "creer-prof-email", "creer-prof-mdp"]) document.getElementById(id).value = "";
+        document.getElementById("btn-creer-prof").disabled = true;
+        document.getElementById("carte-creer-prof").hidden = true;
+        await chargerProfsAdmin();
+      } catch (e) {
+        statut.textContent = "Erreur inattendue : " + e.message;
+      }
+    });
+
+    document.getElementById("btn-toggle-inviter-prof").addEventListener("click", () => {
+      const carte = document.getElementById("carte-inviter-prof");
+      carte.hidden = !carte.hidden;
+    });
+    document.getElementById("inviter-prof-email").addEventListener("input", () => {
+      document.getElementById("btn-inviter-prof").disabled = !document.getElementById("inviter-prof-email").value.includes("@");
+    });
+    document.getElementById("btn-inviter-prof").addEventListener("click", async () => {
+      const statut = document.getElementById("statut-inviter-prof");
+      statut.textContent = "Génération…";
+      try {
+        const reponse = await fetch("/api/admin/profs/inviter", { method: "POST", headers: enteteAdmin(), body: JSON.stringify({ email: document.getElementById("inviter-prof-email").value.trim() }) });
+        const retour = await reponse.json();
+        if (!reponse.ok) {
+          statut.textContent = formaterErreur(retour);
+          return;
+        }
+        statut.textContent = "";
+        document.getElementById("resultat-invitation-consigne").textContent = `À transmettre à ${retour.email} : le code ne fonctionne qu'avec cet email.`;
+        document.getElementById("resultat-invitation-code").textContent = retour.code;
+        document.getElementById("resultat-invitation").hidden = false;
+        document.getElementById("inviter-prof-email").value = "";
+        document.getElementById("btn-inviter-prof").disabled = true;
+        document.getElementById("carte-inviter-prof").hidden = true;
+      } catch (e) {
+        statut.textContent = "Erreur inattendue : " + e.message;
+      }
+    });
+    document.getElementById("btn-copier-invitation").addEventListener("click", async () => {
+      const champ = document.getElementById("resultat-invitation-code");
+      const plage = document.createRange();
+      plage.selectNodeContents(champ);
+      window.getSelection().removeAllRanges();
+      window.getSelection().addRange(plage);
+      try {
+        await navigator.clipboard.writeText(champ.textContent);
+        document.getElementById("statut-inviter-prof").textContent = "Code copié.";
+      } catch (e) {
+        document.getElementById("statut-inviter-prof").textContent = "Copie impossible : sélectionnez le code et copiez-le.";
+      }
+    });
+
+    /**
      * Prompt "Système visuel partagé (v3)", Étape 4 : `#btn-avatar-prof` ouvre/ferme
      * `#menu-compte-prof` (email complet + déconnexion) — remplace l'ancienne `#ligne-connectee`
      * toujours affichée en ligne. Un simple bascule au tap (pas de fermeture au clic extérieur,
@@ -4098,6 +4412,7 @@
       if (supabaseClient) await supabaseClient.auth.signOut();
       session = null;
       document.getElementById("menu-compte-prof").hidden = true;
+      masquerAdministration();
       document.getElementById("compte-avatar").hidden = true;
       document.getElementById("composition").hidden = true;
       document.getElementById("connexion").hidden = false;

@@ -60,7 +60,7 @@ for (const chemin of routes) {
   const i = src.indexOf(".signInWithPassword(");
   const apres = src.slice(i);
   verifier(!/\.(from|rpc)\(/.test(apres), `${chemin} : accès aux données APRÈS signInWithPassword (le client enverrait le JWT utilisateur, plus service_role)`);
-  verifier(!/provisionnerEleve\(/.test(apres), `${chemin} : provisionnerEleve APRÈS signInWithPassword`);
+  verifier(!/provisionner(Eleve|Prof)\(/.test(apres), `${chemin} : provisionnerEleve/provisionnerProf APRÈS signInWithPassword`);
 }
 
 const suspect = "await admin.auth.signInWithPassword({});\nawait admin.from(\"eleves\").select();";

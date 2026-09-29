@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { lireSupabaseUrl } from "./urlSupabase";
+import { profDepuisLigne, type ProfAuthentifie } from "./authProf";
 
 /**
  * Client serveur uniquement (clé service_role) — jamais exposé au navigateur. Contourne RLS : les 13 tables
@@ -21,21 +22,22 @@ export function supabaseAdmin() {
 
 /**
  * Authentifie le prof à partir du header Authorization: Bearer <jwt> (Supabase Auth,
- * email/mot de passe — Étape 2). Un seul compte professeur pour ce pilote : la seule
- * vérification nécessaire est que le token soit valide et corresponde à une ligne `profs`.
+ * email/mot de passe — Étape 2) : le token doit être valide, correspondre à une ligne `profs` ET
+ * (rôle admin-prof, RAPPORT §26) à un compte non désactivé (`actif`). Renvoie aussi `estAdmin`.
  */
-export async function profAuthentifie(authHeader: string | undefined): Promise<{ id: string } | null> {
+export async function profAuthentifie(authHeader: string | undefined, admin: ReturnType<typeof supabaseAdmin> = supabaseAdmin()): Promise<ProfAuthentifie | null> {
   const token = authHeader?.startsWith("Bearer ") ? authHeader.slice("Bearer ".length) : undefined;
   if (!token) return null;
 
-  const admin = supabaseAdmin();
   const { data: userData, error: userError } = await admin.auth.getUser(token);
   if (userError || !userData.user) return null;
 
-  const { data: prof, error: profError } = await admin.from("profs").select("id").eq("id", userData.user.id).maybeSingle();
+  // Rôle admin-prof (RAPPORT §26) : `actif` et `est_admin` sont relus à chaque requête. Un compte désactivé est
+  // refusé ICI (401 partout : ce point unique est appelé par toutes les routes prof), en plus du bannissement Auth.
+  const { data: prof, error: profError } = await admin.from("profs").select("id, nom, actif, est_admin").eq("id", userData.user.id).maybeSingle();
   if (profError || !prof) return null;
 
-  return { id: prof.id as string };
+  return profDepuisLigne(prof as { id: string; nom: string | null; actif: boolean | null; est_admin: boolean | null });
 }
 
 /**

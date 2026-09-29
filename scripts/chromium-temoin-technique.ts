@@ -884,6 +884,117 @@ async function scenarioEtendu(navigateur: any, base: string, largeur: number) {
  * enveloppe de test de `temoin.ecrans` (restaurée) : somme 3 ✔, parité 2 ✘, diviseurs 1 ✔, signes 4 ✔ →
  * 8/10 = 80 % pondéré (le comptage d'origine donnerait 3/4 = 75 %).
  */
+/** Rôle admin-prof (RAPPORT §26) : l'onglet « Admin » n'existe que pour un compte que le SERVEUR déclare admin ; parcours réel dans prof.html. */
+async function scenarioAdmin(navigateur: any, base: string, largeur: number) {
+  const l = `${largeur}`;
+  const hauteur = largeur < 600 ? 800 : 900;
+  const UUID_BOB = "00000000-0000-4000-8000-0000000000b0";
+  const UUID_CARL = "00000000-0000-4000-8000-0000000000c0";
+  const UUID_DANA = "00000000-0000-4000-8000-0000000000d0";
+
+  // --- 1. Prof NON admin : aucun onglet, et l'API admin refuse côté serveur (403) ---
+  const ordinaire = creerScenario();
+  installerBase(ordinaire.base);
+  {
+    const { page, contexte, journal } = await preparerPage(navigateur, base, largeur, hauteur, `prof:${ordinaire.profId}`, "p@x");
+    const moiRepondu = page.waitForResponse((r: any) => r.url().endsWith("/api/profs/moi"));
+    await page.goto(base + "/prof.html");
+    await page.waitForSelector('button[data-onglet="taches"]:visible');
+    const moi = await (await moiRepondu).json();
+    verifier(moi.est_admin === false, `${l} admin : /api/profs/moi d'un prof ordinaire doit dire est_admin=false (${JSON.stringify(moi)})`);
+    await page.waitForTimeout(150);
+    verifier(!(await page.locator("#onglet-bouton-admin").isVisible()) && !(await page.locator("#onglet-admin").isVisible()), `${l} admin : ni bouton ni panneau « Admin » pour un prof non admin`);
+    const refus = (await page.evaluate(`fetch("/api/admin/profs", { headers: { Authorization: "Bearer prof:${ordinaire.profId}" } }).then(async (r) => ({ statut: r.status, corps: await r.json() }))`)) as { statut: number; corps: { erreur: string } };
+    verifier(refus.statut === 403 && refus.corps.erreur === "Réservé aux administrateurs", `${l} admin : l'API admin refuse un prof non admin même appelée à la main (${JSON.stringify(refus)})`);
+    verifier(journal.pageerrors.length === 0, `${l} admin (non admin) : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+    await contexte.close();
+  }
+
+  // --- 2. Prof admin : parcours complet ---
+  const sc = creerScenario();
+  const b = sc.base;
+  const profsBase = b.table("profs");
+  profsBase.splice(profsBase.findIndex((p) => p.id === sc.autreProfId), 1); // le 2e prof générique du scénario n'a ni nom ni compte Auth
+  const ligneAdmin = b.table("profs").find((p) => p.id === sc.profId)!;
+  Object.assign(ligneAdmin, { nom: "Alice Admin", est_admin: true, actif: true });
+  b.utilisateursAuth.set(sc.profId, { id: sc.profId, email: "alice@ecole.be", password: "ancien", banni: null });
+  for (const [id, nom, email, extra] of [
+    [UUID_BOB, "Bob Ordinaire", "bob@ecole.be", { est_admin: false, actif: true }],
+    [UUID_CARL, "Carl Autre-Admin", "carl@ecole.be", { est_admin: true, actif: true }],
+    [UUID_DANA, "Dana Inactive", "dana@ecole.be", { est_admin: false, actif: false }],
+  ] as [string, string, string, Record<string, unknown>][]) {
+    b.inserer("profs", { id, nom, ...extra });
+    b.utilisateursAuth.set(id, { id, email, password: "ancien", banni: null });
+  }
+  installerBase(b);
+  const { page, contexte, journal } = await preparerPage(navigateur, base, largeur, hauteur, `prof:${sc.profId}`, "alice@ecole.be");
+  page.on("dialog", (d: any) => d.accept());
+  await page.goto(base + "/prof.html");
+  await page.waitForSelector("#onglet-bouton-admin:visible");
+  await page.locator("#onglet-bouton-admin").click();
+  await page.waitForSelector("#onglet-admin:visible");
+  await page.waitForFunction(`document.querySelectorAll("#liste-profs-admin li").length === 4`);
+  const ligne = (nom: string) => page.locator("#liste-profs-admin li", { hasText: nom });
+  verifier((await ligne("Bob").innerText()).includes("bob@ecole.be"), `${l} admin : l'email de Bob (issu de Supabase Auth) est affiché`);
+  verifier((await ligne("Carl").innerText()).includes("Administrateur") && (await ligne("Carl").locator(".icone-action").count()) === 0, `${l} admin : un autre admin est signalé et n'a AUCUNE action`);
+  verifier((await ligne("Alice").innerText()).includes("(vous)") && (await ligne("Alice").locator(".icone-action").count()) === 0, `${l} admin : sa propre ligne est marquée « vous » et sans action`);
+  verifier((await ligne("Dana").innerText()).includes("Compte désactivé") && (await ligne("Dana").locator('[aria-label="Réactiver"]').count()) === 1, `${l} admin : un compte désactivé est signalé et proposé à la réactivation`);
+  await page.screenshot({ path: join(CAPTURES, `${l}-13-admin-liste.png`), fullPage: false });
+
+  // Mise en page : pas de défilement horizontal, barre de navigation à 5 onglets lisible, zones tactiles.
+  const mesures = (await page.evaluate(`(() => {
+    const boutons = [...document.querySelectorAll("#onglets-nav .onglet-bouton")].filter((b) => b.getBoundingClientRect().width > 0);
+    const icones = [...document.querySelectorAll("#liste-profs-admin .icone-action")].map((i) => { const r = i.getBoundingClientRect(); return Math.round(Math.min(r.width, r.height)); });
+    return { debordement: document.documentElement.scrollWidth > window.innerWidth, nbOnglets: boutons.length, largeurMin: Math.round(Math.min(...boutons.map((b) => b.getBoundingClientRect().width))), coupes: boutons.filter((b) => b.scrollWidth > b.clientWidth + 1).length, tailleIconeMin: Math.min(...icones) };
+  })()`)) as { debordement: boolean; nbOnglets: number; largeurMin: number; coupes: number; tailleIconeMin: number };
+  verifier(!mesures.debordement, `${l} admin : défilement horizontal de la page`);
+  verifier(mesures.nbOnglets === 5 && mesures.coupes === 0, `${l} admin : 5 onglets visibles, aucun libellé coupé (${JSON.stringify(mesures)})`);
+
+  // Création directe
+  await page.locator("#btn-toggle-creer-prof").click();
+  verifier(await page.locator("#btn-creer-prof").isDisabled(), `${l} admin : « Créer » désactivé tant que le formulaire est incomplet`);
+  await page.locator("#creer-prof-nom").fill("Nina Nouvelle");
+  await page.locator("#creer-prof-email").fill("nina@ecole.be");
+  await page.locator("#creer-prof-mdp").fill("secret12");
+  await page.screenshot({ path: join(CAPTURES, `${l}-14-admin-creation.png`), fullPage: false });
+  await page.locator("#btn-creer-prof").click();
+  await page.waitForFunction(`document.querySelectorAll("#liste-profs-admin li").length === 5`);
+  const nina = b.table("profs").find((p) => p.nom === "Nina Nouvelle");
+  verifier(!!nina && nina.est_admin !== true && [...b.utilisateursAuth.values()].some((u) => u.email === "nina@ecole.be"), `${l} admin : création directe = ligne profs non admin + compte Auth`);
+  verifier((await page.locator("#statut-creer-prof").innerText()).includes("Compte créé"), `${l} admin : message de création`);
+
+  // Code d'invitation lié à un e-mail
+  await page.locator("#btn-toggle-inviter-prof").click();
+  await page.locator("#inviter-prof-email").fill("Invitee@Ecole.be");
+  await page.locator("#btn-inviter-prof").click();
+  await page.waitForSelector("#resultat-invitation:visible");
+  const code = (await page.locator("#resultat-invitation-code").textContent()) ?? "";
+  verifier(code.length === 36, `${l} admin : code d'invitation affiché (36 caractères), obtenu « ${code} »`);
+  const champCode = (await page.evaluate(`(() => { const i = document.getElementById("resultat-invitation-code"); return { tronque: i.scrollWidth > i.clientWidth + 1 }; })()`)) as { tronque: boolean };
+  verifier(!champCode.tronque, `${l} admin : le code est affiché EN ENTIER dans son champ (36 caractères lisibles)`);
+  const inv = b.table("invitations_prof").find((i) => i.code === code);
+  verifier(!!inv && inv.email_cible === "invitee@ecole.be" && inv.cree_par === sc.profId, `${l} admin : code lié à l'e-mail et rattaché à l'admin (${JSON.stringify(inv)})`);
+  await page.screenshot({ path: join(CAPTURES, `${l}-15-admin-code.png`), fullPage: false });
+
+  // Désactivation, réactivation, réinitialisation
+  await ligne("Bob").locator('[aria-label="Désactiver"]').click();
+  await page.waitForFunction(`[...document.querySelectorAll("#liste-profs-admin li")].some((li) => li.textContent.includes("Bob") && li.textContent.includes("Compte désactivé"))`);
+  verifier(b.table("profs").find((p) => p.id === UUID_BOB)!.actif === false && b.utilisateursAuth.get(UUID_BOB)!.banni === "876000h", `${l} admin : désactivation (actif=false + bannissement Auth)`);
+  await ligne("Dana").locator('[aria-label="Réactiver"]').click();
+  await page.waitForFunction(`![...document.querySelectorAll("#liste-profs-admin li")].some((li) => li.textContent.includes("Dana") && li.textContent.includes("Compte désactivé"))`);
+  verifier(b.table("profs").find((p) => p.id === UUID_DANA)!.actif === true && b.utilisateursAuth.get(UUID_DANA)!.banni === null, `${l} admin : réactivation (actif=true, ban levé)`);
+  await ligne("Bob").locator('[aria-label="Réinitialiser le mot de passe"]').click();
+  await page.locator("#reset-prof-mdp").fill("nouveau-mdp-1");
+  await page.screenshot({ path: join(CAPTURES, `${l}-16-admin-reset.png`), fullPage: false });
+  await page.getByRole("button", { name: "Enregistrer" }).click();
+  await page.waitForFunction(`document.getElementById("statut-liste-profs-admin").textContent.includes("réinitialisé")`);
+  verifier(b.utilisateursAuth.get(UUID_BOB)!.password === "nouveau-mdp-1", `${l} admin : mot de passe réinitialisé côté Auth`);
+  verifier(!((await page.evaluate(`document.documentElement.scrollWidth > window.innerWidth`)) as boolean), `${l} admin : pas de défilement horizontal en fin de parcours`);
+  if (largeur < 600) verifier(mesures.tailleIconeMin >= 30, `${l} admin : zones d'action lisibles (${mesures.tailleIconeMin}px, même composant que les élèves)`);
+  verifier(journal.pageerrors.length === 0, `${l} admin : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+  await contexte.close();
+}
+
 async function scenarioPoids(navigateur: any, base: string, largeur: number) {
   imposerProfilAssignation("base");
   const s: Scenario = creerScenario();
@@ -954,6 +1065,8 @@ async function main() {
       controlerReponsesHttp(`${largeur} étendu`);
       await scenarioProf(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} prof`);
+      await scenarioAdmin(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} admin`, [{ statut: 403, motif: /^GET \/api\/admin\/profs$/, pourquoi: "un prof non admin appelle l'API admin à la main : refus serveur attendu (403)" }]);
       await scenarioPoids(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} poids`);
     }

@@ -14,6 +14,7 @@
     "test-rls-schema": "tsx scripts/test-rls-schema.ts",
     "test-diag-invitation": "tsx scripts/test-diag-invitation.ts",
     "test-url-supabase": "tsx scripts/test-url-supabase.ts",
+    "test-admin-profs": "tsx scripts/test-admin-profs.ts",
     "test-texte-math": "tsx scripts/test-texte-math.ts",
     "test-design-system": "tsx scripts/test-design-system.ts",
     "chromium-temoin": "tsx scripts/chromium-temoin-technique.ts"

@@ -15,9 +15,65 @@ type Resultat = { data: any; error: { message: string } | null };
 const TABLES_AVEC_ID = new Set(["profs", "classes", "eleves", "taches", "taches_composition", "taches_assignations", "taches_assignations_eleves", "exercices_assignes", "reponses"]);
 const COLONNES_HORODATAGE = ["date_creation", "horodatage", "horodatage_debut", "date_debut"];
 
+export interface UtilisateurAuth {
+  id: string;
+  email: string;
+  password: string;
+  /** `ban_duration` reçu (ex. « 876000h ») ; `null` = non banni (jamais banni, ou « none »). */
+  banni: string | null;
+}
+
 export class BaseMemoire {
   tables = new Map<string, Ligne[]>();
   maintenant: () => string = () => new Date().toISOString();
+
+  /** Comptes « Supabase Auth » simulés, pour les routes qui appellent `admin.auth.admin.*` (rôle admin-prof, RAPPORT §26). */
+  utilisateursAuth = new Map<string, UtilisateurAuth>();
+  /** Journal des appels `auth.admin.*` (nom + argument utile), pour que les tests vérifient ce qui a été demandé à Auth. */
+  appelsAuth: { appel: string; id?: string; attributs?: Record<string, unknown> }[] = [];
+  /** Force l'échec du prochain `updateUserById` (message donné), une seule fois. */
+  echecProchaineMajAuth: string | null = null;
+
+  auth = {
+    /** Connexion e-mail / mot de passe simulée (ni jeton réel, ni bannissement : ce n'est PAS le comportement de GoTrue). */
+    signInWithPassword: async (a: { email: string; password: string }) => {
+      const u = [...this.utilisateursAuth.values()].find((x) => x.email.toLowerCase() === a.email.toLowerCase() && x.password === a.password);
+      return u ? { data: { session: { access_token: `prof:${u.id}`, refresh_token: "refresh" } }, error: null } : { data: { session: null }, error: { message: "Invalid login credentials" } };
+    },
+    admin: {
+      createUser: async (a: { email: string; password: string; email_confirm?: boolean }) => {
+        this.appelsAuth.push({ appel: "createUser", attributs: { email: a.email } });
+        if ([...this.utilisateursAuth.values()].some((u) => u.email.toLowerCase() === a.email.toLowerCase())) {
+          return { data: { user: null }, error: { message: "A user with this email address has already been registered" } };
+        }
+        const id = randomUUID();
+        this.utilisateursAuth.set(id, { id, email: a.email, password: a.password, banni: null });
+        return { data: { user: { id, email: a.email } }, error: null };
+      },
+      getUserById: async (id: string) => {
+        const u = this.utilisateursAuth.get(id);
+        return u ? { data: { user: { id: u.id, email: u.email } }, error: null } : { data: { user: null }, error: { message: "User not found" } };
+      },
+      updateUserById: async (id: string, attributs: { password?: string; ban_duration?: string }) => {
+        this.appelsAuth.push({ appel: "updateUserById", id, attributs: { ...attributs } });
+        if (this.echecProchaineMajAuth) {
+          const message = this.echecProchaineMajAuth;
+          this.echecProchaineMajAuth = null;
+          return { data: { user: null }, error: { message } };
+        }
+        const u = this.utilisateursAuth.get(id);
+        if (!u) return { data: { user: null }, error: { message: "User not found" } };
+        if (attributs.password !== undefined) u.password = attributs.password;
+        if (attributs.ban_duration !== undefined) u.banni = attributs.ban_duration === "none" ? null : attributs.ban_duration;
+        return { data: { user: { id: u.id } }, error: null };
+      },
+      deleteUser: async (id: string) => {
+        this.appelsAuth.push({ appel: "deleteUser", id });
+        this.utilisateursAuth.delete(id);
+        return { data: null, error: null };
+      },
+    },
+  };
 
   table(nom: string): Ligne[] {
     if (!this.tables.has(nom)) this.tables.set(nom, []);
