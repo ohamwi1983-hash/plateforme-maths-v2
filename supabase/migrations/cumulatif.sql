@@ -127,6 +127,10 @@ alter table taches add column if not exists chrono_mode text not null default 'a
 alter table taches add column if not exists chrono_duree_secondes int;
 alter table reponses add column if not exists duree_ecoulee_secondes int;
 
+-- Score partiel (RAPPORT §16) : fraction de réponse déjà juste d'un `not_equivalent` (voir
+-- supabase/schema.sql). Nullable : les lignes existantes restent NULL = comportement inchangé.
+alter table reponses add column if not exists fraction_correcte double precision check (fraction_correcte is null or (fraction_correcte >= 0 and fraction_correcte < 1));
+
 -- Correctif "Chrono de réponse" (révision "horodatage de départ côté serveur") : horodatage de
 -- départ d'écran, seule source de vérité du temps (voir supabase/schema.sql pour la justification
 -- complète). `create table if not exists` : idempotent comme le reste de ce fichier.

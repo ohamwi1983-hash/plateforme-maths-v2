@@ -89,6 +89,8 @@ export interface LigneReponse {
   valeur_saisie: string;
   statut: StatutVerification;
   indice_utilise: boolean;
+  /** Score partiel (RAPPORT §16) : `null`/absent = pas de fraction. Jamais exposée par une réponse HTTP. */
+  fraction_correcte?: number | null;
 }
 
 export interface DonneesExercice {
@@ -102,7 +104,7 @@ export interface DonneesExercice {
 export async function chargerDonneesExercice(admin: AdminClient, exerciceId: string): Promise<DonneesExercice> {
   const { data: reponses, error: erreurReponses } = await admin
     .from("reponses")
-    .select("exercice_assigne_id, champ, valeur_saisie, statut, indice_utilise")
+    .select("exercice_assigne_id, champ, valeur_saisie, statut, indice_utilise, fraction_correcte")
     .eq("exercice_assigne_id", exerciceId)
     .order("horodatage", { ascending: true });
   if (erreurReponses) throw new Error(erreurReponses.message);
@@ -148,18 +150,20 @@ export function etatTentativesAvecChrono(
   debuts: readonly LigneDebutEcran[],
   contexte: Pick<ContexteTache, "tentativesMax" | "aidePenalitePourcent" | "chronoMode" | "chronoDureeSecondes">,
   maintenant: Date,
+  /** Fractions (`reponses.fraction_correcte`) dans le MÊME ordre que `statutsChronologiques` ; omises = comportement d'origine. */
+  fractionsChronologiques?: readonly (number | null | undefined)[],
 ): EtatChampTentatives {
-  const normal = calculerEtatChampTentatives(statutsChronologiques, contexte.tentativesMax, aideUtilisee, contexte.aidePenalitePourcent, false);
+  const normal = calculerEtatChampTentatives(statutsChronologiques, contexte.tentativesMax, aideUtilisee, contexte.aidePenalitePourcent, false, fractionsChronologiques);
   if (normal.terminee) return normal;
   const debut = horodatageDebutPertinent(contexte.chronoMode, champ, debuts);
   const expire = calculerChronoExpire(contexte.chronoMode, contexte.chronoDureeSecondes, debut, maintenant);
-  return expire ? calculerEtatChampTentatives(statutsChronologiques, contexte.tentativesMax, aideUtilisee, contexte.aidePenalitePourcent, true) : normal;
+  return expire ? calculerEtatChampTentatives(statutsChronologiques, contexte.tentativesMax, aideUtilisee, contexte.aidePenalitePourcent, true, fractionsChronologiques) : normal;
 }
 
 export function calculerEtatChamp(champ: string, donnees: DonneesExercice, contexte: ContexteTache, maintenant: Date): EtatChamp {
   const historique = donnees.reponsesParChamp.get(champ) ?? [];
   const aideUtilisee = donnees.champsAvecAide.has(champ) || historique.some((h) => h.indice_utilise);
-  const etat = etatTentativesAvecChrono(champ, historique.map((h) => h.statut), aideUtilisee, donnees.debuts, contexte, maintenant);
+  const etat = etatTentativesAvecChrono(champ, historique.map((h) => h.statut), aideUtilisee, donnees.debuts, contexte, maintenant, historique.map((h) => h.fraction_correcte));
   const derniereLigne = historique.length > 0 ? historique[historique.length - 1] : null;
   return {
     champ,

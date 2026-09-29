@@ -27,6 +27,7 @@ interface ReponseBrute {
   bug_detecte: string | null;
   horodatage: string;
   duree_ecoulee_secondes: number | null;
+  fraction_correcte: number | null;
 }
 
 /**
@@ -129,7 +130,7 @@ export const gererElevesMesResultats = avecGestionErreurs(async function handler
   // `derniereStatutParCle` ci-dessous (dernière écriture = la plus récente, en itérant dans cet ordre).
   const { data: reponsesBrutes, error: erreurReponses } = await admin
     .from("reponses")
-    .select("exercice_assigne_id, champ, statut, bug_detecte, horodatage, duree_ecoulee_secondes")
+    .select("exercice_assigne_id, champ, statut, bug_detecte, horodatage, duree_ecoulee_secondes, fraction_correcte")
     .in("exercice_assigne_id", exerciceIds)
     .order("horodatage", { ascending: true })
     .returns<ReponseBrute[]>();
@@ -144,6 +145,8 @@ export const gererElevesMesResultats = avecGestionErreurs(async function handler
   // Historique chronologique des statuts par (exercice, champ) — nécessaire à l'état du moteur de
   // tentatives (un champ n'est « terminé » que réussi ou révélé, jamais dès la 1re réponse).
   const historiqueStatutsParCle = new Map<string, StatutVerification[]>();
+  // Fractions (score partiel, RAPPORT §16) dans le MÊME ordre — transmises au moteur pour une dérivation identique partout ; le pourcentage affiché ici reste fondé sur les statuts.
+  const historiqueFractionsParCle = new Map<string, (number | null)[]>();
   const derniereHorodatageParTache = new Map<string, string>();
   // Tâche "barre de progression segmentée" (§160/§161) : construite dans la MÊME passe (le score
   // d'un segment ne dépend plus, depuis §161, du statut FINAL d'une clé — seulement du nombre
@@ -162,6 +165,8 @@ export const gererElevesMesResultats = avecGestionErreurs(async function handler
     const cleHistorique = `${r.exercice_assigne_id}:${r.champ}`;
     if (!historiqueStatutsParCle.has(cleHistorique)) historiqueStatutsParCle.set(cleHistorique, []);
     historiqueStatutsParCle.get(cleHistorique)!.push(r.statut);
+    if (!historiqueFractionsParCle.has(cleHistorique)) historiqueFractionsParCle.set(cleHistorique, []);
+    historiqueFractionsParCle.get(cleHistorique)!.push(r.fraction_correcte ?? null);
     const tacheId = tacheIdParExercice.get(r.exercice_assigne_id);
     bugsAvecTache.push({ tacheId, bug: r.bug_detecte });
     if (tacheId) derniereHorodatageParTache.set(tacheId, r.horodatage);
@@ -216,7 +221,7 @@ export const gererElevesMesResultats = avecGestionErreurs(async function handler
       if (!contexte) continue; // tâche introuvable : déjà écartée plus haut, défensif
       for (const champ of ex.champs_attendus ?? []) {
         const statuts = historiqueStatutsParCle.get(`${ex.id}:${champ}`) ?? [];
-        const etat = etatTentativesAvecChrono(champ, statuts, false, debutsParExercice.get(ex.id) ?? [], contexte, maintenant);
+        const etat = etatTentativesAvecChrono(champ, statuts, false, debutsParExercice.get(ex.id) ?? [], contexte, maintenant, historiqueFractionsParCle.get(`${ex.id}:${champ}`));
         if (etat.terminee) {
           if (!champsTermineParExercice.has(ex.id)) champsTermineParExercice.set(ex.id, new Set());
           champsTermineParExercice.get(ex.id)!.add(champ);
