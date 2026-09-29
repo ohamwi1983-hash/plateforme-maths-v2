@@ -164,3 +164,9 @@ create table if not exists aides_utilisees (
   horodatage timestamptz not null default now(),
   primary key (exercice_assigne_id, champ)
 );
+
+-- Sécurité (RAPPORT §22) : RLS activé, sans AUCUNE police, sur `invitations_prof` et `profs` (voir
+-- supabase/schema.sql pour la justification complète). Idempotent : `enable row level security` est un
+-- no-op si RLS est déjà activé. Les 11 autres tables n'ont PAS RLS (décision différée, RAPPORT §22-D).
+alter table invitations_prof enable row level security;
+alter table profs enable row level security;
