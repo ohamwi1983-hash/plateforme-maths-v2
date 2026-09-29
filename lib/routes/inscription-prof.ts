@@ -1,6 +1,7 @@
 import type { RequeteHttp, ReponseHttp } from "../httpTypes";
 import { avecGestionErreurs } from "../avecGestionErreurs";
 import { supabaseAdmin } from "../supabaseAdmin";
+import { diagApres, diagAvant } from "../diagInvitation"; // DIAG-INVITATION (temporaire, RAPPORT §24)
 
 interface CorpsInscriptionProf {
   codeInvitation: string;
@@ -65,11 +66,13 @@ export const gererInscriptionProf = avecGestionErreurs(async function handler(re
   const email = req.body.email.trim();
   const nom = req.body.nom.trim();
 
+  diagAvant(req.body.codeInvitation, code); // DIAG-INVITATION (temporaire)
   const { data: invitation, error: erreurInvitation } = await admin
     .from("invitations_prof")
     .select("code, utilise")
     .eq("code", code)
     .maybeSingle();
+  await diagApres(admin, code, { data: invitation, error: erreurInvitation }); // DIAG-INVITATION (temporaire)
   if (erreurInvitation || !invitation) {
     res.status(404).json({ erreur: "Code d'invitation invalide" });
     return;
