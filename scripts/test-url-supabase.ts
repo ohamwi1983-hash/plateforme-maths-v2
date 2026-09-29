@@ -109,8 +109,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = jwt;
   const racine = join(__dirname, "..");
   const fichiers = (d: string): string[] => readdirSync(join(racine, d)).flatMap((n) => { const r = `${d}/${n}`; return statSync(join(racine, r)).isDirectory() ? fichiers(r) : r.endsWith(".ts") ? [r] : []; });
   const lecteurs = ["lib", "api", "src"].flatMap(fichiers).filter((f) => /process\.env\.SUPABASE_URL|env\.SUPABASE_URL/.test(readFileSync(join(racine, f), "utf8"))).sort();
-  // lib/diagInvitation.ts : diagnostic TEMPORAIRE (RAPPORT §24), lit la valeur BRUTE exprès pour afficher l'hôte réel ; à retirer de cette liste avec lui.
-  verifier(JSON.stringify(lecteurs) === JSON.stringify(["lib/diagInvitation.ts", "lib/urlSupabase.ts"]), `lecteurs de SUPABASE_URL : ${JSON.stringify(lecteurs)} (seul lib/urlSupabase.ts doit la lire ; lib/diagInvitation.ts est temporaire)`);
+  verifier(JSON.stringify(lecteurs) === JSON.stringify(["lib/urlSupabase.ts"]), `lecteurs de SUPABASE_URL : ${JSON.stringify(lecteurs)} (seul lib/urlSupabase.ts doit la lire)`);
 
   if (echecs.length > 0) {
     console.error(`ÉCHEC : ${echecs.length} vérification(s) sur ${nb}`);

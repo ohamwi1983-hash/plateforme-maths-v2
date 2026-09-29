@@ -1157,3 +1157,27 @@ Correctif : `scripts/support/fauxSupabase.ts` `enUneLigneSiDemande` (`.single()`
 - Le garde-fou ne lit que `#erreur-fatale-pilote` et `#statut-connexion` : une erreur écrite dans un autre élément (`#statut-liste-eleves`, `#statut-creer-prof`…) n'est pas vue. Un `catch` qui avale l'erreur SANS rien afficher reste invisible pour tous les canaux.
 - `chargerIdentiteProf` reste appelé en premier (§26) : sa robustesse est voulue, mais la raison invoquée au §26-G (« défaut du harnais antérieur ») est remplacée par ce §27.
 - D'autres écarts de fidélité du faux Supabase sont possibles (il n'implémente ni contraintes ni tous les opérateurs) : chacun se découvre à l'usage.
+
+
+## §28 : Retrait du diagnostic DIAG-INVITATION (§24) ; bannissement Auth vérifié en production
+
+Aucun SQL, aucun changement de comportement de la route : le diagnostic n'avait qu'observé.
+
+### A. Retiré (tout ce que le §24 listait)
+`lib/diagInvitation.ts` et `scripts/test-diag-invitation.ts` supprimés ; entrée `test-diag-invitation` retirée de `package.json` ; les 3 lignes marquées `DIAG-INVITATION` retirées de `lib/routes/inscription-prof.ts` (import, `diagAvant`, `diagApres`) ; deux mentions devenues fausses corrigées : `scripts/test-url-supabase.ts` (le seul lecteur de `SUPABASE_URL` est désormais `lib/urlSupabase.ts`) et `scripts/test-admin-profs.ts` (le silence de `console.log` qui n'avait plus d'objet). `grep DIAG-INVITATION|diagInvitation|diagAvant|diagApres` hors `RAPPORT.md` (historique) : aucun résultat.
+
+### B. Motif : cause trouvée et corrigée (§25), inscription confirmée en production
+`SUPABASE_URL` se terminait par `/rest/v1/` (chemins doublés `/rest/v1/rest/v1/…`, PGRST125) ; variable corrigée sur Vercel, et normalisée défensivement par `lireSupabaseUrl` (§25). Rapporté par le professeur après déploiement : une nouvelle inscription par code d'invitation fonctionne normalement.
+
+### C. Le bannissement Auth (§26-G, « non vérifié contre le vrai GoTrue ») est vérifié pour la connexion
+Rapporté par le professeur sur la vraie base : un compte désactivé par `POST /api/admin/profs/:id/desactiver` **ne peut plus se connecter** (refus par Supabase Auth). Non testé : le renouvellement d'un jeton déjà émis (couvert de toute façon par `profAuthentifie`, 401 à chaque requête).
+
+### D. À faire de ton côté — les journaux de la période de diagnostic contiennent des codes
+Pendant le diagnostic, la fonction écrivait le code d'invitation SAISI en clair dans les journaux Vercel. Ces lignes (`DIAG-INVITATION`) restent dans les journaux jusqu'à leur expiration. Un code déjà utilisé est inoffensif ; **un code encore non utilisé qui y figure resterait valable**. Vérifier et supprimer si besoin :
+```sql
+select code, email_cible, utilise, cree_le from invitations_prof where not utilise order by cree_le;
+-- puis, pour chaque code non utilisé apparu dans les journaux :
+delete from invitations_prof where code = '…';
+```
+### E. Non traité (proposition inchangée)
+`inscription-prof.ts` répond toujours « Code d'invitation invalide » (404) quand la requête à la base ÉCHOUE (`erreurInvitation || !invitation`) : une panne de configuration comme celle du §25 reste indiscernable d'un code faux. Corriger = répondre 500 journalisé sur `erreurInvitation` seule. À décider séparément.
