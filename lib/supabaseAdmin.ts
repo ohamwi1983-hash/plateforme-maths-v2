@@ -1,9 +1,13 @@
 import { createClient } from "@supabase/supabase-js";
 
 /**
- * Client serveur uniquement (clé service_role) — jamais exposé au navigateur. Contourne RLS,
- * ce qui est sans conséquence ici puisque RLS est volontairement hors scope pour ce pilote
- * (un seul prof, une seule classe — voir supabase/schema.sql et le rapport de fin).
+ * Client serveur uniquement (clé service_role) — jamais exposé au navigateur. Contourne RLS : les 13 tables
+ * ont RLS activé SANS police (RAPPORT §22-§23), donc ce client est le SEUL chemin d'accès aux données.
+ *
+ * PIÈGE (mesuré, RAPPORT §23-D) : après `admin.auth.signInWithPassword(...)`, les `admin.from(...)` du MÊME client
+ * partent avec le JWT de l'utilisateur (rôle `authenticated`) : RLS s'applique alors, sans police = 0 ligne. Faire
+ * tous les accès aux données AVANT un `signInWithPassword`, ou en créer un autre `supabaseAdmin()`.
+ * `scripts/test-rls-schema.ts` le vérifie statiquement.
  */
 export function supabaseAdmin() {
   const url = process.env.SUPABASE_URL;

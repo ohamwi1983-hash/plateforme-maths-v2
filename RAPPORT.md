@@ -968,3 +968,39 @@ Même mécanisme sur les 11 autres tables — `aides_utilisees, classes, debuts_
 ### E. Limites
 - Test statique : il ne prouve pas le comportement de la base, seulement que le SQL reste présent ; la preuve de comportement est le §C (émulation).
 - Sans police, la lecture d'un client `authenticated` est aussi vide : si un futur écran lit ces tables depuis le navigateur, il faudra une police, décision explicite.
+
+
+## §23 : RLS activé (sans police) sur les 11 autres tables — les 13 tables du pilote sont protégées
+
+Suite de la §22 (question d'étendue, §22-D) sur ordre explicite. **Migration SQL : OUI** — 11 instructions idempotentes, dans le même commit que `schema.sql` : `supabase/migrations/cumulatif.sql:176-186` (à EXÉCUTER sur la vraie base — la PR #9 (§22) doit l'avoir été avant ou en même temps) et `supabase/schema.sql:278-288` (comment `:274-277`).
+
+### A. Tables
+`aides_utilisees, classes, debuts_ecran, eleves, exercices_assignes, inscriptions, reponses, taches, taches_assignations, taches_assignations_eleves, taches_composition`. Avec la §22 : `pg_class.relrowsecurity = true` sur 13 tables sur 13 (mesuré sur base neuve issue de `schema.sql`).
+
+### B. Preuve avant/après sur un vrai PostgreSQL 16 (cluster local jetable, rôles `anon`/`authenticated`/`service_role` ÉMULÉS avec les privilèges par défaut de Supabase)
+Une ligne insérée dans chacune des 13 tables, puis lecture (`select count(*)`) et modification (`update t set 1re_colonne = 1re_colonne`) sous chaque rôle :
+- **AVANT (état de `main`, RLS sur 2 tables)** : `anon` lit **1 ligne et modifie 1 ligne** dans **11 tables sur 13** ; `authenticated` lit 1 ligne dans les mêmes 11 ; `invitations_prof` et `profs` : 0/0.
+- **APRÈS (migration rejouée deux fois sur cette base, données présentes = idempotente)** : `anon` et `authenticated` : **0 ligne lue, 0 modifiée sur les 13 tables** ; `service_role` : 1 ligne lue partout.
+- `schema.sql` sur base neuve + mêmes lignes : même résultat.
+
+### C. « Aucun mécanisme Supabase interne n'a besoin d'un accès anon » — ce qui est PROUVÉ, et ce qui ne l'est pas
+Prouvé par le code du dépôt :
+1. Le seul client serveur est `supabaseAdmin()` (`service_role`), `lib/supabaseAdmin.ts:8-15` ; `SUPABASE_ANON_KEY` n'est lue que par `lib/routes/config.ts:17` pour la remettre au navigateur.
+2. Le navigateur ne fait que de l'authentification (`createClient` : `prof.html:1318`, `eleve.html:331`, `index.html:185`) : aucun `.from(`, `.rpc(`, `.channel(`, `.storage`, `functions.invoke` dans `public/`, `lib/`, `api/`, `src/`.
+3. Aucun trigger, fonction, vue, publication Realtime, `security definer`, `grant` ni extension dans `schema.sql`/`cumulatif.sql` : rien côté base ne lit ces tables sous un autre rôle.
+Prouvé sur le cluster local (propriétaire NON superuser `postgres_sim`, tables créées par lui, comme le rôle `postgres` de Supabase) :
+4. Le propriétaire lit tout malgré RLS (le SQL Editor / Table Editor du dashboard se connectent en `postgres`, propriétaire) : 1 ligne dans `classes`, `eleves`, `invitations_prof`, `reponses`.
+5. Le rôle qui joue GoTrue (`supabase_auth_admin`, droits sur `auth.users` seulement) supprimant un compte encore référencé par `profs` obtient **`violates foreign key constraint "profs_id_fkey"`**, comptes intacts : le contrôle de clé étrangère n'est pas aveuglé par RLS (les vérifications d'intégrité référentielle ignorent RLS).
+6. `service_role` : `insert` / `update` / `delete` réussis sur `invitations_prof` et `reponses`.
+**NON prouvé (documentation supabase.com bloquée par le proxy de cette session : `EGRESS_BLOCKED`)** : que le tableau de bord, Auth (GoTrue), Realtime ou Storage réels n'interrogent jamais ces tables sous `anon`/`authenticated`. Ce que je sais de l'architecture (GoTrue n'utilise que le schéma `auth` ; le dashboard se connecte en `postgres`) n'est PAS vérifié ici et repose sur ma connaissance générale. Contrôle à faire sur la vraie base après exécution : connexion prof, connexion élève, inscription élève et prof, une réponse d'élève, un rechargement du tableau de bord — puis `GET /rest/v1/eleves?select=nom` avec la clé `anon` (attendu `[]`).
+
+### D. Piège trouvé en vérifiant — `signInWithPassword` change le rôle du client (mesuré avec `@supabase/supabase-js` 2.115.0 réel, `fetch` simulé)
+Sur un client créé avec la clé de service : `admin.from(...)` avant `signInWithPassword` part avec `Authorization: Bearer <service_role>` ; **après, le MÊME client envoie `Bearer <JWT de l'utilisateur>`** (rôle `authenticated` ⇒ RLS s'applique, sans police : 0 ligne / écriture refusée). `admin.auth.admin.*` garde la clé de service (mesuré). Aucun code actuel n'est touché (les trois routes qui appellent `signInWithPassword` — `connexion-eleve.ts:84`, `inscription-eleve.ts:69`, `inscription-prof.ts:100` — ne font AUCUN accès aux données après), mais avant cette PR le piège était invisible (RLS absent) et il aurait échoué en silence. Garde-fou : `lib/supabaseAdmin.ts` (commentaire, ancien texte « RLS hors scope » corrigé) + `scripts/test-rls-schema.ts` (découverte automatique des fichiers appelant `signInWithPassword`, exactement 3 attendus, aucun `.from(`/`.rpc(`/`provisionnerEleve(` textuellement après).
+
+### E. Test qui verrouille la liste
+`scripts/test-rls-schema.ts` : 15 → 47 vérifications. Dans `schema.sql` ET `cumulatif.sql` : RLS sur exactement les 13 tables de la liste figée, aucune table créée sans RLS, aucune `create policy`, aucun `disable`, mêmes tables dans les deux fichiers, garde-fou `signInWithPassword` + témoin. Mutations vérifiées : retrait d'une ligne dans chaque fichier (2 échecs chacun), table nouvelle sans RLS dans `cumulatif.sql` (3), police (1), accès aux données après `signInWithPassword` (1).
+
+### F. Limites
+- Test statique : la preuve de comportement est le §B (émulation, pas la plateforme). Le garde-fou `signInWithPassword` est textuel (ordre dans le fichier) : une fonction qui reçoit le client déjà connecté n'est pas vue.
+- Sans police, un futur écran qui lirait ces tables depuis le navigateur ne recevra rien : il faudra une police, décision explicite, avec un test refus + accès.
+- Les lignes de `RAPPORT.md` antérieures qui disent « RLS hors scope » (`schema.sql` en-tête, sections anciennes) sont historiques ; l'état courant est ce paragraphe et CLAUDE.md.

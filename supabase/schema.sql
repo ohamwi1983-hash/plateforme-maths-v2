@@ -5,7 +5,8 @@
 -- exact où RLS devra être ajouté avant tout usage à plusieurs profs/classes réelles. Ce constat
 -- pèse davantage depuis l'ajout des comptes élèves (RLS absent = n'importe quel titulaire d'une
 -- clé anon peut, en théorie, requêter d'autres tables que les siennes) — noté, non traité ici, SAUF
--- `invitations_prof` et `profs` (RLS activé, RAPPORT §22 — voir la fin de ce fichier).
+-- `invitations_prof` et `profs` (RAPPORT §22), puis les 11 autres tables (RAPPORT §23) : RLS activé
+-- partout, sans police — voir la fin de ce fichier.
 
 create table profs (
   id uuid primary key references auth.users(id),
@@ -269,3 +270,19 @@ create table invitations_prof (
 -- la lecture des codes d'invitation, une `insert` permettrait d'en forger un.
 alter table invitations_prof enable row level security;
 alter table profs enable row level security;
+
+-- Sécurité (RAPPORT §23) : même traitement sur les 11 autres tables — RLS ACTIVÉ, SANS AUCUNE police.
+-- Toutes les tables du pilote ont désormais RLS ; le serveur (`service_role`) le contourne, le navigateur
+-- n'utilise la clé `anon` que pour `auth`. Ne créer une police qu'en même temps qu'un accès direct
+-- navigateur -> base (aucun aujourd'hui), avec un test qui reproduit l'accès refusé ET l'accès permis.
+alter table aides_utilisees enable row level security;
+alter table classes enable row level security;
+alter table debuts_ecran enable row level security;
+alter table eleves enable row level security;
+alter table exercices_assignes enable row level security;
+alter table inscriptions enable row level security;
+alter table reponses enable row level security;
+alter table taches enable row level security;
+alter table taches_assignations enable row level security;
+alter table taches_assignations_eleves enable row level security;
+alter table taches_composition enable row level security;
