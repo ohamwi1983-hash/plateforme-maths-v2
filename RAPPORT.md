@@ -1018,3 +1018,31 @@ Sur un client créé avec la clé de service : `admin.from(...)` avant `signInWi
 - **`select count(*) from pg_policies where schemaname = 'public'` → 0.** Aucune police nulle part sur la base réelle (y compris créée à la main dans le dashboard, ce que `scripts/test-rls-schema.ts` ne voit pas). Réserve n°2 du §G : levée.
 - **Conclusion.** Sur la base réelle, les 13 tables ont RLS activé et aucune police : `anon` et `authenticated` n'ont accès à aucune ligne, en lecture comme en écriture (même mécanisme, aucune police permissive). Preuves : catalogue (`relrowsecurity`, `pg_policies`) pour les 13 tables + preuve HTTP d'écriture sur `invitations_prof` (`42501`). Ce qui n'a JAMAIS été exercé en HTTP : une lecture `anon` sur une table non vide (`eleves` était vide) ; elle est déduite du mécanisme, sans réserve restante.
 - **Cause de l'écart code/production (§G, 1er point) toujours non établie** : RLS était déjà actif sur la base réelle avant les migrations de ce dépôt ; `pg_event_trigger` n'a pas été rapporté. Sans effet sur la protection, à connaître si une base est reconstruite : c'est `cumulatif.sql` (§22-§23) qui garantit désormais le RLS, plus un comportement de plateforme.
+
+
+## §24 : Diagnostic TEMPORAIRE — « Code d'invitation invalide » en production (DIAG-INVITATION)
+
+**Temporaire : à supprimer dès la cause trouvée** (supprimer `lib/diagInvitation.ts`, `scripts/test-diag-invitation.ts`, son entrée `package.json`, et les 3 lignes marquées `DIAG-INVITATION` de `lib/routes/inscription-prof.ts`). Aucun SQL, aucun changement de comportement.
+
+### A. Contexte (établi avant ce traçage)
+Le formulaire n'a aucune validation côté client (`public/prof.html:174-190`, `:4050-4066` : la valeur du champ part telle quelle) ; le serveur fait `code.trim()` puis `.eq("code", code).maybeSingle()` (`lib/routes/inscription-prof.ts:64,68-72`), égalité STRICTE et sensible à la casse ; **`erreurInvitation || !invitation` renvoie le même 404 « Code d'invitation invalide »** (ligne 73) qu'il y ait « aucune ligne » ou une erreur de requête réelle, l'erreur étant jetée. Trace Chromium locale (base en mémoire) : espaces, tabulation, espace insécable → 201 ; majuscule initiale, tout en majuscules, tirets typographiques, U+200B, caractère manquant → 404. Sur la production (constaté par le professeur) : code copié-collé, URL et rôle de clé confirmés corrects, échec identique ⇒ cause côté serveur/base, ou erreur de requête masquée.
+
+### B. Ce que le traçage écrit (une ligne `DIAG-INVITATION {json}` par étape, dans les logs de la fonction)
+- `avant` (`lib/diagInvitation.ts`, `diagAvant`) : le code reçu tel quel (`recu`, échappé par JSON), `longueurRecu` / `longueurApresTrim`, `pointsDeCodeRecu` (U+ en hexadécimal de chaque caractère), `hoteSupabaseUrl` (hôte seulement), `cleService` = revendications NON secrètes `role` / `ref` / `iss` du JWT de la clé de service (jamais la clé). Le `ref` permet de voir une clé d'un AUTRE projet que l'URL (une clé valide mais étrangère donne « Invalid API key » côté PostgREST, donc le même message masqué).
+- `apres` (`diagApres`) : `erreurRequete` (`message`, `code`, `details`, `hint` PostgREST) **distincte** de « aucune ligne » ; `decision` ∈ `TROUVE` / `AUCUNE_LIGNE` / `ERREUR_DE_REQUETE`.
+- `controle` (seulement quand la route va répondre « invalide ») : une lecture de contrôle de `invitations_prof` (50 lignes max, `count: exact`) : `nombreLignesVues`, `compteExact`, et pour chacune des 10 premières lignes — SANS jamais écrire le code stocké : `longueurStocke`, `egalExact`, `egalApresTrimDuStocke`, `egalSansCasse`, `caracteresHorsHexTiret` (points de code), `utilise`.
+- **Ajouts par rapport à la demande littérale** (code reçu + points de code, erreur distincte, nombre de lignes) : `cleService.ref`/`hoteSupabaseUrl` et les booléens de comparaison du contrôle — sans eux, un désaccord entre code stocké et code saisi serait invisible sans écrire le code stocké dans les logs. Retirables sans effet sur le reste.
+- Le code SAISI est journalisé en clair, à la demande du professeur : c'est un code à usage unique ; il ne faut pas laisser ce diagnostic en place ensuite. Ni mot de passe, ni email, ni clé ne sont journalisés.
+
+### C. Vérifications
+`scripts/test-diag-invitation.ts` (16 vérifications) : réponse de la route inchangée dans tous les cas (201 / 404 / 404), cas « aucune ligne » distinct de « erreur de requête » (`PGRST301` simulée), points de code et longueurs (majuscule `0046`, U+200B `200b`, longueur 40 → 37), `nombreLignesVues` (1 puis 0), code stocké jamais dans les logs, aucun mot de passe / email. Vérifié aussi avec le vrai `@supabase/supabase-js` (fetch simulé) : les deux requêtes sont bien formées (`GET …?select=code,utilise&code=eq.…`, puis `GET …?select=code,utilise&limit=50` avec `Prefer: count=exact`).
+
+### D. Comment lire les logs après une tentative
+| Ce que montrent les lignes | Cause |
+|---|---|
+| `decision: ERREUR_DE_REQUETE` (message/code/hint) | erreur PostgREST masquée par la ligne 73 (clé invalide → `PGRST301`/`Invalid API key`, table introuvable → `42P01`/`PGRST205`, droit refusé → `42501`) |
+| `AUCUNE_LIGNE`, `nombreLignesVues: 0` | le serveur ne voit aucune ligne : autre projet/base que celle où le code a été inséré (comparer `cleService.ref` et `hoteSupabaseUrl` au projet), ou clé sans droit de lecture (RLS actif sans police + clé non `service_role`) |
+| `AUCUNE_LIGNE`, `nombreLignesVues ≥ 1`, aucun `egalExact` | désaccord de contenu : `egalSansCasse` / `caracteresHorsHexTiret` / `longueurStocke` / `pointsDeCodeRecu` le montrent |
+| `TROUVE` | la recherche réussit ; le 404 vient d'ailleurs (la réponse serait alors 400 « déjà utilisé » ou 500, à recouper avec le corps de la réponse) |
+
+À compléter (cause, correctif, retrait du diagnostic) une fois les logs lus.
