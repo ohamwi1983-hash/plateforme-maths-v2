@@ -1,9 +1,11 @@
 // Test permanent — phase 2 §E : le design system reste (1) fidèle à sa documentation et (2) le seul
 // vocabulaire des composants d'écran du moteur.
-//  - les 32 tokens de `:root` (public/style.css) et le tableau de docs/design-system.md sont
+//  - les 35 tokens de `:root` (public/style.css) et le tableau de docs/design-system.md sont
 //    identiques (mêmes noms, mêmes valeurs, aucun token non documenté ni fantôme) ;
 //  - public/moteur/ecrans.css n'utilise que des `var(--token)` existants : aucune couleur, police,
-//    rayon ni longueur en dur (exceptions documentées : 0, 1px, 2px, 100%, em).
+//    rayon ni longueur en dur (exceptions documentées : 0, 1px, 2px, 100%, em) ;
+//  - phase 3b-1 : les 3 tokens de surbrillance `--coef-a|b|c` sont RÉSERVÉS (usage limité à `.moteur-coef-*`)
+//    et leur contraste est CALCULÉ ici (WCAG ≥ 4,5:1 sur tous les fonds de carte) : le contraste est un test permanent.
 // Lancer : `npx tsx scripts/test-design-system.ts`.
 
 export {}; // module
@@ -26,12 +28,13 @@ const bloc = css.slice(debut, fin).replace(/\/\*[\s\S]*?\*\//g, "");
 const tokensCss = new Map<string, string>();
 for (const m of bloc.matchAll(/^\s*(--[a-z0-9-]+):\s*(.+?);\s*$/gm)) tokensCss.set(m[1], m[2]);
 
-verifier(tokensCss.size === 32, `:root doit contenir exactement 32 tokens, trouvé ${tokensCss.size}`);
+const NB_TOKENS = 35;
+verifier(tokensCss.size === NB_TOKENS, `:root doit contenir exactement ${NB_TOKENS} tokens, trouvé ${tokensCss.size}`);
 
 const doc = readFileSync(join(RACINE, "docs/design-system.md"), "utf8");
 const tokensDoc = new Map<string, string>();
 for (const m of doc.matchAll(/^\|\s*`(--[a-z0-9-]+)`\s*\|\s*`([^`]+)`\s*\|/gm)) tokensDoc.set(m[1], m[2]);
-verifier(tokensDoc.size === 32, `docs/design-system.md doit documenter exactement 32 tokens, trouvé ${tokensDoc.size}`);
+verifier(tokensDoc.size === NB_TOKENS, `docs/design-system.md doit documenter exactement ${NB_TOKENS} tokens, trouvé ${tokensDoc.size}`);
 for (const [nom, valeur] of tokensCss) {
   verifier(tokensDoc.has(nom), `token ${nom} absent de docs/design-system.md`);
   verifier(!tokensDoc.has(nom) || tokensDoc.get(nom) === valeur, `token ${nom} : valeur documentée « ${tokensDoc.get(nom)} » ≠ valeur CSS « ${valeur} »`);
@@ -61,9 +64,44 @@ for (const m of ecrans.matchAll(/(?<![\w-])(margin|padding|gap)(-[a-z]+)?:\s*([^
   verifier(valeurs.every((v) => v === "0" || v === "auto" || v.startsWith("var(--espace-") || v.startsWith("calc(")), `ecrans.css : ${m[1]}${m[2] ?? ""} en dur « ${m[3].trim()} »`);
 }
 
+// ── Tokens de surbrillance des coefficients (phase 3b-1) : réservés + contraste calculé ──
+const tokensCoef = [...tokensCss.keys()].filter((n) => n.startsWith("--coef-"));
+verifier(tokensCoef.length === 3 && ["--coef-a", "--coef-b", "--coef-c"].every((n) => tokensCoef.includes(n)), `au plus 3 tokens de surbrillance, exactement --coef-a/b/c : trouvé ${tokensCoef.join(", ")}`);
+const luminance = (hex: string): number => {
+  const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+};
+const ratio = (a: string, b: string): number => {
+  const [x, y] = [luminance(a), luminance(b)];
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+};
+const SEUIL_CONTRASTE = 4.5;
+const FONDS_DE_CARTE = ["--surface", "--surface-sunken", "--ambre-clair", "--violet-clair", "--vert-clair", "--danger-clair"];
+for (const coef of tokensCoef) {
+  const couleur = tokensCss.get(coef) ?? "";
+  verifier(/^#[0-9A-Fa-f]{6}$/.test(couleur), `${coef} doit être une couleur hexadécimale à 6 chiffres, trouvé « ${couleur} »`);
+  for (const fond of FONDS_DE_CARTE) {
+    const valeurFond = tokensCss.get(fond) ?? "";
+    verifier(/^#[0-9A-Fa-f]{6}$/.test(valeurFond), `${fond} doit être une couleur hexadécimale pour le calcul de contraste`);
+    if (/^#[0-9A-Fa-f]{6}$/.test(couleur) && /^#[0-9A-Fa-f]{6}$/.test(valeurFond)) {
+      const r = ratio(couleur, valeurFond);
+      verifier(r >= SEUIL_CONTRASTE, `${coef} (${couleur}) sur ${fond} (${valeurFond}) : contraste ${r.toFixed(2)}:1 < ${SEUIL_CONTRASTE}:1`);
+    }
+  }
+}
+// Réservés : chaque `var(--coef-x)` d'ecrans.css est dans une règle `.moteur-coef-x` (et seulement là).
+for (const regle of ecrans.split("}")) {
+  const [selecteur, corps] = [regle.slice(0, Math.max(0, regle.indexOf("{"))).trim(), regle.slice(regle.indexOf("{") + 1)];
+  for (const m of corps.matchAll(/var\((--coef-[abc])\)/g)) {
+    verifier(selecteur === `.moteur-coef-${m[1].slice(-1)}`, `ecrans.css : ${m[1]} n'est réservé qu'à .moteur-coef-${m[1].slice(-1)} (trouvé dans « ${selecteur} »)`);
+  }
+}
+verifier(["a", "b", "c"].every((x) => new RegExp(`\\.moteur-coef-${x}\\s*\\{[^}]*color:\\s*var\\(--coef-${x}\\)`).test(ecrans)), "ecrans.css : .moteur-coef-a|b|c doivent colorer le texte avec leur token");
+verifier(![...css.matchAll(/var\(--coef-/g)].length, "style.css : aucun usage de --coef-* hors ecrans.css");
+
 if (echecs.length > 0) {
   console.error(`ÉCHEC : ${echecs.length} vérification(s) sur ${nb}`);
   for (const e of echecs) console.error(" - " + e);
   process.exit(1);
 }
-console.log(`OK : ${nb} vérifications (32 tokens :root == docs/design-system.md, ecrans.css n'utilise que des tokens)`);
+console.log(`OK : ${nb} vérifications (${NB_TOKENS} tokens :root == docs/design-system.md, ecrans.css n'utilise que des tokens, contraste des tokens --coef-* calculé)`);

@@ -1,4 +1,5 @@
 import type { StatutVerification } from "../src/moteur/statutVerification";
+import type { AideTypee } from "./aideTypee";
 
 /**
  * Contrat de générateur (phase 2) — le SEUL point d'extension pour ajouter un exercice à la
@@ -30,28 +31,53 @@ import type { StatutVerification } from "../src/moteur/statutVerification";
  *  - `liste_valeurs`    : tableau JSON de chaînes (valeurs non vides, ordre de saisie) — la
  *                         comparaison est faite en ENSEMBLE par le générateur (ordre et doublons
  *                         sans importance, sauf décision contraire du générateur).
+ *                         Avec `permetAucune`, le tableau vide `[]` est la réponse explicite « aucune
+ *                         valeur » (décodeur : `decoderListeValeursOuAucune`).
  *  - `tableau_signes`   : objet JSON `{ [ligneId]: { [colonneId]: signe } }`.
- * Décodeurs partagés : lib/reponsesEcran.ts.
+ *  - `champs_multiples` : objet JSON `{ [sousChampId]: string }` — texte tapé, ou `id` du choix retenu ;
+ *                         TOUS les sous-champs déclarés présents, aucun en trop, aucun vide
+ *                         (`decoderChampsMultiples`). Une seule tentative pour l'ensemble.
+ *  - `intervalle`       : objet JSON `{ crochetGauche, borneGauche, crochetDroit, borneDroite }`,
+ *                         crochets `"["` ou `"]"`, bornes = texte tapé ou sentinelles `"-inf"`/`"+inf"`
+ *                         (`decoderIntervalle` ne juge ni le sens ni la valeur numérique).
+ * Décodeurs partagés : lib/reponsesEcran.ts (dont `lireNombreOuFraction`, le SEUL lecteur de nombre :
+ * un champ vide, des espaces seuls ou un texte non numérique donnent `null`, jamais 0).
+ *
+ * ── Texte servi et balisage mathématique ────────────────────────────────────────────────────
+ * Tout texte D'AUTEUR (consigne, libellés de choix/colonnes/lignes/sous-champs, étiquettes, aide en
+ * chaîne, solution attendue, message d'erreur) peut contenir du balisage `$…$` (LaTeX inline) ; le
+ * texte D'ÉLÈVE n'est jamais interprété. Grammaire, échappement (`\$`), invalidité (texte brut) et
+ * commandes interdites : CLAUDE.md « Balisage mathématique ». `public/moteur/rendreTexte.js` est le
+ * SEUL point d'écriture d'un texte dans le DOM.
+ *
+ * ── Aide ────────────────────────────────────────────────────────────────────────────────────
+ * `aide` est une chaîne (texte d'auteur) OU une `AideTypee` (lib/aideTypee.ts : exactement deux
+ * formes, `formule_coloree` et `croquis_parabole`). Jamais envoyée avec l'écran ; validée par le
+ * serveur avant d'être servie.
  *
  * ── Ajouter un type d'écran ─────────────────────────────────────────────────────────────────
- * Ajouter (1) une interface dans `EcranDeclare` ci-dessous, (2) un composant dans
- * `public/moteur/ecrans/` enregistré dans `public/moteur/ecrans/index.js`, (3) un écran
- * correspondant dans le générateur témoin technique (`src/generateurs/_temoinTechnique/`). Ni le
- * contrat `Generateur`, ni le moteur, ni les routes serveur ne changent.
+ * Ajouter (1) une interface dans `EcranDeclare` ci-dessous, (2) un décodeur dans
+ * lib/reponsesEcran.ts, (3) un composant dans `public/moteur/ecrans/` enregistré dans
+ * `public/moteur/ecrans/index.js` (tout texte d'auteur via `rendreTexte(…, { math: true })`),
+ * (4) un écran correspondant dans un générateur témoin (`src/generateurs/_temoinTechnique/` ou son
+ * extension `src/generateurs/_temoinTechniqueEtendu/`, tous deux hors catalogue),
+ * (5) `npm run chromium-temoin` doit passer. Ni le contrat `Generateur`, ni le moteur, ni les routes
+ * serveur ne changent.
  */
 
-export type TypeEcran = "champ_expression" | "qcm" | "liste_valeurs" | "tableau_signes";
+export type TypeEcran = "champ_expression" | "qcm" | "liste_valeurs" | "tableau_signes" | "champs_multiples" | "intervalle";
 
 interface EcranCommun {
   /** Identifiant du champ = `reponses.champ` en base. Unique dans un exercice. */
   champ: string;
-  /** Texte de l'énoncé de CET écran (texte brut ; le rendu passe par `public/moteur/rendreTexte.js`). */
+  /** Texte de l'énoncé de CET écran (texte d'auteur, balisage `$…$` admis ; le rendu passe par `public/moteur/rendreTexte.js`). */
   consigne: string;
   /**
-   * Texte d'aide (indice). Jamais envoyé avec l'écran : servi seulement par `POST /api/reponses/aide`,
-   * qui enregistre l'usage côté serveur (pénalité calculée serveur, jamais déclarée par le client).
+   * Aide (indice) : texte d'auteur OU aide typée (`AideTypee`, exactement 2 formes). Jamais envoyée
+   * avec l'écran : servie seulement par `POST /api/reponses/aide`, qui la valide puis enregistre
+   * l'usage côté serveur (pénalité calculée serveur, jamais déclarée par le client).
    */
-  aide?: string;
+  aide?: string | AideTypee;
 }
 
 export interface EcranChampExpression extends EcranCommun {
@@ -68,17 +94,96 @@ export interface EcranListeValeurs extends EcranCommun {
   type: "liste_valeurs";
   /** Libellé du bouton d'ajout d'une valeur (ex. « Ajouter un diviseur »). */
   etiquetteAjout: string;
+  /**
+   * Propose d'abord le choix « aucune valeur » / « au moins une valeur » ; « aucune valeur » produit
+   * `reponseBrute = "[]"`. Sans cette option, la liste vide n'est jamais confirmable.
+   */
+  permetAucune?: boolean;
+  /** Libellés des deux choix (texte d'auteur). Défauts : « Aucune valeur » / « Au moins une valeur ». */
+  etiquetteAucune?: string;
+  etiquetteAuMoinsUne?: string;
+}
+
+/** `rendu: "symboles_variation"` : les valeurs `⌢ ⌣ ↗ ↘` sont dessinées (et nommées pour l'accessibilité). */
+export type RenduLigneTableau = "texte" | "symboles_variation";
+
+export interface LigneTableauSignes {
+  id: string;
+  libelle: string;
+  /** Alphabet de CETTE ligne ; défaut : `signesAutorises` de l'écran. */
+  signesAutorises?: string[];
+  rendu?: RenduLigneTableau;
+}
+
+export interface ColonneTableauSignes {
+  id: string;
+  libelle: string;
+  /** Second niveau de l'en-tête (ex. `$x_S$` sous la valeur du sommet). */
+  sousLibelle?: string;
 }
 
 export interface EcranTableauSignes extends EcranCommun {
   type: "tableau_signes";
-  colonnes: { id: string; libelle: string }[];
-  lignes: { id: string; libelle: string }[];
-  /** Signes proposés dans chaque case (ex. `["+", "-", "0"]`). */
+  colonnes: ColonneTableauSignes[];
+  lignes: LigneTableauSignes[];
+  /** Signes proposés dans chaque case (ex. `["+", "-", "0"]`) : alphabet par défaut des lignes. */
   signesAutorises: string[];
+  /**
+   * Colonnes de BORNES d'affichage (ex. `$-\infty$` / `$+\infty$`) aux deux extrémités : ce ne sont
+   * pas des cases de réponse, elles n'apparaissent jamais dans `reponseBrute`.
+   */
+  bornes?: { gauche: string; droite: string };
 }
 
-export type EcranDeclare = EcranChampExpression | EcranQcm | EcranListeValeurs | EcranTableauSignes;
+export interface SousChampTexte {
+  id: string;
+  /** Texte d'auteur (balisage `$…$` admis), ex. `$a =$`. */
+  libelle: string;
+  genre: "texte";
+  /** Texte brut (attribut) : aucun balisage. */
+  placeholder?: string;
+}
+
+export interface SousChampChoix {
+  id: string;
+  libelle: string;
+  genre: "choix";
+  choix: { id: string; libelle: string }[];
+}
+
+export type SousChamp = SousChampTexte | SousChampChoix;
+
+/**
+ * Croquis de l'axe Oy qui SUIT EN DIRECT les choix locaux de deux sous-champs (état d'édition : jamais
+ * envoyé). Ce n'est PAS une aide (aucune pénalité) : il n'affiche que ces choix et `c`.
+ */
+export interface IllustrationAllure {
+  type: "croquis_allure";
+  /** Ordonnée à l'origine (publique dans l'énoncé). */
+  c: number;
+  /** Id du sous-champ dont le choix (`"+"` | `"-"`) alimente le croquis (signe de a). */
+  champSigneA: string;
+  /** Id du sous-champ dont le choix (`"+"` | `"-"` | `"0"`) alimente le croquis (signe de a·b). */
+  champSigneAB: string;
+}
+
+export interface EcranChampsMultiples extends EcranCommun {
+  type: "champs_multiples";
+  champs: SousChamp[];
+  illustration?: IllustrationAllure;
+}
+
+export interface EcranIntervalle extends EcranCommun {
+  type: "intervalle";
+}
+
+export type EcranDeclare =
+  | EcranChampExpression
+  | EcranQcm
+  | EcranListeValeurs
+  | EcranTableauSignes
+  | EcranChampsMultiples
+  | EcranIntervalle;
 
 /**
  * Réponse d'un champ TERMINÉ (réussi ou révélé, voir `calculerEtatChampTentatives`) : dernière

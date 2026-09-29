@@ -21,6 +21,10 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
 import { appeler, creerScenario, creerTache, installerBase, type Scenario } from "./support/harnaisRouteur";
 import { CHAMP_DIVISEURS, CHAMP_PARITE, CHAMP_SIGNES, CHAMP_SOMME, generateurTemoinTechnique as temoin, reponseBruteCorrecte, VARIANTE_TEMOIN } from "../src/generateurs/_temoinTechnique";
+import {
+  CHAMP_ALLURE, CHAMP_AXE, CHAMP_COEFFICIENTS, CHAMP_EXTREMUM, CHAMP_IMAGE, CHAMP_RACINES, CHAMP_SIGNES_VARIATION,
+  generateurTemoinTechniqueEtendu as temoinEtendu, reponseBruteCorrecteEtendue, VARIANTE_TEMOIN_ETENDU,
+} from "../src/generateurs/_temoinTechniqueEtendu";
 
 const RACINE = join(__dirname, "..");
 const CAPTURES = process.env.CAPTURES_DIR ?? join(RACINE, "captures-chromium");
@@ -507,6 +511,296 @@ async function scenarioProf(navigateur: any, base: string, largeur: number) {
   await contexte.close();
 }
 
+
+/**
+ * Phase 3b-1 — témoin ÉTENDU joué de bout en bout dans un vrai navigateur : champs_multiples (avec et sans
+ * illustration), intervalle, liste_valeurs.permetAucune, tableau_signes étendu (3 PUIS 7 colonnes sur deux
+ * exercices consécutifs de la même tâche : l'état local d'édition doit être réinitialisé), aides typées,
+ * et le balisage mathématique dans chaque champ de texte d'auteur — jamais dans le texte tapé par l'élève.
+ */
+async function scenarioEtendu(navigateur: any, base: string, largeur: number) {
+  const s: Scenario = creerScenario();
+  installerBase(s.base);
+  const l = `${largeur}`;
+  const tacheId = creerTache(s, { nom: "Tâche témoin étendu", aide_activee: true, aide_penalite_pourcent: 25, tentatives_supplementaires: 1, feedback_immediat: true, reponse_visible: false, variantes: [{ variante_id: VARIANTE_TEMOIN_ETENDU, nombre_exercices: 2 }] });
+  const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tacheId, eleve_ids: ["eleve-1"] } });
+  verifier(a.statut === 201, `${l} étendu : assignation préalable : ${a.statut}`);
+
+  // Deux exercices consécutifs de formes DIFFÉRENTES : 1er = racine double (3 colonnes), 2e = deux racines (7 colonnes).
+  const graineEtroite = [...Array(300).keys()].find((g) => !temoinEtendu.generer(g).large)!;
+  const graineLarge = [...Array(300).keys()].find((g) => temoinEtendu.generer(g).large)!;
+  const tdb = await appeler("eleves/tableau-de-bord", "GET", { jeton: "eleve:eleve-1" });
+  const ordre: string[] = tdb.corps.en_cours.find((t: any) => t.tache_id === tacheId).exercices.map((e: any) => e.id);
+  const ligneA = s.base.table("exercices_assignes").find((x) => x.id === ordre[0])!;
+  const ligneB = s.base.table("exercices_assignes").find((x) => x.id === ordre[1])!;
+  ligneA.graine = graineEtroite;
+  ligneB.graine = graineLarge;
+  const exA = temoinEtendu.generer(graineEtroite);
+  const exB = temoinEtendu.generer(graineLarge);
+  // Le 2e exercice est répondu (via l'API) jusqu'au tableau : il s'ouvrira directement sur le tableau à 7 colonnes.
+  for (const champ of [CHAMP_COEFFICIENTS, CHAMP_ALLURE, CHAMP_EXTREMUM, CHAMP_AXE, CHAMP_IMAGE, CHAMP_RACINES]) {
+    const r = await appeler("reponses", "POST", { jeton: "eleve:eleve-1", corps: { exercice_assigne_id: ligneB.id, champ, reponse_brute: reponseBruteCorrecteEtendue(exB, champ) } });
+    verifier(r.statut === 200 && r.corps.statut === "correct", `${l} étendu : préparation de l'exercice 2 (${champ}) : ${JSON.stringify(r.corps)}`);
+  }
+
+  const { page, contexte, journal } = await preparerPage(navigateur, base, largeur, largeur < 600 ? 800 : 900, "eleve:eleve-1", "e1@x", `localStorage.setItem("eleve-profil-cache", JSON.stringify({ affichage: "Test eleve-1", prenom: "Test", nom: "eleve-1" }));`);
+  await page.goto(base + "/eleve.html");
+  await page.waitForSelector(".carte-tache");
+  await page.locator(".carte-tache").click();
+  await page.waitForSelector(".moteur-ecran-courant");
+  const courant = page.locator(".moteur-ecran-courant");
+  const valider = () => courant.getByRole("button", { name: "Valider", exact: true });
+  const suivante = () => page.getByRole("button", { name: "Question suivante" });
+  const cap = (nom: string) => join(CAPTURES, `${l}-etendu-${nom}.png`);
+  const nbMath = (sel: string) => courant.locator(`${sel} .moteur-math`).count();
+  const ouvrirAide = async () => {
+    await page.getByRole("button", { name: "Besoin d'un indice ?" }).click();
+    await page.getByRole("button", { name: /Confirmer/ }).click();
+  };
+  const NOMS_SYMBOLES: Record<string, string> = { "⌣": "minimum (en creux)", "⌢": "maximum (en bosse)", "↗": "croissante", "↘": "décroissante" };
+
+  // ── Écran 1 : champs_multiples (3 sous-champs texte) + aide formule_coloree ──
+  verifier((await nbMath(".moteur-consigne")) >= 4, `${l} étendu : la consigne rend ses segments $…$ (f(x), a, b, c)`);
+  verifier((await courant.locator(".moteur-sous-champ-libelle .moteur-math").count()) === 3, `${l} étendu : les 3 libellés de sous-champ sont rendus comme mathématiques`);
+  verifier(!(await courant.locator("#mc-coefficients-a").getAttribute("placeholder"))!.includes("$"), `${l} étendu : le placeholder est un attribut en texte brut (aucun « $ »)`);
+  await page.screenshot({ path: cap("01-champs-multiples-initial"), fullPage: true });
+  await verifierMiseEnPage(page, "champs_multiples", largeur);
+  verifier(await valider().isDisabled(), `${l} étendu : « Valider » désactivé tant que rien n'est rempli`);
+  const av1 = reponsesEnvoyees(journal);
+  await courant.locator("#mc-coefficients-a").fill("$x$"); // texte d'élève : jamais interprété
+  await courant.locator("#mc-coefficients-b").fill(String(exA.b));
+  verifier(await valider().isDisabled(), `${l} étendu : « Valider » désactivé tant qu'UN sous-champ est vide (jamais lu comme 0)`);
+  await courant.locator("#mc-coefficients-c").fill(String(exA.c));
+  verifier(await valider().isEnabled(), `${l} étendu : « Valider » actif quand tous les sous-champs sont remplis`);
+  verifier(reponsesEnvoyees(journal) === av1, `${l} étendu : aucune requête /api/reponses pendant l'édition des champs multiples`);
+  // Aide typée « formule colorée » : absente du DOM avant la demande.
+  verifier((await courant.locator(".moteur-formule").count()) === 0 && !(await page.content()).includes("moteur-coef-a"), `${l} étendu : aucune aide typée dans la page avant la demande`);
+  await ouvrirAide();
+  await page.waitForSelector(".moteur-aide-typee .moteur-formule");
+  verifier(s.base.table("aides_utilisees").length === 1, `${l} étendu : usage de l'aide typée enregistré côté serveur`);
+  const couleurs = (await page.evaluate(`(() => {
+    const lum = (rgb) => { const c = rgb.match(/\\d+/g).slice(0, 3).map((v) => v / 255).map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+    const rapport = (x, y) => { const [a, b] = [lum(x), lum(y)]; return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05); };
+    const zone = document.querySelector(".moteur-aide-typee");
+    const fond = getComputedStyle(zone).backgroundColor;
+    const r = { fond, roles: {} };
+    for (const role of ["a", "b", "c"]) {
+      const el = zone.querySelector(".moteur-coef-" + role);
+      if (el) { const couleur = getComputedStyle(el).color; r.roles[role] = { couleur, contraste: rapport(couleur, fond), texte: el.textContent }; }
+    }
+    r.aria = zone.querySelector(".moteur-formule").getAttribute("aria-label");
+    return r;
+  })()`)) as { fond: string; roles: Record<string, { couleur: string; contraste: number; texte: string }>; aria: string };
+  const attendus: Record<string, string> = { a: "rgb(191, 34, 128)", b: "rgb(17, 55, 208)", c: "rgb(121, 91, 21)" };
+  for (const role of Object.keys(couleurs.roles)) {
+    verifier(couleurs.roles[role].couleur === attendus[role], `${l} étendu : le coefficient ${role} prend la couleur de son token (${couleurs.roles[role].couleur} ≠ ${attendus[role]})`);
+    verifier(couleurs.roles[role].contraste >= 4.5, `${l} étendu : contraste réel du coefficient ${role} (${couleurs.roles[role].contraste.toFixed(2)}:1) sous 4,5:1`);
+  }
+  verifier(Object.keys(couleurs.roles).length >= 2 && couleurs.aria.startsWith("Formule : f(x) = "), `${l} étendu : formule colorée : rôles présents et alternative textuelle (${JSON.stringify(Object.keys(couleurs.roles))})`);
+  await page.screenshot({ path: cap("02-aide-formule-coloree"), fullPage: true });
+  // Trois déficiences visuelles émulées (les teintes doivent rester distinguables ; ordre a, b, c = indice non chromatique).
+  const cdp = await contexte.newCDPSession(page);
+  for (const type of ["protanopia", "deuteranopia", "tritanopia", "achromatopsia"]) {
+    await cdp.send("Emulation.setEmulatedVisionDeficiency", { type });
+    await courant.locator(".moteur-formule").screenshot({ path: cap(`03-vision-${type}`) });
+  }
+  await cdp.send("Emulation.setEmulatedVisionDeficiency", { type: "none" });
+  await verifierMiseEnPage(page, "champs_multiples + aide", largeur);
+  // 1re tentative : texte illisible → parse_error, message d'AUTEUR rendu avec ses mathématiques ; le « $x$ » tapé part tel quel.
+  await valider().click();
+  await page.waitForSelector(".moteur-statut-parse_error");
+  verifier((await courant.locator(".moteur-message-syntaxe .moteur-math").count()) >= 1, `${l} étendu : le message d'erreur (texte d'auteur) rend ses mathématiques`);
+  const dernierPost = () => JSON.parse(journal.requetes.filter((r) => r.methode === "POST" && r.url.endsWith("/api/reponses")).at(-1)!.corps ?? "{}");
+  verifier(JSON.parse(dernierPost().reponse_brute).a === "$x$", `${l} étendu : ce que l'élève a tapé (« $x$ ») part tel quel, jamais transformé`);
+  await courant.locator("#mc-coefficients-a").fill(String(exA.a));
+  await valider().click();
+  await page.waitForSelector(".moteur-statut-correct");
+  await suivante().click();
+
+  // ── Écran 2 : champs_multiples (2 choix) + illustration qui suit les choix LOCAUX ──
+  await page.waitForSelector(".moteur-illustration svg");
+  const svgAllure = () => courant.locator(".moteur-illustration svg");
+  const points = () => courant.locator(".moteur-illustration .croquis-courbe").getAttribute("points");
+  verifier((await svgAllure().getAttribute("aria-label"))!.includes("fais tes deux choix") && (await courant.locator(".moteur-illustration .croquis-courbe-neutre").count()) === 1, `${l} étendu : illustration neutre (pointillés) tant qu'aucun choix n'est fait`);
+  verifier((await courant.locator(".moteur-sous-champ-choix .moteur-choix .moteur-math").count()) === 5, `${l} étendu : les 5 libellés de choix des sous-champs sont rendus comme mathématiques`);
+  const av2 = reponsesEnvoyees(journal);
+  const neutre = await points();
+  await courant.locator('input[name="mc-allure-signeA"][value="+"]').check();
+  verifier((await courant.locator(".moteur-illustration .croquis-courbe-neutre").count()) === 1 && (await points()) === neutre, `${l} étendu : un seul choix : l'illustration reste neutre`);
+  await courant.locator('input[name="mc-allure-signeAB"][value="-"]').check();
+  const droite = await points();
+  verifier((await courant.locator(".moteur-illustration .croquis-courbe-neutre").count()) === 0 && droite !== neutre && (await svgAllure().getAttribute("aria-label"))!.includes("à droite"), `${l} étendu : deux choix (a>0, ab<0) : l'illustration montre le sommet à droite`);
+  await page.screenshot({ path: cap("04-allure-illustration-droite"), fullPage: true });
+  await courant.locator('input[name="mc-allure-signeAB"][value="+"]').check();
+  verifier((await points()) !== droite && (await svgAllure().getAttribute("aria-label"))!.includes("à gauche"), `${l} étendu : l'illustration suit un changement de choix (sommet à gauche)`);
+  await courant.locator('input[name="mc-allure-signeA"][value="-"]').check();
+  verifier((await svgAllure().getAttribute("aria-label"))!.includes("ouverte vers le bas"), `${l} étendu : a<0 : parabole ouverte vers le bas`);
+  verifier(reponsesEnvoyees(journal) === av2, `${l} étendu : l'illustration ne déclenche AUCUNE requête (état local d'édition)`);
+  verifier((await page.locator(".moteur-illustration").innerText()).length < 200 && (await courant.locator(".moteur-statut").count()) === 0, `${l} étendu : l'illustration n'affiche aucun verdict`);
+  verifier((await page.getByRole("button", { name: "Besoin d'un indice ?" }).count()) === 0, `${l} étendu : l'illustration n'est PAS une aide (aucun indice sur l'écran d'allure)`);
+  await verifierMiseEnPage(page, "allure", largeur);
+  const allureJuste = JSON.parse(reponseBruteCorrecteEtendue(exA, CHAMP_ALLURE));
+  for (const [id, valeur] of Object.entries(allureJuste)) await courant.locator(`input[name="mc-allure-${id}"][value="${valeur}"]`).check();
+  await valider().click();
+  await page.waitForSelector(".moteur-statut-correct");
+  await suivante().click();
+
+  // ── Écran 3 : qcm à libellés mathématiques ──
+  await page.waitForSelector('input[name="qcm-extremum"]'); // (l'écran d'allure utilise aussi `.moteur-qcm` : attendre CE champ)
+  verifier((await courant.locator(".moteur-choix .moteur-math").count()) === 2, `${l} étendu : les libellés du QCM sont rendus comme mathématiques`);
+  await courant.locator(`.moteur-qcm input[value="${reponseBruteCorrecteEtendue(exA, CHAMP_EXTREMUM)}"]`).check();
+  await valider().click();
+  await page.waitForSelector(".moteur-statut-correct");
+  await suivante().click();
+
+  // ── Écran 4 : champs_multiples (axe) + aide croquis_parabole (marque S seule) + « $ » d'élève jamais interprété ──
+  await page.waitForSelector("#mc-axe-axeTexte");
+  verifier(!(await courant.locator("#mc-axe-axeTexte").getAttribute("placeholder"))!.includes("$"), `${l} étendu : placeholder de l'axe sans « $ »`);
+  await ouvrirAide();
+  await page.waitForSelector(".moteur-aide-croquis svg.moteur-croquis");
+  verifier((await courant.locator(".moteur-aide-croquis .croquis-etiquette-sommet").textContent()) === "S" && (await courant.locator(".croquis-surlignage").count()) === 0 && (await courant.locator(".croquis-etiquette-petite").count()) === 0, `${l} étendu : aide de l'axe : S marqué, pas de surlignage ni de marques sur Ox`);
+  verifier((await courant.locator(".moteur-aide-croquis svg").getAttribute("aria-label"))!.startsWith("Croquis de la parabole d'équation y = "), `${l} étendu : croquis : alternative textuelle`);
+  await page.screenshot({ path: cap("05-aide-croquis-axe"), fullPage: true });
+  await verifierMiseEnPage(page, "axe + croquis", largeur);
+  const axeJuste = JSON.parse(reponseBruteCorrecteEtendue(exA, CHAMP_AXE));
+  await courant.locator("#mc-axe-axeTexte").fill(axeJuste.xS); // valeur juste SANS « x = »
+  await courant.locator("#mc-axe-xS").fill(axeJuste.xS);
+  await courant.locator("#mc-axe-yS").fill(axeJuste.yS);
+  await valider().click();
+  await page.waitForSelector(".moteur-statut-parse_error");
+  verifier((await courant.locator(".moteur-message-syntaxe .moteur-math").count()) >= 1 && s.base.table("reponses").some((r) => r.champ === CHAMP_AXE && r.bug_detecte === "TEMOIN_AXE_NOTATION"), `${l} étendu : « valeur juste sans x = » : parse_error, message balisé, code de compétence stocké`);
+  await courant.locator("#mc-axe-axeTexte").fill("x = 999");
+  await courant.locator("#mc-axe-xS").fill("$x$"); // texte d'élève contenant des délimiteurs
+  await valider().click(); // 2e et dernière tentative : verrouillage, révélation (correction immédiate active)
+  await page.waitForSelector(".moteur-solution");
+  verifier((await courant.locator(".moteur-solution .moteur-math").count()) >= 3, `${l} étendu : « Réponse attendue » (texte d'auteur) rend ses mathématiques`);
+  await page.screenshot({ path: cap("06-axe-verrouille-revele"), fullPage: true });
+  await suivante().click();
+  await page.waitForSelector(".moteur-ecran-termine");
+  const resume = page.locator(".moteur-ecran-termine").filter({ hasText: "Donne l'axe de symétrie" }).locator(".moteur-valeur");
+  verifier((await resume.innerText()).includes("$x$"), `${l} étendu : « Ta réponse » affiche le « $x$ » tapé par l'élève tel quel`);
+  verifier((await resume.locator(".moteur-math").count()) === 3, `${l} étendu : dans « Ta réponse », seuls les 3 libellés d'auteur sont mathématiques ; le texte de l'élève ne l'est jamais`);
+
+  // ── Écran 5 : intervalle ──
+  await page.waitForSelector(".moteur-intervalle");
+  verifier(await valider().isDisabled(), `${l} étendu : intervalle : « Valider » désactivé au départ`);
+  const av5 = reponsesEnvoyees(journal);
+  const image = JSON.parse(reponseBruteCorrecteEtendue(exA, CHAMP_IMAGE));
+  const ligneI = courant.locator(".moteur-intervalle-ligne");
+  await ligneI.getByRole("button", { name: /Crochet de gauche/ }).click();
+  await ligneI.getByRole("button", { name: /Crochet de droite/ }).click();
+  await ligneI.getByLabel("Borne de gauche", { exact: true }).fill("$x$"); // texte d'élève
+  verifier((await courant.locator(".moteur-apercu").innerText()).includes("$x$") && (await courant.locator(".moteur-apercu .moteur-math").count()) === 0, `${l} étendu : l'aperçu affiche le texte de l'élève tel quel, sans jamais l'interpréter`);
+  await ligneI.getByRole("button", { name: "Borne de droite : plus l'infini" }).click();
+  verifier(await ligneI.getByLabel("Borne de droite", { exact: true }).isDisabled() && (await ligneI.getByRole("button", { name: "Borne de droite : plus l'infini" }).getAttribute("aria-pressed")) === "true", `${l} étendu : « +∞ » désactive la borne de droite`);
+  await ligneI.getByLabel("Borne de gauche", { exact: true }).fill(image.borneGauche);
+  verifier((await courant.locator(".moteur-apercu").innerText()) === `[${image.borneGauche} ; +∞[`, `${l} étendu : aperçu « [${image.borneGauche} ; +∞[ » (obtenu « ${await courant.locator(".moteur-apercu").innerText()} »)`);
+  verifier(reponsesEnvoyees(journal) === av5, `${l} étendu : construire l'intervalle n'envoie rien`);
+  await ouvrirAide();
+  await page.waitForSelector(".moteur-aide-croquis svg.moteur-croquis");
+  verifier((await courant.locator(".croquis-surlignage").count()) === 1, `${l} étendu : aide de l'image : surlignage de l'ensemble-image`);
+  await page.screenshot({ path: cap("07-intervalle-aide"), fullPage: true });
+  await verifierMiseEnPage(page, "intervalle", largeur);
+  await valider().click();
+  await page.waitForSelector(".moteur-statut-correct");
+  const corpsIntervalle = JSON.parse(dernierPost().reponse_brute);
+  verifier(Object.keys(corpsIntervalle).sort().join() === "borneDroite,borneGauche,crochetDroit,crochetGauche" && corpsIntervalle.borneDroite === "+inf", `${l} étendu : réponse d'intervalle : 4 clés, sentinelle « +inf » (${JSON.stringify(corpsIntervalle)})`);
+  await suivante().click();
+
+  // ── Écran 6 : liste_valeurs avec « aucune valeur » + aide en chaîne à mathématiques ──
+  await page.waitForSelector(".moteur-choix-mode");
+  verifier((await courant.locator(".moteur-liste-zone").isHidden()) && (await valider().isDisabled()), `${l} étendu : avant le choix « aucune / au moins une » : liste masquée, rien à valider`);
+  verifier((await courant.locator(".moteur-choix-mode .moteur-bouton").count()) === 2, `${l} étendu : deux choix proposés`);
+  await courant.getByRole("radio", { name: "Pas de racine" }).click();
+  verifier(await valider().isEnabled(), `${l} étendu : « Pas de racine » suffit à valider`);
+  await page.screenshot({ path: cap("08-liste-aucune"), fullPage: true });
+  await verifierMiseEnPage(page, "liste_valeurs permetAucune", largeur);
+  await valider().click(); // faux (f a une racine) : 1re tentative, non verrouillante
+  await page.waitForSelector(".moteur-statut-not_equivalent");
+  verifier(dernierPost().reponse_brute === "[]", `${l} étendu : « Pas de racine » envoie exactement "[]"`);
+  await courant.getByRole("radio", { name: "Au moins une racine" }).click();
+  verifier(await courant.locator(".moteur-liste-zone").isVisible() && (await valider().isDisabled()), `${l} étendu : « au moins une racine » : liste visible, vide donc non validable`);
+  await courant.locator(".moteur-liste-ligne .moteur-champ").first().fill(String(exA.r1));
+  await ouvrirAide();
+  await page.waitForSelector(".moteur-aide-texte:not([hidden])");
+  verifier((await courant.locator(".moteur-aide-texte .moteur-math").count()) >= 2, `${l} étendu : l'aide en chaîne rend ses mathématiques`);
+  await valider().click();
+  await page.waitForSelector(".moteur-statut-correct");
+  await suivante().click();
+
+  // ── Écran 7 (exercice 1) : tableau étendu à 3 colonnes ──
+  const remplir = async (ex: typeof exA, colonnes: number) => {
+    const sol = JSON.parse(reponseBruteCorrecteEtendue(ex, CHAMP_SIGNES_VARIATION)) as Record<string, Record<string, string>>;
+    const lignes = courant.locator(".moteur-table-signes tbody tr");
+    for (const [i, id] of ["signe", "variation"].entries()) {
+      const boutons = lignes.nth(i).locator("td button");
+      for (let c = 0; c < colonnes; c++) {
+        const attendu = sol[id][`c${c}`];
+        const bouton = boutons.nth(c);
+        for (let k = 0; k < 6; k++) {
+          const ok = i === 0 ? (await bouton.innerText()) === attendu : ((await bouton.getAttribute("aria-label")) ?? "").includes(NOMS_SYMBOLES[attendu]);
+          if (ok) break;
+          await bouton.click();
+        }
+      }
+    }
+  };
+  await page.waitForSelector(".moteur-table-signes");
+  verifier((await courant.locator("thead th[scope=col]").count()) === 3 && (await courant.locator("tbody td button").count()) === 6, `${l} étendu : tableau à 3 colonnes (6 cases de réponse)`);
+  verifier((await courant.locator("thead .moteur-borne").count()) === 2 && (await courant.locator("thead .moteur-borne .moteur-math").count()) === 2 && (await courant.locator("tbody .moteur-borne button").count()) === 0, `${l} étendu : deux colonnes de bornes d'affichage, mathématiques, sans case de réponse`);
+  verifier((await courant.locator("thead .moteur-sous-libelle .moteur-math").count()) === 1, `${l} étendu : sous-libellé x_S sous la colonne du sommet`);
+  verifier((await courant.locator("tbody tr").nth(1).locator("th .moteur-math").count()) === 0 && (await courant.locator("tbody tr").nth(0).locator("th .moteur-math").count()) >= 1, `${l} étendu : libellés de ligne rendus par rendreTexte`);
+  const av7 = reponsesEnvoyees(journal);
+  await courant.locator("tbody tr").nth(1).locator("td button").first().click();
+  verifier((await courant.locator("tbody tr").nth(1).locator("td button svg.moteur-symbole").count()) === 1, `${l} étendu : un symbole de variation est DESSINÉ (svg), pas un caractère`);
+  verifier((await courant.locator("tbody tr").nth(1).locator("td button").first().getAttribute("aria-label"))!.includes("maximum (en bosse)"), `${l} étendu : le symbole est nommé en toutes lettres (aria-label)`);
+  await ouvrirAide();
+  await page.waitForSelector(".moteur-aide-croquis svg.moteur-croquis");
+  verifier((await courant.locator(".croquis-indice").count()) === 1 && (await courant.locator("text.croquis-etiquette-petite").count()) === 2, `${l} étendu : croquis (racine double) : UNE marque fusionnée portant l'indice x_S`);
+  await remplir(exA, 3);
+  verifier(reponsesEnvoyees(journal) === av7, `${l} étendu : remplir le tableau n'envoie rien`);
+  await page.screenshot({ path: cap("09-tableau-3-colonnes"), fullPage: true });
+  await verifierMiseEnPage(page, "tableau étendu 3 colonnes", largeur);
+  await valider().click();
+  await page.waitForSelector(".moteur-statut-correct");
+  const cases3 = JSON.parse(dernierPost().reponse_brute);
+  verifier(Object.keys(cases3.signe).join() === "c0,c1,c2" && Object.keys(cases3.variation).join() === "c0,c1,c2", `${l} étendu : la réponse ne contient que les 3 colonnes de réponse (jamais les bornes)`);
+  await page.getByRole("button", { name: "Voir la fin" }).click();
+  await page.waitForSelector(".moteur-fin");
+  await page.getByRole("button", { name: "Terminer" }).click();
+
+  // ── Exercice 2 : le tableau passe de 3 à 7 colonnes — l'état local d'édition doit repartir de zéro ──
+  await page.waitForSelector(".moteur-table-signes thead th[scope=col]:nth-of-type(8)", { state: "attached" });
+  verifier((await courant.locator("thead th[scope=col]").count()) === 7 && (await courant.locator("tbody td button").count()) === 14, `${l} étendu : 3 puis 7 colonnes : 14 cases de réponse`);
+  const etats = await courant.locator("tbody td button").allInnerTexts();
+  verifier(etats.length === 14 && etats.every((e: string) => e === "?"), `${l} étendu : aucune case ne garde l'état de l'exercice précédent (${JSON.stringify(etats)})`);
+  verifier((await valider().isDisabled()), `${l} étendu : « Valider » désactivé sur le nouveau tableau vide`);
+  await ouvrirAide();
+  await page.waitForSelector(".moteur-aide-croquis svg.moteur-croquis");
+  verifier((await courant.locator(".croquis-indice").count()) === 1 && (await courant.locator("text.croquis-etiquette-petite").count()) === 4, `${l} étendu : croquis (deux racines) : 2 racines + le sommet, indice x_S`);
+  await remplir(exB, 7);
+  await page.screenshot({ path: cap("10-tableau-7-colonnes"), fullPage: true });
+  await verifierMiseEnPage(page, "tableau étendu 7 colonnes", largeur);
+  await valider().click();
+  await page.waitForSelector(".moteur-statut-correct");
+  const cases7 = JSON.parse(dernierPost().reponse_brute);
+  verifier(Object.keys(cases7.signe).length === 7 && Object.keys(cases7.variation).length === 7, `${l} étendu : réponse à 7 colonnes`);
+  await page.getByRole("button", { name: "Voir la fin" }).click();
+  await page.waitForSelector(".moteur-fin");
+  await page.getByRole("button", { name: "Terminer" }).click();
+  await page.waitForSelector("#tableau-de-bord:not([hidden])");
+
+  // Bilan : chaque réponse vient d'un clic sur « Valider » et n'a que les 3 clés du contrat.
+  const posts = journal.requetes.filter((r) => r.methode === "POST" && r.url.endsWith("/api/reponses"));
+  verifier(posts.length === 11, `${l} étendu : 11 réponses envoyées par le navigateur attendues (2+1+1+2+1+2+1 sur l'exercice 1, 1 sur l'exercice 2), obtenu ${posts.length}`);
+  verifier(posts.every((p) => Object.keys(JSON.parse(p.corps ?? "{}")).sort().join() === "champ,exercice_assigne_id,reponse_brute" && typeof JSON.parse(p.corps ?? "{}").reponse_brute === "string"), `${l} étendu : chaque réponse n'a que les 3 clés du contrat, `+`reponse_brute est une chaîne`);
+  verifier(journal.requetes.filter((r) => r.url.includes("/api/reponses/aide")).length === 6, `${l} étendu : 6 demandes d'aide (coefficients, axe, image, racines, tableau des deux exercices)`);
+  verifier(journal.pageerrors.length === 0, `${l} étendu : erreurs JS non interceptées : ${journal.pageerrors.join(" | ")}`);
+  const erreursUtiles = journal.erreursConsole.filter((m) => !/fonts\.g|net::ERR_FAILED/.test(m));
+  verifier(erreursUtiles.length === 0, `${l} étendu : erreurs console : ${erreursUtiles.join(" | ")}`);
+  await contexte.close();
+}
+
 async function main() {
   const { serveur, url } = await demarrerServeur();
   const navigateur = await chromium.launch();
@@ -516,6 +810,7 @@ async function main() {
       await scenarioSansCorrection(navigateur, url, largeur);
       await matriceVisuelle(navigateur, url, largeur);
       await scenarioRetentative(navigateur, url, largeur);
+      await scenarioEtendu(navigateur, url, largeur);
       await scenarioProf(navigateur, url, largeur);
     }
   } finally {

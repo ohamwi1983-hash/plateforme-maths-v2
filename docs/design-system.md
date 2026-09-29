@@ -1,7 +1,7 @@
 # Design system — tokens
 
 Source de vérité **technique** : le bloc `:root` de `public/style.css`. Ce document en est la
-description ; `scripts/test-design-system.ts` vérifie qu'ils restent identiques (mêmes 32 noms, mêmes
+description ; `scripts/test-design-system.ts` vérifie qu'ils restent identiques (mêmes 35 noms, mêmes
 valeurs, aucun token non documenté). **Aucune valeur n'a été inventée** : les 31 variables issues du « système visuel partagé v3 » (phase 1)
 ont été regroupées par famille et nommées par rôle ; le 32e token, `--ombre-carte`, **nomme** l'ombre de carte
 qui était répétée à l'identique dans cinq règles de `style.css` (sans en changer la valeur ; ces cinq règles
@@ -67,6 +67,32 @@ utilisé pour le libellé de `not_equivalent`).
 | `--bleu-clair` | `#E7EEFC` | Fond bleu |
 | `--jaune` | `#CA8A04` | Icônes de chrono |
 | `--jaune-clair` | `#FEF9C3` | Fond jaune |
+
+### Surbrillance des coefficients (phase 3b-1)
+| Token | Valeur | Rôle |
+|---|---|---|
+| `--coef-a` | `#BF2280` | Coefficient a dans l'aide `formule_coloree` (magenta) |
+| `--coef-b` | `#1137D0` | Coefficient b (bleu) |
+| `--coef-c` | `#795B15` | Coefficient c (brun ocre) |
+
+**Réservés à la surbrillance d'un coefficient** : jamais un verdict, jamais un état (le rouge, le vert et
+l'ambre ont déjà un sens). Les teintes de l'ancien pilote (`#d6336c`, `#1971c2`, `#2f9e44`) n'étaient pas mesurées
+et ne conviennent pas : `#2f9e44` n'atteint que 3,45:1 sur fond blanc.
+
+Contrastes mesurés (WCAG, ratio calculé ; seuil du test : **4,5:1** pour du texte) — `scripts/test-design-system.ts`
+recalcule ces ratios et échoue sous le seuil :
+
+| Token | `--surface` | `--surface-sunken` | `--ambre-clair` | `--violet-clair` | `--vert-clair` | `--danger-clair` |
+|---|---|---|---|---|---|---|
+| `--coef-a` | 5,59 | 5,09 | 5,02 | 4,80 | 4,98 | 4,80 |
+| `--coef-b` | 8,46 | 7,71 | 7,60 | 7,27 | 7,53 | 7,27 |
+| `--coef-c` | 6,32 | 5,76 | 5,68 | 5,43 | 5,63 | 5,43 |
+
+Distinction entre les trois teintes (ΔE CIE76 après simulation de Machado 2009, sévérité 1) : vision normale
+70 / 82 / 130 (a–b / a–c / b–c) ; protanopie 50 / 72 / 119 ; deutéranopie 79 / **48** / 124 ; tritanopie 92 / 49 /
+**48**. Le minimum est 48 (les teintes du pilote tombaient à 20 sous déficience). Une distinction purement
+chromatique n'est pas garantie pour autant : l'**ordre** des termes (a, b, c de gauche à droite) reste l'indice non
+chromatique, et le nom de chaque coefficient figure dans l'`aria-label` de l'aide.
 
 ### Neutres
 | Token | Valeur | Rôle |

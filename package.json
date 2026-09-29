@@ -6,6 +6,8 @@
     "build": "tsc -b",
     "smoke-test": "tsx scripts/smoke-test.ts",
     "test-temoin": "tsx scripts/test-temoin-technique.ts",
+    "test-temoin-etendu": "tsx scripts/test-temoin-etendu.ts",
+    "test-texte-math": "tsx scripts/test-texte-math.ts",
     "test-design-system": "tsx scripts/test-design-system.ts",
     "chromium-temoin": "tsx scripts/chromium-temoin-technique.ts"
   },

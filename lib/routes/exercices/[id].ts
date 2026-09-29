@@ -2,6 +2,7 @@ import type { RequeteHttp, ReponseHttp } from "../../httpTypes";
 import { avecGestionErreurs } from "../../avecGestionErreurs";
 import { eleveAuthentifie, supabaseAdmin } from "../../supabaseAdmin";
 import { calculerEtatExercice, chargerContexteTache, chargerDonneesExercice, COLONNES_EXERCICE_ASSIGNE, regenererExercice, revelationFinDeTache, tacheEstCompletePourEleve, type LigneExerciceAssigne } from "../../etatExercice";
+import { aidePresente } from "../../aideTypee";
 import { construireChampVue, REGLAGES_FORCEES_ANTERIEURES } from "../../tableauDeBord";
 import { categorieTachePourEleve } from "../../verrouillageTache";
 
@@ -90,7 +91,7 @@ export const gererExercicesId = avecGestionErreurs(async function handler(req: R
     saisie_possible: !anterieure,
     ecrans: regenere.ecrans.map((ecran) => {
       const { aide, ...publics } = ecran;
-      return { ...publics, aide_disponible: contexte.aideActivee && typeof aide === "string" && aide !== "" };
+      return { ...publics, aide_disponible: contexte.aideActivee && aidePresente(aide) };
     }),
     champs,
     champ_courant: anterieure ? null : etat.champCourant,

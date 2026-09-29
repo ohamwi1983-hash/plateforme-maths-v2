@@ -1,6 +1,7 @@
 import type { RequeteHttp, ReponseHttp } from "../httpTypes";
 import { avecGestionErreurs } from "../avecGestionErreurs";
 import { eleveAuthentifie, supabaseAdmin } from "../supabaseAdmin";
+import { validerAide } from "../aideTypee";
 import { calculerEtatExercice, chargerContexteTache, chargerDonneesExercice, COLONNES_EXERCICE_ASSIGNE, regenererExercice, type LigneExerciceAssigne } from "../etatExercice";
 
 /**
@@ -51,6 +52,12 @@ export const gererReponsesAide = avecGestionErreurs(async function handler(req: 
   if (!ecran.aide) {
     res.status(404).json({ erreur: "Pas d'aide pour cet écran" });
     return;
+  }
+  // Aide typée : validée AVANT tout enregistrement d'usage. Une aide invalide n'est ni servie ni comptée
+  // (échec bruyant : c'est un défaut du générateur, jamais de l'élève — la pénalité ne doit pas le payer).
+  if (typeof ecran.aide !== "string") {
+    const problemes = validerAide(ecran.aide);
+    if (problemes.length > 0) throw new Error(`Aide invalide pour ${ligne.variante_id} / ${champ} : ${problemes.join(" ; ")}`);
   }
   const donnees = await chargerDonneesExercice(admin, exercice_assigne_id);
   const etat = calculerEtatExercice(regenere, donnees, contexte, new Date());

@@ -1,3 +1,5 @@
+import type { EcranChampsMultiples } from "./contratGenerateur";
+
 /**
  * Décodeurs de `reponseBrute` partagés par les générateurs (format par type d'écran documenté dans
  * lib/contratGenerateur.ts). Un décodage impossible ne lève jamais d'exception : il renvoie un
@@ -41,4 +43,115 @@ export function decoderTableauSignes(reponseBrute: string): Decodage<CasesTablea
     }
   }
   return { ok: true, valeur: cases };
+}
+
+/**
+ * `liste_valeurs` avec `permetAucune` : `[]` est la réponse explicite « aucune valeur ». Une liste
+ * non vide se décode comme `decoderListeValeurs`. `decoderListeValeurs` reste INCHANGÉ (il rejette
+ * toujours la liste vide : un écran sans `permetAucune` ne peut pas la confirmer).
+ */
+export function decoderListeValeursOuAucune(reponseBrute: string): Decodage<{ aucune: boolean; valeurs: string[] }> {
+  let brut: unknown;
+  try {
+    brut = JSON.parse(reponseBrute);
+  } catch {
+    return { ok: false, message: "La liste de valeurs n'a pas pu être lue." };
+  }
+  if (!Array.isArray(brut) || !brut.every((v) => typeof v === "string")) return { ok: false, message: "La liste de valeurs n'a pas pu être lue." };
+  if (brut.length === 0) return { ok: true, valeur: { aucune: true, valeurs: [] } };
+  const valeurs = brut.map((v) => v.trim()).filter((v) => v !== "");
+  if (valeurs.length === 0) return { ok: false, message: "Ajoute au moins une valeur, ou choisis « aucune valeur »." };
+  return { ok: true, valeur: { aucune: false, valeurs } };
+}
+
+/** Texte de la déclaration d'un sous-champ, sans balisage, pour nommer le champ fautif dans un message. */
+function nomSousChamp(libelle: string): string {
+  return libelle.replace(/\\\$/g, "\u0000").replace(/\$/g, "").replace(/\u0000/g, "$").trim() || "un champ";
+}
+
+/**
+ * `champs_multiples` : valide `reponseBrute` contre la DÉCLARATION de l'écran (ids, ids de choix). Ne
+ * juge jamais la justesse. Un sous-champ vide (après `trim`) est refusé : jamais lu comme 0.
+ */
+export function decoderChampsMultiples(reponseBrute: string, ecran: Pick<EcranChampsMultiples, "champs">): Decodage<Record<string, string>> {
+  const illisible = { ok: false as const, message: "Les champs n'ont pas pu être lus." };
+  let brut: unknown;
+  try {
+    brut = JSON.parse(reponseBrute);
+  } catch {
+    return illisible;
+  }
+  if (typeof brut !== "object" || brut === null || Array.isArray(brut)) return illisible;
+  const objet = brut as Record<string, unknown>;
+  const attendus = ecran.champs.map((c) => c.id);
+  const enTrop = Object.keys(objet).filter((k) => !attendus.includes(k));
+  if (enTrop.length > 0) return { ok: false, message: `Un champ inattendu a été reçu (${enTrop.join(", ")}).` };
+  const valeurs: Record<string, string> = {};
+  for (const champ of ecran.champs) {
+    const v = objet[champ.id];
+    const nom = nomSousChamp(champ.libelle);
+    if (v === undefined) return { ok: false, message: `Le champ « ${nom} » manque.` };
+    if (typeof v !== "string") return { ok: false, message: `Le champ « ${nom} » n'a pas pu être lu.` };
+    const nettoye = v.trim();
+    if (nettoye === "") return { ok: false, message: `Le champ « ${nom} » est vide : remplis-le avant de valider.` };
+    if (champ.genre === "choix" && !champ.choix.some((c) => c.id === nettoye)) return { ok: false, message: `Le choix du champ « ${nom} » n'existe pas.` };
+    valeurs[champ.id] = nettoye;
+  }
+  return { ok: true, valeur: valeurs };
+}
+
+export interface ReponseIntervalle {
+  crochetGauche: "[" | "]";
+  borneGauche: string;
+  crochetDroit: "[" | "]";
+  borneDroite: string;
+}
+
+/**
+ * `intervalle` : structure et crochets seulement. N'interprète PAS les nombres (voir
+ * `lireNombreOuFraction`) et ne juge pas le sens (un `+inf` à gauche est lisible ; c'est le
+ * générateur qui le déclarera faux).
+ */
+export function decoderIntervalle(reponseBrute: string): Decodage<ReponseIntervalle> {
+  const illisible = { ok: false as const, message: "L'intervalle n'a pas pu être lu." };
+  let brut: unknown;
+  try {
+    brut = JSON.parse(reponseBrute);
+  } catch {
+    return illisible;
+  }
+  if (typeof brut !== "object" || brut === null || Array.isArray(brut)) return illisible;
+  const o = brut as Record<string, unknown>;
+  const cles = ["crochetGauche", "borneGauche", "crochetDroit", "borneDroite"];
+  if (Object.keys(o).length !== cles.length || !cles.every((k) => typeof o[k] === "string")) return illisible;
+  const crochetGauche = o.crochetGauche as string;
+  const crochetDroit = o.crochetDroit as string;
+  if (crochetGauche !== "[" && crochetGauche !== "]") return { ok: false, message: "Le crochet de gauche doit être [ ou ]." };
+  if (crochetDroit !== "[" && crochetDroit !== "]") return { ok: false, message: "Le crochet de droite doit être [ ou ]." };
+  const borneGauche = (o.borneGauche as string).trim();
+  const borneDroite = (o.borneDroite as string).trim();
+  if (borneGauche === "") return { ok: false, message: "La borne de gauche est vide : écris un nombre ou choisis −∞." };
+  if (borneDroite === "") return { ok: false, message: "La borne de droite est vide : écris un nombre ou choisis +∞." };
+  return { ok: true, valeur: { crochetGauche, borneGauche, crochetDroit, borneDroite } };
+}
+
+/**
+ * LE lecteur de nombre de la plateforme (ne jamais en écrire un autre) : entier, décimal (point OU
+ * virgule) ou fraction `p/q` (`q ≠ 0`, espaces tolérés autour de `/`). Chaîne vide, espaces seuls,
+ * texte non numérique, `1/0` → `null` — jamais 0. Comportement de référence : ancien pilote,
+ * `src/moteur/analyseFonction.ts` (`parserNombreOuFraction`), avec en plus le refus explicite de
+ * `Infinity`, de la notation hexadécimale/binaire/scientifique et des séparateurs multiples, et l'acceptation
+ * du signe moins typographique « − » (U+2212).
+ */
+export function lireNombreOuFraction(texte: string): number | null {
+  const nettoye = texte.trim().replace(/\u2212/g, "-").replace(",", ".");
+  if (nettoye === "") return null;
+  const NOMBRE = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/;
+  if (NOMBRE.test(nettoye)) return Number(nettoye);
+  const fraction = /^([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*\/\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+))$/.exec(nettoye);
+  if (!fraction) return null;
+  const numerateur = Number(fraction[1]);
+  const denominateur = Number(fraction[2]);
+  if (!Number.isFinite(numerateur) || !Number.isFinite(denominateur) || denominateur === 0) return null;
+  return numerateur / denominateur;
 }

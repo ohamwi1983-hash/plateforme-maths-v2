@@ -11,6 +11,7 @@
  * à zéro, l'état est relu au serveur, seul juge.
  */
 import { COMPOSANTS_ECRAN } from "./ecrans/index.js";
+import { AIDES_TYPEES } from "./aides/index.js";
 import { rendreTexte } from "./rendreTexte.js";
 
 const LIBELLES_STATUT = {
@@ -19,11 +20,29 @@ const LIBELLES_STATUT = {
   parse_error: "Ta réponse n'a pas pu être lue",
 };
 
-function creer(balise, classe, texte) {
+/**
+ * `options.math: true` pour un texte d'AUTEUR (consigne, solution, message d'erreur, aide) ; sans option,
+ * texte brut (interface, texte d'élève). Voir `rendreTexte.js`.
+ */
+function creer(balise, classe, texte, options) {
   const element = document.createElement(balise);
   if (classe) element.className = classe;
-  if (texte !== undefined) rendreTexte(element, texte);
+  if (texte !== undefined) rendreTexte(element, texte, options);
   return element;
+}
+
+/** Résumé d'un composant : `string` (texte d'élève) ou pièces `{ texte, auteur? }[]` (voir ecrans/index.js). */
+function rendrePieces(element, resume) {
+  if (typeof resume === "string") {
+    rendreTexte(element, resume);
+    return;
+  }
+  element.replaceChildren();
+  for (const piece of resume) {
+    const morceau = document.createElement("span");
+    rendreTexte(morceau, piece.texte, { math: piece.auteur === true });
+    element.appendChild(morceau);
+  }
 }
 
 function composantPour(ecran) {
@@ -82,7 +101,7 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
       const estCourant = exercice.saisie_possible && exercice.champ_courant === ecran.champ;
       if (!estCourant && !info.verrouille) continue; // écrans à venir : pas encore affichés
       const carte = creer("section", "moteur-ecran " + (estCourant ? "moteur-ecran-courant" : "moteur-ecran-termine"));
-      carte.appendChild(creer("p", "moteur-consigne", ecran.consigne));
+      carte.appendChild(creer("p", "moteur-consigne", ecran.consigne, { math: true }));
       if (estCourant) {
         carteCourante = { carte, ecran, info };
       } else {
@@ -111,11 +130,13 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
     const bloc = creer("div", "moteur-resume");
     if (info.valeur_saisie !== null) {
       const reponse = creer("p", "moteur-reponse-eleve");
-      reponse.append(creer("span", "moteur-etiquette", "Ta réponse : "), creer("span", "moteur-valeur", composantPour(ecran).resumer(ecran, info.valeur_saisie)));
+      const valeur = creer("span", "moteur-valeur");
+      rendrePieces(valeur, composantPour(ecran).resumer(ecran, info.valeur_saisie));
+      reponse.append(creer("span", "moteur-etiquette", "Ta réponse : "), valeur);
       bloc.appendChild(reponse);
     }
     if (info.statut !== null) bloc.appendChild(creer("p", "moteur-statut moteur-statut-" + info.statut, LIBELLES_STATUT[info.statut]));
-    if (info.solution_attendue !== null) bloc.appendChild(creer("p", "moteur-solution", "Réponse attendue : " + info.solution_attendue));
+    if (info.solution_attendue !== null) bloc.appendChild(creer("p", "moteur-solution", "Réponse attendue : " + info.solution_attendue, { math: true }));
     return bloc;
   }
 
@@ -164,8 +185,8 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
       } else {
         retourServeur.appendChild(creer("p", "moteur-statut moteur-statut-neutre", "Réponse enregistrée."));
       }
-      if (resultat.message_erreur) retourServeur.appendChild(creer("p", "moteur-message-syntaxe", resultat.message_erreur));
-      if (resultat.solution_attendue) retourServeur.appendChild(creer("p", "moteur-solution", "Réponse attendue : " + resultat.solution_attendue));
+      if (resultat.message_erreur) retourServeur.appendChild(creer("p", "moteur-message-syntaxe", resultat.message_erreur, { math: true }));
+      if (resultat.solution_attendue) retourServeur.appendChild(creer("p", "moteur-solution", "Réponse attendue : " + resultat.solution_attendue, { math: true }));
       if (resultat.verrouille) {
         arreterMinuterie();
         const suite = creer("button", "moteur-bouton moteur-bouton-principal", resultat.exercice_termine ? "Voir la fin" : "Question suivante");
@@ -222,7 +243,8 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
     const bloc = creer("div", "moteur-aide");
     const bouton = creer("button", "moteur-bouton moteur-bouton-secondaire", "Besoin d'un indice ?");
     bouton.type = "button";
-    const texte = creer("p", "moteur-aide-texte");
+    // Zone de l'aide : chaîne (texte d'auteur) OU aide typée (composant de `aides/`).
+    const texte = creer("div", "moteur-aide-texte");
     texte.hidden = true;
     let confirmation = exercice.tache.aide_penalite_pourcent > 0 && !info.aide_utilisee;
     bouton.addEventListener("click", async () => {
@@ -234,7 +256,7 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
       bouton.disabled = true;
       try {
         const resultat = await api.demanderAide(exercice.id, ecran.champ);
-        rendreTexte(texte, resultat.aide);
+        afficherAide(texte, resultat.aide);
         texte.hidden = false;
         bouton.hidden = true;
       } catch (e) {
@@ -249,6 +271,22 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
     }
     bloc.append(bouton, texte);
     return bloc;
+  }
+
+  /** Affiche l'aide servie par le serveur : chaîne d'auteur, ou aide typée par la table `AIDES_TYPEES` (type inconnu : message neutre). */
+  function afficherAide(zone, aide) {
+    zone.classList.remove("moteur-aide-typee");
+    if (typeof aide === "string") {
+      rendreTexte(zone, aide, { math: true });
+      return;
+    }
+    const composant = aide && typeof aide === "object" ? AIDES_TYPEES[aide.type] : undefined;
+    if (!composant) {
+      rendreTexte(zone, "Cette aide ne peut pas être affichée.");
+      return;
+    }
+    zone.classList.add("moteur-aide-typee");
+    zone.replaceChildren(composant.creer(aide));
   }
 
   await recharger();

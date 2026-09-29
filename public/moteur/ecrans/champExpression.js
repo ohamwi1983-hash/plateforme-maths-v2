@@ -1,3 +1,5 @@
+import { versTexteBrut } from "../texteMath.js";
+
 /**
  * Composant d'écran « champ_expression » : un champ de saisie libre. État d'édition = la valeur du
  * `<input>`, privée à ce composant ; le moteur n'en obtient une copie (`lireReponse`) qu'au moment de
@@ -15,7 +17,7 @@ export default {
     entree.autocomplete = "off";
     entree.autocapitalize = "off";
     entree.spellcheck = false;
-    entree.placeholder = ecran.placeholder || "";
+    entree.placeholder = versTexteBrut(ecran.placeholder || ""); // attribut : texte brut, jamais de balisage
     entree.setAttribute("aria-label", "Ta réponse");
     entree.addEventListener("input", () => surChangement());
     entree.addEventListener("keydown", (e) => {
