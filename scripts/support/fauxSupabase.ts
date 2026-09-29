@@ -203,6 +203,18 @@ class Constructeur implements PromiseLike<Resultat> {
     return sortie;
   }
 
+  /**
+   * `.single()` / `.maybeSingle()` après `insert` / `update` / `upsert` (avec `.select()`) : PostgREST renvoie UN objet,
+   * pas un tableau. Le faux ne le faisait que pour `select` : `classes.ts` (génération paresseuse du code) recevait donc un
+   * tableau, l'étalait (`{ ...[ligne] }` = `{ "0": ligne }`) et `prof.html` cessait de charger après `chargerClasses`.
+   * `single()` sans ligne = erreur (PGRST116), `maybeSingle()` sans ligne = `null`.
+   */
+  private enUneLigneSiDemande(lignes: Ligne[]): Resultat {
+    if (!this.unique) return { data: lignes, error: null };
+    if (lignes.length === 0 && this.unique === "single") return { data: null, error: { message: "JSON object requested, multiple (or no) rows returned" } };
+    return { data: lignes[0] ?? null, error: null };
+  }
+
   private executer(): Resultat {
     const table = this.base.table(this.nom);
     if (this.mode === "insert" || this.mode === "upsert") {
@@ -219,12 +231,12 @@ class Constructeur implements PromiseLike<Resultat> {
         }
         inserees.push(this.base.inserer(this.nom, l));
       }
-      return { data: inserees.map((l) => this.projeter(l)), error: null };
+      return this.enUneLigneSiDemande(inserees.map((l) => this.projeter(l)));
     }
     const cibles = table.filter((l) => this.filtres.every((f) => f(l)));
     if (this.mode === "update") {
       for (const l of cibles) Object.assign(l, this.charge);
-      return { data: cibles.map((l) => this.projeter(l)), error: null };
+      return this.enUneLigneSiDemande(cibles.map((l) => this.projeter(l)));
     }
     if (this.mode === "delete") {
       this.base.tables.set(this.nom, table.filter((l) => !cibles.includes(l)));

@@ -98,8 +98,20 @@ interface Journal {
   pageerrors: string[];
   requetes: { methode: string; url: string; corps: string | null }[];
   reponsesEnErreur: { statut: number; methode: string; url: string }[];
+  /** Messages d'erreur AFFICHÉS à l'utilisateur au moment de la fermeture de la page (RAPPORT §27) : ni HTTP, ni console, ni exception non interceptée. */
+  erreursInterface: string[];
 }
 const journauxOuverts: { journal: Journal; jeton: string }[] = [];
+
+/** Code exécuté DANS la page : messages d'erreur visibles (erreur fatale du pilote ; échec de chargement de prof.html). */
+const LECTURE_ERREURS_INTERFACE = `(() => {
+  const sortie = [];
+  const fatale = document.getElementById("erreur-fatale-pilote");
+  if (fatale && fatale.textContent.trim() !== "") sortie.push("erreur fatale : " + fatale.textContent.trim().slice(0, 240));
+  const statut = document.getElementById("statut-connexion");
+  if (statut && /Impossible de charger|Erreur inattendue/.test(statut.textContent)) sortie.push("statut-connexion : " + statut.textContent.trim().slice(0, 240));
+  return sortie;
+})()`;
 
 /** Réponse >= 400 qu'un scénario PROVOQUE volontairement : `motif` sur « MÉTHODE chemin », `pourquoi` obligatoire. */
 interface ReponseHttpAttendue {
@@ -130,8 +142,14 @@ function evaluerReponsesHttp(etiquette: string, journaux: { journal: Journal; je
   return problemes;
 }
 
+function evaluerErreursInterface(etiquette: string, journaux: { journal: Journal; jeton: string }[]): string[] {
+  return journaux.flatMap(({ journal, jeton }) => journal.erreursInterface.map((m) => `${etiquette} (${jeton}) : erreur affichée à l'écran — ${m}`));
+}
+
 function controlerReponsesHttp(etiquette: string, attendues: ReponseHttpAttendue[] = []): void {
-  const problemes = evaluerReponsesHttp(etiquette, journauxOuverts.splice(0), attendues);
+  const ouverts = journauxOuverts.splice(0);
+  for (const m of evaluerErreursInterface(etiquette, ouverts)) verifier(false, m);
+  const problemes = evaluerReponsesHttp(etiquette, ouverts, attendues);
   for (const m of problemes) verifier(false, m);
   verifier(problemes.length === 0, `${etiquette} : réponses HTTP >= 400 conformes aux attendus déclarés`);
 }
@@ -149,13 +167,35 @@ async function temoinControleHttp(navigateur: any, base: string) {
   verifier(evaluerReponsesHttp("t", journaux, [declaree]).length === 0, "témoin du contrôle : un 404 déclaré doit être accepté");
   verifier(evaluerReponsesHttp("t", journaux, [{ ...declaree, statut: 409 }]).length === 2, "témoin du contrôle : un statut différent = réponse inattendue ET attendu périmé");
   verifier(evaluerReponsesHttp("t", [{ journal: { ...journal, reponsesEnErreur: [] }, jeton: "t" }], [declaree]).length === 1, "témoin du contrôle : un attendu jamais observé doit être signalé");
+  // Erreur affichée à l'écran mais invisible pour HTTP / console / pageerror : la lecture à la fermeture doit la voir.
+  {
+    const { page: p2, contexte: c2, journal: j2 } = await preparerPage(navigateur, base, 1280, 900, "eleve:eleve-1", "e1@x");
+    await p2.setContent('<p id="statut-connexion">Impossible de charger la configuration : Cannot read properties of undefined (reading \'slice\')</p>');
+    await c2.close();
+    journauxOuverts.splice(0);
+    verifier(j2.reponsesEnErreur.length === 0 && j2.erreursConsole.length === 0 && j2.pageerrors.length === 0, "témoin interface : cette panne n'a AUCUN signal HTTP / console / pageerror");
+    verifier(j2.erreursInterface.length === 1 && evaluerErreursInterface("t", [{ journal: j2, jeton: "t" }]).length === 1, `témoin interface : l'erreur affichée est lue à la fermeture (${JSON.stringify(j2.erreursInterface)})`);
+  }
 }
 
 async function preparerPage(navigateur: any, url: string, largeur: number, hauteur: number, jeton: string, email: string, avantChargement?: string) {
   const contexte = await navigateur.newContext({ viewport: { width: largeur, height: hauteur }, hasTouch: largeur < 600 });
   const page = await contexte.newPage();
-  const journal: Journal = { erreursConsole: [], pageerrors: [], requetes: [], reponsesEnErreur: [] };
+  const journal: Journal = { erreursConsole: [], pageerrors: [], requetes: [], reponsesEnErreur: [], erreursInterface: [] };
   journauxOuverts.push({ journal, jeton });
+  // Un chargement qui échoue dans un try/catch de la page (ex. `init` de prof.html : « Impossible de charger la configuration : … »)
+  // n'est NI une réponse HTTP >= 400, NI une erreur console, NI un `pageerror` : seul l'écran le dit. On le lit à la fermeture.
+  const fermerContexte = contexte.close.bind(contexte);
+  contexte.close = async () => {
+    for (const p of contexte.pages()) {
+      try {
+        journal.erreursInterface.push(...((await p.evaluate(LECTURE_ERREURS_INTERFACE)) as string[]));
+      } catch {
+        /* page déjà fermée ou sans document : rien à lire */
+      }
+    }
+    await fermerContexte();
+  };
   page.on("pageerror", (e: Error) => journal.pageerrors.push(e.message));
   page.on("console", (m: any) => {
     if (m.type() === "error") journal.erreursConsole.push(m.text());

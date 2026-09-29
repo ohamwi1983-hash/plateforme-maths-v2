@@ -1132,3 +1132,28 @@ Faisable sur le schéma réel (`invitations_prof` : `code`, `utilise`, `cree_le`
 - Pas de liste des invitations en attente (D7) : un code perdu se retrouve par SQL (`select code, email_cible from invitations_prof where not utilise`). Deux codes peuvent être générés pour le même e-mail.
 - Trouvé en testant : dans le harnais Chromium, `prof.html` interrompt son chargement après `chargerClasses` (`Cannot read properties of undefined (reading 'slice')`, `GET /api/eleves?classe_id=undefined`) — antérieur à ce chantier, non corrigé. Conséquence traitée : `chargerIdentiteProf` s'exécute AVANT les autres chargements et a son propre `try/catch`, pour que l'onglet « Admin » ne dépende d'aucun chargement sans rapport.
 - **Ordre des PR (D8)** : celle-ci modifie `lib/routes/inscription-prof.ts` près des lignes `DIAG-INVITATION` (§24, temporaires) ; à fusionner après la PR #13 et le retrait du diagnostic. Le diagnostic est toujours en place.
+
+
+## §27 : Chromium — la vraie cause du chargement interrompu de `prof.html` (faux Supabase) + lecture des erreurs affichées
+
+Correction du §26-G, qui décrivait ce défaut comme « antérieur à ce chantier, non corrigé » sans en avoir cherché la cause : le contournement (`chargerIdentiteProf` d'abord) masquait le symptôme. Aucun code de production touché, aucune migration SQL.
+
+### A. Ce que le contrôle des 4xx (§21) a vu : rien — et il ne pouvait pas le voir
+Trace réelle du chargement de `prof.html` dans le harnais : `GET /api/classes` → **200** `[{"0":{"id":"classe-1","nom":"4A","code":"3NSR33"},"nombre_eleves_actifs":0}]` (objet emballé sous la clé `"0"`), `GET /api/eleves?classe_id=undefined` → **200** `[]`, puis `TypeError: Cannot read properties of undefined (reading 'slice')` dans `rendreBandeauEtMesClasses` (`prof.html:2262`), rattrapé par le `try/catch` de `init` qui écrit « Impossible de charger la configuration : … » dans `#statut-connexion`. **Aucune réponse >= 400, aucune erreur console, aucun `pageerror`** : les trois canaux surveillés étaient muets. Il n'a été découvert que parce que le nouveau scénario attendait `GET /api/profs/moi`, appelé après le plantage.
+Les scénarios `prof` / `poids` existants passaient parce que leurs assertions ne portent que sur ce qui est chargé AVANT l'échec (`chargerCatalogue`) : `chargerTaches` et `chargerTableauDeBordProf` n'ont **jamais** été exécutés en Chromium avant ce correctif.
+
+### B. Cause : le faux Supabase, pas le pont d'API
+`lib/routes/classes.ts:56-62` génère paresseusement le `code` d'une classe qui n'en a pas : `update({code}).eq().select().single()`. PostgREST renvoie **un objet** ; `BaseMemoire.executer()` n'appliquait `.single()` / `.maybeSingle()` qu'à `select`, et renvoyait un **tableau** pour `update` / `insert` / `upsert`. `{ ...classe }` d'un tableau = `{ "0": ligne }`. Les classes du scénario (`creerScenario`) n'ont pas de `code` : le premier `GET /api/classes` prenait toujours cette branche. La route est correcte ; le pont d'API (`demarrerServeur`) relaie fidèlement.
+Correctif : `scripts/support/fauxSupabase.ts` `enUneLigneSiDemande` (`.single()` sans ligne = erreur PGRST116, `.maybeSingle()` sans ligne = `null`), appliqué à `insert` / `upsert` / `update`.
+
+### C. Lecture des erreurs affichées (`scripts/chromium-temoin-technique.ts`)
+`LECTURE_ERREURS_INTERFACE` : à la fermeture de chaque contexte (`contexte.close` enveloppé dans `preparerPage`), le harnais lit `#erreur-fatale-pilote` (erreur fatale du pilote, `eleve.html` / `index.html`) et `#statut-connexion` (« Impossible de charger » / « Erreur inattendue », `prof.html`). `evaluerErreursInterface` les rapporte dans `controlerReponsesHttp` : tout message d'erreur affiché fait échouer le scénario. Témoin : une page qui n'a AUCUN signal HTTP / console / pageerror mais affiche l'erreur est bien lue.
+
+### D. Mesures
+- Avec le correctif : 28/28 scripts (aucune assertion modifiée), **Chromium 498/498** ; `prof.html` charge maintenant `/api/taches` et `/api/profs/tableau-de-bord` (trace : `config · profs/moi · catalogue · classes · eleves?classe_id=classe-1 · taches · tableau-de-bord`, `#statut-connexion` vide).
+- **Mutation** : faux Supabase SANS correctif + garde-fou → **6 échecs** (scénarios `prof` et `admin` × 2 largeurs), message « erreur affichée à l'écran — statut-connexion : Impossible de charger la configuration : Cannot read properties of undefined (reading 'slice') ».
+
+### E. Limites
+- Le garde-fou ne lit que `#erreur-fatale-pilote` et `#statut-connexion` : une erreur écrite dans un autre élément (`#statut-liste-eleves`, `#statut-creer-prof`…) n'est pas vue. Un `catch` qui avale l'erreur SANS rien afficher reste invisible pour tous les canaux.
+- `chargerIdentiteProf` reste appelé en premier (§26) : sa robustesse est voulue, mais la raison invoquée au §26-G (« défaut du harnais antérieur ») est remplacée par ce §27.
+- D'autres écarts de fidélité du faux Supabase sont possibles (il n'implémente ni contraintes ni tous les opérateurs) : chacun se découvre à l'usage.
