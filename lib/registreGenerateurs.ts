@@ -48,7 +48,8 @@ export function verifierCoherenceRegistre(
       if (!dansCatalogue) erreurs.push(`${g.variante_id} : générateur curriculaire absent de CATALOGUE_GENERATEURS`);
       else if (dansCatalogue.generateur_id !== g.generateur_id) erreurs.push(`${g.variante_id} : generateur_id "${g.generateur_id}" ≠ catalogue "${dansCatalogue.generateur_id}"`);
       for (const code of g.codesCompetenceDeclares) {
-        if (!(code in dictionnaire)) erreurs.push(`${g.variante_id} : code de compétence "${code}" absent de lib/dictionnaireCompetences.ts`);
+        // `Object.hasOwn` : `code in dictionnaire` acceptait « constructor », « toString »… (membres d'Object.prototype), RAPPORT.md §20.
+        if (!Object.hasOwn(dictionnaire, code)) erreurs.push(`${g.variante_id} : code de compétence "${code}" absent de lib/dictionnaireCompetences.ts`);
       }
     } else if (dansCatalogue) {
       erreurs.push(`${g.variante_id} : générateur non curriculaire présent dans CATALOGUE_GENERATEURS (jamais exposé au professeur)`);

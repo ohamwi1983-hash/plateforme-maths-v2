@@ -7,6 +7,7 @@ import { exerciceEstComplet } from "../../tableauDeBord";
 import { separerBugsDetectes, calculerProfilCompetences, type CompetenceProfil } from "../../profilCompetences";
 import { DICTIONNAIRE_COMPETENCES } from "../../dictionnaireCompetences";
 import { EXPLICATIONS_COMPETENCES } from "../../explicationsCompetences";
+import { lirePropre } from "../../tablePropre";
 import { ORDRE_CATEGORIES } from "../../categoriesCompetences";
 import { recupererToutesLesLignes } from "../../supabasePagination";
 import { tempsTotalExerciceDepuisReponses, type LigneReponseTemps } from "../../tempsExercice";
@@ -275,7 +276,8 @@ export const gererProfsResultats = avecGestionErreurs(async function handler(req
   // `resumeBugs` — voir le correctif documenté au-dessus : TOUTES les occurrences historiques,
   // jamais dédupliquées par champ (donc calculées séparément de `derniereSoumissionParCle`
   // ci-dessus, qui reste dédupliquée pour le détail par champ affiché plus bas).
-  const resumeBugs: Record<string, number> = {};
+  // `Map` (et non un objet littéral) : un code « constructor » ne doit pas lire `Object.prototype.constructor` (RAPPORT.md §20).
+  const resumeBugs = new Map<string, number>();
   // Prompt "Refonte Résultats (Option C)" — `bug_detecte` de CHAQUE soumission, groupé par élève
   // (via `eleveIdParExerciceId`), pour nourrir `calculerProfilCompetences` par élève ci-dessous.
   // Même donnée brute que `resumeBugs` (TOUTES les occurrences, jamais dédupliquées par champ),
@@ -321,7 +323,7 @@ export const gererProfsResultats = avecGestionErreurs(async function handler(req
     // ici au niveau du code individuel plutôt que de la valeur brute jointe (sinon "CODE1,CODE2"
     // deviendrait sa propre clé distincte de "CODE1" et "CODE2" pris isolément ailleurs).
     for (const code of separerBugsDetectes((r.bug_detecte as string | null) ?? null)) {
-      resumeBugs[code] = (resumeBugs[code] ?? 0) + 1;
+      resumeBugs.set(code, (resumeBugs.get(code) ?? 0) + 1);
     }
   }
 
@@ -355,13 +357,13 @@ export const gererProfsResultats = avecGestionErreurs(async function handler(req
     return { id: eleve.id, nom: eleve.nom, prenom: eleve.prenom, actif: eleve.actif, exercices, competences };
   });
 
-  const resumeBugsTrie: ResumeBugEntree[] = Object.entries(resumeBugs)
+  const resumeBugsTrie: ResumeBugEntree[] = [...resumeBugs.entries()]
     .map(([code, occurrences]) => ({
       code,
-      libelle: DICTIONNAIRE_COMPETENCES[code]?.libelle ?? code,
+      libelle: lirePropre(DICTIONNAIRE_COMPETENCES, code)?.libelle ?? code,
       occurrences,
-      explication: EXPLICATIONS_COMPETENCES[code]?.explication,
-      exemple: EXPLICATIONS_COMPETENCES[code]?.exemple,
+      explication: lirePropre(EXPLICATIONS_COMPETENCES, code)?.explication,
+      exemple: lirePropre(EXPLICATIONS_COMPETENCES, code)?.exemple,
     }))
     .sort((a, b) => b.occurrences - a.occurrences);
 

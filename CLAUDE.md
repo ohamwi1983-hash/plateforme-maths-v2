@@ -174,3 +174,11 @@ du typage — ne jamais lui donner un écran « toujours correct ». L'**ordre d
 figé (toute modification impose un nouveau `variante_id`). Toute divergence avec l'ancien pilote doit être
 délibérée, listée dans le test et dans `RAPPORT.md` (quatre à ce jour). `C07_ou_C08` n'est jamais émis ni déclaré pour gen7.
 
+## Tables d'objets littéraux : jamais `cle in table` ni `table[cle]` avec une clé dynamique (RAPPORT §20)
+
+Tout objet littéral hérite de `Object.prototype` : `"constructor" in table` est vrai et `table["constructor"]` est
+une fonction. Pour une clé qui n'est pas une constante du code (code de compétence, id venu du serveur, et surtout
+tout texte ou toute clé JSON venant de l'ÉLÈVE) : `lirePropre(table, cle)` (`lib/tablePropre.ts`) ou `Object.hasOwn`,
+une `Map` pour un compteur, `Object.create(null)` pour un objet construit avec des clés d'élève (et rejet de
+`__proto__`, comme `decoderTableauSignes`). Un test doit reproduire l'entrée hostile (`scripts/test-durcissement-prototype.ts`).
+

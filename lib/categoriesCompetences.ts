@@ -1,3 +1,4 @@
+import { lirePropre } from "./tablePropre";
 /**
  * Prompt "Catégorisation des compétences + regroupement du profil élève (Option B)" — table de
  * correspondance code de compétence -> catégorie/sous-catégorie, reprise TELLE QUELLE du prompt
@@ -130,7 +131,7 @@ export const CATEGORIES_COMPETENCES: Record<string, CategorieCompetence> = {
 export const CATEGORIE_PAR_DEFAUT: CategorieCompetence = { categorie: "Non classé" };
 
 export function categoriserCompetence(code: string): CategorieCompetence {
-  return CATEGORIES_COMPETENCES[code] ?? CATEGORIE_PAR_DEFAUT;
+  return lirePropre(CATEGORIES_COMPETENCES, code) ?? CATEGORIE_PAR_DEFAUT; // jamais la chaîne de prototypes (RAPPORT.md §20)
 }
 
 /**

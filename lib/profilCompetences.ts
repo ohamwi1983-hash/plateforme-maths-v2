@@ -1,3 +1,4 @@
+import { lirePropre } from "./tablePropre";
 import { DICTIONNAIRE_COMPETENCES } from "./dictionnaireCompetences";
 import { EXPLICATIONS_COMPETENCES } from "./explicationsCompetences";
 import { EXPLICATIONS_COMPETENCES_ELEVE } from "./explicationsCompetencesEleve";
@@ -126,8 +127,9 @@ export function calculerProfilCompetences(bugsDetectes: (string | null)[]): Comp
   }
 
   const profil: CompetenceProfil[] = [...occurrencesParCode.entries()].map(([code, occurrences]) => {
-    const entree = DICTIONNAIRE_COMPETENCES[code];
-    const explication = EXPLICATIONS_COMPETENCES[code];
+    // `lirePropre` : jamais la chaîne de prototypes (un code « constructor » ne doit pas lire une fonction), RAPPORT.md §20.
+    const entree = lirePropre(DICTIONNAIRE_COMPETENCES, code);
+    const explication = lirePropre(EXPLICATIONS_COMPETENCES, code);
     const { categorie, sousCategorie } = categoriserCompetence(code);
     return {
       code,
@@ -137,7 +139,7 @@ export function calculerProfilCompetences(bugsDetectes: (string | null)[]): Comp
       occurrences,
       explication: explication?.explication,
       exemple: explication?.exemple,
-      explicationEleve: EXPLICATIONS_COMPETENCES_ELEVE[code],
+      explicationEleve: lirePropre(EXPLICATIONS_COMPETENCES_ELEVE, code),
       categorie,
       sousCategorie,
     };

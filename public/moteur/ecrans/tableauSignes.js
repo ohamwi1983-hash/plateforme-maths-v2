@@ -38,7 +38,7 @@ function symboleSvg(glyphe) {
   svg.setAttribute("class", "moteur-symbole");
   svg.setAttribute("aria-hidden", "true");
   svg.setAttribute("focusable", "false");
-  for (const d of TRACES_SYMBOLES[glyphe]) {
+  for (const d of Object.hasOwn(TRACES_SYMBOLES, glyphe) ? TRACES_SYMBOLES[glyphe] : []) {
     const chemin = document.createElementNS(NS, "path");
     chemin.setAttribute("d", d);
     svg.appendChild(chemin);
@@ -46,8 +46,12 @@ function symboleSvg(glyphe) {
   return svg;
 }
 
+// `Object.hasOwn` : `valeur` peut venir d'une réponse STOCKÉE de l'élève (`resumer`) ; `NOMS_SYMBOLES["constructor"]`
+// serait une fonction (membre d'Object.prototype). RAPPORT.md §20.
+const estSymbole = (valeur) => typeof valeur === "string" && Object.hasOwn(TRACES_SYMBOLES, valeur);
+
 function nomValeur(ligne, valeur) {
-  return ligne.rendu === "symboles_variation" && NOMS_SYMBOLES[valeur] ? NOMS_SYMBOLES[valeur] : valeur;
+  return ligne.rendu === "symboles_variation" && typeof valeur === "string" && Object.hasOwn(NOMS_SYMBOLES, valeur) ? NOMS_SYMBOLES[valeur] : valeur;
 }
 
 function alphabetDe(ecran, ligne) {
@@ -113,7 +117,7 @@ export default {
         const rafraichir = () => {
           if (etat.valeur === null) {
             bouton.replaceChildren(document.createTextNode("?"));
-          } else if (ligne.rendu === "symboles_variation" && TRACES_SYMBOLES[etat.valeur]) {
+          } else if (ligne.rendu === "symboles_variation" && estSymbole(etat.valeur)) {
             bouton.replaceChildren(symboleSvg(etat.valeur));
           } else {
             bouton.replaceChildren(document.createTextNode(etat.valeur));

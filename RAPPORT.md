@@ -884,3 +884,39 @@ Le reste est **identique**, prouvé ci-dessous.
 
 ### G. Erratum (comptes de scripts annoncés avant cette section)
 `RAPPORT.md:711` (§15) annonçait « 21 scripts (`smoke-test` + `scripts/test-*.ts`) » : **19** au commit de fusion `dc64fb3` (le chiffre datait d'avant la fusion des deux témoins). `RAPPORT.md:756` (§16) annonçait 21 : **20** (`cb5a3aa`). Les PR #5 annonçaient 22 puis 23 : **21** puis **22**. Cause : le script Chromium était compté en plus alors qu'il était aussi cité à part. Les comptes d'assertions (412, 432, 4 726, 137…) n'étaient pas concernés. Depuis cette section : **23** scripts `smoke-test` + `scripts/test-*.ts`, + Chromium à part.
+
+
+## §20 : Durcissement contre la chaîne de prototypes (`x in objet`, `objet[cle]` sur objet littéral)
+
+Petite PR de correctifs, née du constat de la §19-D n°3 (l'ancien `mot in NOMS_FONCTIONS` lisait `constructor` comme une fonction) : le même piège était-il dans le code déjà écrit ? Grep exhaustif de `lib/`, `api/`, `src/`, `scripts/`, `public/` (opérateur `in` hors boucles `for…in` — il n'y en a aucune —, `hasOwnProperty` / `Object.hasOwn` / `Object.create(null)` — aucun avant la §19 —, tables d'objets littéraux et leurs lectures par clé dynamique). Aucune migration SQL, aucun changement de comportement pour une entrée ordinaire.
+
+### A. Le piège
+Tout objet littéral « contient » `constructor`, `toString`, `valueOf`, `hasOwnProperty`, `__proto__`… : `cle in table` est vrai et `table["constructor"]` est une **fonction**, pas `undefined`. Nouvelle lecture unique : `lib/tablePropre.ts` (`lirePropre`, fondée sur `Object.hasOwn`).
+
+### B. Sites corrigés (un test chacun, `scripts/test-durcissement-prototype.ts`, 97 vérifications)
+| # | Site | Clé | Avant → après |
+|---|---|---|---|
+| 1 | `lib/registreGenerateurs.ts:52` `code in dictionnaire` (**production**) | code déclaré par le développeur | un code déclaré « constructor » passait la cohérence du registre → `Object.hasOwn` |
+| 2 | `lib/profilCompetences.ts:131,132,142` — dictionnaire, explications, explications élève | `bug_detecte` (serveur) | `explicationEleve` recevait la **fonction** `Object` → `lirePropre` |
+| 3 | `lib/categoriesCompetences.ts:134` | idem | `categorie` / `sousCategorie` lues sur une fonction → catégorie par défaut |
+| 4 | `lib/routes/profs/resultats.ts:280,326` `resumeBugs` (objet) ; `:363-366` | idem | **compteur corrompu** : `occurrences: "function Object() { [native code] }11"` (reproduit) → `Map` ; les lectures de tables passent par `lirePropre` |
+| 5 | `lib/reponsesEcran.ts:36-49` `decoderTableauSignes` — **clés venues de l'ÉLÈVE** | id de ligne / de colonne | `{"__proto__":{"signe":"+"}}` changeait le prototype de l'objet décodé (`signe` héritée) → rejet explicite de `__proto__` **et** objets sans prototype |
+| 6 | `public/moteur/ecrans/tableauSignes.js:41,49-54,120` `NOMS_SYMBOLES` / `TRACES_SYMBOLES` | valeur d'une réponse **stockée** (`resumer`) | « function Object() { [native code] } » affiché dans le résumé de l'élève → `Object.hasOwn` |
+| 7 | `lib/tablePropre.ts` | — | test unitaire de `lirePropre` |
+
+### C. Ce que les tests prouvent (chacun reproduit d'abord l'entrée hostile ; **mutation vérifiée** : retirer le correctif d'un site fait échouer son test)
+- Registre : les 9 clés héritées déclarées comme codes sont refusées, un vrai code reste accepté (témoin : `in` les voit bien dans le dictionnaire réel).
+- Profil / catégories : pour chaque clé héritée, libellé de repli, aucune explication lue dans le prototype, catégorie « Non classé » ; un code réel (`FC_CE_FANTOME`) reste résolu depuis les quatre tables.
+- `profs/resultats` en réel (vrai `api/router.ts`, réponses stockées avec `bug_detecte` = `constructor`, `toString`, `__proto__`, `valueOf`) : compteurs entiers exacts, libellé de repli.
+- **`decoderTableauSignes({"__proto__":{"signe":"+"}})` est rejeté** (et `__proto__` en colonne, seul ou parmi des colonnes valides) ; `constructor` / `toString` comme id de ligne sont des clés ordinaires, propres, jamais héritées ; `Object.prototype` n'est pas pollué ; le vérificateur du témoin répond `parse_error` à une réponse portée par `__proto__`, et accepte toujours la bonne. Les décodeurs `champs_multiples`, `intervalle`, `liste_valeurs` refusaient déjà `__proto__` : verrouillé.
+- Client : `resumer` d'une réponse stockée contenant chaque clé héritée affiche la valeur brute ; les vrais symboles gardent leur nom accessible.
+
+### D. Constats honnêtes
+- **Aucun de ces sites n'était atteignable par un élève sauf n°5 et n°6** (les codes viennent du serveur : `verifierAvecControle` ne laisse passer que des codes DÉCLARÉS, et leur nom suit une convention `MAJUSCULES_SOUS_TIRETS` qui ne peut pas heurter un membre de prototype). Le n°4 était pourtant un défaut **réel et reproduit** si un tel code existait ; le n°1 était le seul filet qui aurait pu le laisser entrer.
+- **Les lectures de `DICTIONNAIRE_COMPETENCES[code]?.libelle` et `EXPLICATIONS_COMPETENCES[code]?.explication` dans `resultats.ts` n'avaient AUCUN effet observable** (une propriété lue sur une fonction héritée vaut `undefined`, donc le repli s'appliquait quand même) : elles sont durcies par cohérence, et **aucun test ne peut distinguer** l'ancienne et la nouvelle lecture à cet endroit (mutation testée : 0 échec) — la preuve porte sur `resumeBugs`, seul défaut visible de ce fichier.
+- `NOMS_SYMBOLES` est le seul site client atteignable ; `TRACES_SYMBOLES` (`symboleSvg`, `rafraichir`) est durci par cohérence : ses clés viennent de l'alphabet de l'auteur, jamais d'une réponse ; son chemin normal est couvert par Chromium (symboles de variation), pas par un test hostile.
+- Vérifiés SANS changement : `OPERATEURS[c]` des deux évaluateurs de la §19 (un seul caractère ne peut égaler un membre de prototype) ; `COMPOSANTS_ECRAN[ecran.type]` et `LIBELLES_STATUT[statut]` (`public/moteur/moteur.js`, clés fournies par le serveur) ; `CORRESPONDANCE_JSON_VERS_PILOTE[…]` (clé `niveau:numero`, jamais un nom de propriété) ; les 12 `table in tables` des scripts de test (noms de tables écrits en dur).
+
+### E. Non couvert / limites
+- Grep par motif : un accès indirect (clé calculée à travers plusieurs fonctions) a pu m'échapper ; la recherche a porté sur les tables d'objets littéraux **déclarées** et leurs lectures.
+- Aucune règle de lint ne verrouille le motif : une nouvelle lecture `TABLE[cle]` non protégée serait possible. Règle écrite dans `CLAUDE.md`.
