@@ -61,12 +61,15 @@ sait exécuter) et leur cohérence est vérifiée au chargement du registre (éc
 - Un générateur (`lib/contratGenerateur.ts`) déclare des écrans (données) ; il n'écrit jamais de
   HTML/CSS. Un nouveau type d'écran = une interface dans le contrat + un composant dans
   `public/moteur/ecrans/` (enregistré dans `index.js`) + un décodeur dans `lib/reponsesEcran.ts` + un
-  écran dans un témoin technique — `src/generateurs/_temoinTechnique/` (`variante_id`
-  `_temoin_technique_v1`, dont les assertions chiffrées ne bougent pas) ou son extension
-  `src/generateurs/_temoinTechniqueEtendu/` (`_temoin_technique_etendu_v1`), permanents, jamais dans le
-  catalogue affiché ni assignables par l'API (`validerComposition` rejette toute variante hors
-  catalogue) ; `npm run chromium-temoin` doit alors passer. Tout texte d'auteur d'un composant passe par
-  `rendreTexte(…, { math: true })`, jamais par `textContent`.
+  écran dans le témoin technique UNIQUE — `src/generateurs/_temoinTechnique/` (`variante_id`
+  `_temoin_technique_v1`, permanent, jamais dans le catalogue affiché ni assignable par l'API :
+  `validerComposition` rejette toute variante hors catalogue). Il a deux profils d'exercice tirés de la
+  graine : `base` (les 4 écrans d'origine, dont les 137 assertions de la « Section A » de
+  `scripts/test-temoin-technique.ts` ne bougent pas : leur nombre est compté) et `etendu` (les écrans
+  ajoutés depuis la phase 3b-1, « Section B ») ; un nouveau type d'écran s'ajoute au profil `etendu`. Le
+  profil des exercices assignés par la route se DÉCLARE dans les tests (`imposerProfilAssignation`,
+  `scripts/support/harnaisRouteur.ts`). `npm run chromium-temoin` doit passer. Tout texte d'auteur d'un
+  composant passe par `rendreTexte(…, { math: true })`, jamais par `textContent`.
 - **État local d'édition ≠ réponse.** Ce que l'élève compose (texte tapé, lignes ajoutées, cases
   cochées, choix non confirmé) ne quitte jamais le composant ; seule une réponse confirmée (« Valider »)
   est envoyée, sous forme d'UNE chaîne `reponse_brute`. `POST /api/reponses` rejette toute clé autre que

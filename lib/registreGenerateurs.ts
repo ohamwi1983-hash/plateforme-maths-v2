@@ -2,7 +2,6 @@ import type { Generateur, ResultatVerification } from "./contratGenerateur";
 import { CATALOGUE_GENERATEURS } from "./catalogueGenerateurs";
 import { DICTIONNAIRE_COMPETENCES } from "./dictionnaireCompetences";
 import { generateurTemoinTechnique } from "../src/generateurs/_temoinTechnique";
-import { generateurTemoinTechniqueEtendu } from "../src/generateurs/_temoinTechniqueEtendu";
 
 /**
  * REGISTRE UNIQUE — seule autorité sur « quel `variante_id` correspond à quel générateur exécutable ».
@@ -15,7 +14,7 @@ import { generateurTemoinTechniqueEtendu } from "../src/generateurs/_temoinTechn
  * (ce qu'on peut composer) : le registre sait EXÉCUTER. Les deux ne sont pas fusionnés, leur
  * cohérence est contrôlée par `verifierCoherenceRegistre` au chargement de ce module.
  */
-export const REGISTRE_GENERATEURS: readonly Generateur<any>[] = [generateurTemoinTechnique, generateurTemoinTechniqueEtendu];
+export const REGISTRE_GENERATEURS: readonly Generateur<any>[] = [generateurTemoinTechnique];
 
 interface EntreeCatalogue {
   generateur_id: string;

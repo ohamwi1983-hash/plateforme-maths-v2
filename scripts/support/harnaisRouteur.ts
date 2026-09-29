@@ -4,6 +4,7 @@
  * `scripts/test-routeur.ts`). Jeton d'authentification : `prof:<id>` ou `eleve:<id>`.
  */
 import { BaseMemoire } from "./fauxSupabase";
+import { graineDeProfil, type ProfilTemoin } from "../../src/generateurs/_temoinTechnique";
 
 const cheminSupabaseAdmin = require.resolve("../../lib/supabaseAdmin");
 
@@ -37,12 +38,33 @@ export function installerBase(base: BaseMemoire): void {
   }
 }
 
+/**
+ * Profil des exercices du témoin technique tirés par `POST /api/assignations`. Le témoin a deux profils
+ * (`base` : les 4 écrans d'origine ; `etendu` : les 7 écrans de la phase 3b-1), déterminés par la
+ * graine. Une section de test qui dépend de l'un des deux le DÉCLARE ici (rien de caché) ; `aleatoire`
+ * laisse le tirage réel de la route (`tirerGraine`, `Math.random`). Le réglage vaut pour la suite du
+ * processus jusqu'au prochain appel.
+ */
+let profilAssignation: ProfilTemoin | "aleatoire" = "aleatoire";
+let formeAssignation: { large: boolean } | undefined;
+
+export function imposerProfilAssignation(profil: ProfilTemoin | "aleatoire", forme?: { large: boolean }): void {
+  profilAssignation = profil;
+  formeAssignation = forme;
+}
+
 export async function appeler(
   chemin: string,
   methode: string,
   options: { jeton?: string; corps?: unknown } = {},
 ): Promise<{ statut: number | null; corps: any }> {
   const { default: routeur } = require("../../api/router");
+  // À l'assignation, la seule source d'aléa est `tirerGraine()` (`Math.random`, lib/prng.ts) : on la
+  // remplace, le temps de l'appel, par des graines distinctes du profil demandé (écriture exacte : g / 2^32).
+  const graines = profilAssignation !== "aleatoire" && chemin === "assignations" && methode === "POST";
+  const aleatoireOrigine = Math.random;
+  let tirage = 0;
+  if (graines) Math.random = () => graineDeProfil(profilAssignation as ProfilTemoin, tirage++, formeAssignation) / 2 ** 32;
   const req = {
     method: methode,
     headers: options.jeton ? { authorization: `Bearer ${options.jeton}` } : {},
@@ -61,7 +83,11 @@ export async function appeler(
     },
     end() {},
   };
-  await routeur(req, res);
+  try {
+    await routeur(req, res);
+  } finally {
+    Math.random = aleatoireOrigine;
+  }
   return { statut, corps };
 }
 

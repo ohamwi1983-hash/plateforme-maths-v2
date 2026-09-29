@@ -59,8 +59,8 @@ import type { AideTypee } from "./aideTypee";
  * Ajouter (1) une interface dans `EcranDeclare` ci-dessous, (2) un décodeur dans
  * lib/reponsesEcran.ts, (3) un composant dans `public/moteur/ecrans/` enregistré dans
  * `public/moteur/ecrans/index.js` (tout texte d'auteur via `rendreTexte(…, { math: true })`),
- * (4) un écran correspondant dans un générateur témoin (`src/generateurs/_temoinTechnique/` ou son
- * extension `src/generateurs/_temoinTechniqueEtendu/`, tous deux hors catalogue),
+ * (4) un écran correspondant dans le générateur témoin UNIQUE (`src/generateurs/_temoinTechnique/`,
+ * hors catalogue ; profil d'exercice « base » = écrans d'origine, « etendu » = écrans ajoutés depuis),
  * (5) `npm run chromium-temoin` doit passer. Ni le contrat `Generateur`, ni le moteur, ni les routes
  * serveur ne changent.
  */

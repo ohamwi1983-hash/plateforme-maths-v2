@@ -19,12 +19,11 @@ declare const getComputedStyle: (el: unknown) => Record<string, string>;
 import { createServer, type Server } from "node:http";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
-import { appeler, creerScenario, creerTache, installerBase, type Scenario } from "./support/harnaisRouteur";
-import { CHAMP_DIVISEURS, CHAMP_PARITE, CHAMP_SIGNES, CHAMP_SOMME, generateurTemoinTechnique as temoin, reponseBruteCorrecte, VARIANTE_TEMOIN } from "../src/generateurs/_temoinTechnique";
+import { appeler, creerScenario, creerTache, imposerProfilAssignation, installerBase, type Scenario } from "./support/harnaisRouteur";
 import {
-  CHAMP_ALLURE, CHAMP_AXE, CHAMP_COEFFICIENTS, CHAMP_EXTREMUM, CHAMP_IMAGE, CHAMP_RACINES, CHAMP_SIGNES_VARIATION,
-  generateurTemoinTechniqueEtendu as temoinEtendu, reponseBruteCorrecteEtendue, VARIANTE_TEMOIN_ETENDU,
-} from "../src/generateurs/_temoinTechniqueEtendu";
+  CHAMP_ALLURE, CHAMP_AXE, CHAMP_COEFFICIENTS, CHAMP_DIVISEURS, CHAMP_EXTREMUM, CHAMP_IMAGE, CHAMP_PARITE, CHAMP_RACINES, CHAMP_SIGNES, CHAMP_SIGNES_VARIATION, CHAMP_SOMME,
+  generateurTemoinTechnique as temoin, graineDeProfil, reponseBruteCorrecte, VARIANTE_TEMOIN, type ExerciceEtendu, type ExerciceTemoin,
+} from "../src/generateurs/_temoinTechnique";
 
 const RACINE = join(__dirname, "..");
 const CAPTURES = process.env.CAPTURES_DIR ?? join(RACINE, "captures-chromium");
@@ -129,6 +128,7 @@ async function verifierMiseEnPage(page: any, etiquette: string, largeur: number)
 }
 
 async function scenarioEleve(navigateur: any, base: string, largeur: number) {
+  imposerProfilAssignation("base"); // scénario d'ORIGINE : les 4 écrans du profil « base »
   const s: Scenario = creerScenario();
   installerBase(s.base);
   const tacheId = creerTache(s, { nom: "Tâche témoin technique", aide_activee: true, aide_penalite_pourcent: 50, tentatives_supplementaires: 1, chrono_mode: "par_ecran", chrono_duree_secondes: 300, variantes: [{ variante_id: VARIANTE_TEMOIN, nombre_exercices: 1 }] });
@@ -251,6 +251,7 @@ async function scenarioEleve(navigateur: any, base: string, largeur: number) {
 }
 
 async function scenarioSansCorrection(navigateur: any, base: string, largeur: number) {
+  imposerProfilAssignation("base"); // scénario d'ORIGINE : les 4 écrans du profil « base »
   const s: Scenario = creerScenario();
   installerBase(s.base);
   const l = `${largeur}`;
@@ -350,6 +351,7 @@ async function agirSurComposant(page: any, ex: ReturnType<typeof temoin.generer>
 }
 
 async function matriceVisuelle(navigateur: any, base: string, largeur: number) {
+  imposerProfilAssignation("base"); // scénario d'ORIGINE : les 4 écrans du profil « base »
   const l = `${largeur}`;
   let ombreCarteDashboard = "";
   let rayonCarteDashboard = "";
@@ -434,6 +436,7 @@ async function matriceVisuelle(navigateur: any, base: string, largeur: number) {
 
 /** Nouvelle tentative après `not_equivalent` (essais restants) : la nouvelle sélection reste VIOLETTE, jamais rouge — la carte garde le verdict précédent. */
 async function scenarioRetentative(navigateur: any, base: string, largeur: number) {
+  imposerProfilAssignation("base"); // scénario d'ORIGINE : les 4 écrans du profil « base »
   const l = `${largeur}`;
   const s: Scenario = creerScenario();
   installerBase(s.base);
@@ -512,34 +515,43 @@ async function scenarioProf(navigateur: any, base: string, largeur: number) {
 }
 
 
+/** Enveloppe un exercice étendu en exercice du témoin unique (seuls `profil` et `etendu` comptent pour ses écrans et sa vérification). */
+const U = (e: ExerciceEtendu): ExerciceTemoin => ({ a: 11, b: 11, n: 12, r1: 0, r2: 1, profil: "etendu", etendu: e });
+const genE = (graine: number): ExerciceEtendu => {
+  const ex = temoin.generer(graine);
+  if (!ex.etendu) throw new Error(`graine ${graine} : profil « ${ex.profil} », étendu attendu`);
+  return ex.etendu;
+};
+
 /**
- * Phase 3b-1 — témoin ÉTENDU joué de bout en bout dans un vrai navigateur : champs_multiples (avec et sans
+ * Phase 3b-1 — profil ÉTENDU du témoin unique joué de bout en bout dans un vrai navigateur : champs_multiples (avec et sans
  * illustration), intervalle, liste_valeurs.permetAucune, tableau_signes étendu (3 PUIS 7 colonnes sur deux
  * exercices consécutifs de la même tâche : l'état local d'édition doit être réinitialisé), aides typées,
  * et le balisage mathématique dans chaque champ de texte d'auteur — jamais dans le texte tapé par l'élève.
  */
 async function scenarioEtendu(navigateur: any, base: string, largeur: number) {
+  imposerProfilAssignation("etendu"); // profil des exercices assignés : les 7 écrans de l'extension
   const s: Scenario = creerScenario();
   installerBase(s.base);
   const l = `${largeur}`;
-  const tacheId = creerTache(s, { nom: "Tâche témoin étendu", aide_activee: true, aide_penalite_pourcent: 25, tentatives_supplementaires: 1, feedback_immediat: true, reponse_visible: false, variantes: [{ variante_id: VARIANTE_TEMOIN_ETENDU, nombre_exercices: 2 }] });
+  const tacheId = creerTache(s, { nom: "Tâche témoin étendu", aide_activee: true, aide_penalite_pourcent: 25, tentatives_supplementaires: 1, feedback_immediat: true, reponse_visible: false, variantes: [{ variante_id: VARIANTE_TEMOIN, nombre_exercices: 2 }] });
   const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tacheId, eleve_ids: ["eleve-1"] } });
   verifier(a.statut === 201, `${l} étendu : assignation préalable : ${a.statut}`);
 
   // Deux exercices consécutifs de formes DIFFÉRENTES : 1er = racine double (3 colonnes), 2e = deux racines (7 colonnes).
-  const graineEtroite = [...Array(300).keys()].find((g) => !temoinEtendu.generer(g).large)!;
-  const graineLarge = [...Array(300).keys()].find((g) => temoinEtendu.generer(g).large)!;
+  const graineEtroite = graineDeProfil("etendu", 0, { large: false });
+  const graineLarge = graineDeProfil("etendu", 0, { large: true });
   const tdb = await appeler("eleves/tableau-de-bord", "GET", { jeton: "eleve:eleve-1" });
   const ordre: string[] = tdb.corps.en_cours.find((t: any) => t.tache_id === tacheId).exercices.map((e: any) => e.id);
   const ligneA = s.base.table("exercices_assignes").find((x) => x.id === ordre[0])!;
   const ligneB = s.base.table("exercices_assignes").find((x) => x.id === ordre[1])!;
   ligneA.graine = graineEtroite;
   ligneB.graine = graineLarge;
-  const exA = temoinEtendu.generer(graineEtroite);
-  const exB = temoinEtendu.generer(graineLarge);
+  const exA = genE(graineEtroite);
+  const exB = genE(graineLarge);
   // Le 2e exercice est répondu (via l'API) jusqu'au tableau : il s'ouvrira directement sur le tableau à 7 colonnes.
   for (const champ of [CHAMP_COEFFICIENTS, CHAMP_ALLURE, CHAMP_EXTREMUM, CHAMP_AXE, CHAMP_IMAGE, CHAMP_RACINES]) {
-    const r = await appeler("reponses", "POST", { jeton: "eleve:eleve-1", corps: { exercice_assigne_id: ligneB.id, champ, reponse_brute: reponseBruteCorrecteEtendue(exB, champ) } });
+    const r = await appeler("reponses", "POST", { jeton: "eleve:eleve-1", corps: { exercice_assigne_id: ligneB.id, champ, reponse_brute: reponseBruteCorrecte(U(exB), champ) } });
     verifier(r.statut === 200 && r.corps.statut === "correct", `${l} étendu : préparation de l'exercice 2 (${champ}) : ${JSON.stringify(r.corps)}`);
   }
 
@@ -639,7 +651,7 @@ async function scenarioEtendu(navigateur: any, base: string, largeur: number) {
   verifier((await page.locator(".moteur-illustration").innerText()).length < 200 && (await courant.locator(".moteur-statut").count()) === 0, `${l} étendu : l'illustration n'affiche aucun verdict`);
   verifier((await page.getByRole("button", { name: "Besoin d'un indice ?" }).count()) === 0, `${l} étendu : l'illustration n'est PAS une aide (aucun indice sur l'écran d'allure)`);
   await verifierMiseEnPage(page, "allure", largeur);
-  const allureJuste = JSON.parse(reponseBruteCorrecteEtendue(exA, CHAMP_ALLURE));
+  const allureJuste = JSON.parse(reponseBruteCorrecte(U(exA), CHAMP_ALLURE));
   for (const [id, valeur] of Object.entries(allureJuste)) await courant.locator(`input[name="mc-allure-${id}"][value="${valeur}"]`).check();
   await valider().click();
   await page.waitForSelector(".moteur-statut-correct");
@@ -648,7 +660,7 @@ async function scenarioEtendu(navigateur: any, base: string, largeur: number) {
   // ── Écran 3 : qcm à libellés mathématiques ──
   await page.waitForSelector('input[name="qcm-extremum"]'); // (l'écran d'allure utilise aussi `.moteur-qcm` : attendre CE champ)
   verifier((await courant.locator(".moteur-choix .moteur-math").count()) === 2, `${l} étendu : les libellés du QCM sont rendus comme mathématiques`);
-  await courant.locator(`.moteur-qcm input[value="${reponseBruteCorrecteEtendue(exA, CHAMP_EXTREMUM)}"]`).check();
+  await courant.locator(`.moteur-qcm input[value="${reponseBruteCorrecte(U(exA), CHAMP_EXTREMUM)}"]`).check();
   await valider().click();
   await page.waitForSelector(".moteur-statut-correct");
   await suivante().click();
@@ -662,7 +674,7 @@ async function scenarioEtendu(navigateur: any, base: string, largeur: number) {
   verifier((await courant.locator(".moteur-aide-croquis svg").getAttribute("aria-label"))!.startsWith("Croquis de la parabole d'équation y = "), `${l} étendu : croquis : alternative textuelle`);
   await page.screenshot({ path: cap("05-aide-croquis-axe"), fullPage: true });
   await verifierMiseEnPage(page, "axe + croquis", largeur);
-  const axeJuste = JSON.parse(reponseBruteCorrecteEtendue(exA, CHAMP_AXE));
+  const axeJuste = JSON.parse(reponseBruteCorrecte(U(exA), CHAMP_AXE));
   await courant.locator("#mc-axe-axeTexte").fill(axeJuste.xS); // valeur juste SANS « x = »
   await courant.locator("#mc-axe-xS").fill(axeJuste.xS);
   await courant.locator("#mc-axe-yS").fill(axeJuste.yS);
@@ -685,7 +697,7 @@ async function scenarioEtendu(navigateur: any, base: string, largeur: number) {
   await page.waitForSelector(".moteur-intervalle");
   verifier(await valider().isDisabled(), `${l} étendu : intervalle : « Valider » désactivé au départ`);
   const av5 = reponsesEnvoyees(journal);
-  const image = JSON.parse(reponseBruteCorrecteEtendue(exA, CHAMP_IMAGE));
+  const image = JSON.parse(reponseBruteCorrecte(U(exA), CHAMP_IMAGE));
   const ligneI = courant.locator(".moteur-intervalle-ligne");
   await ligneI.getByRole("button", { name: /Crochet de gauche/ }).click();
   await ligneI.getByRole("button", { name: /Crochet de droite/ }).click();
@@ -730,7 +742,7 @@ async function scenarioEtendu(navigateur: any, base: string, largeur: number) {
 
   // ── Écran 7 (exercice 1) : tableau étendu à 3 colonnes ──
   const remplir = async (ex: typeof exA, colonnes: number) => {
-    const sol = JSON.parse(reponseBruteCorrecteEtendue(ex, CHAMP_SIGNES_VARIATION)) as Record<string, Record<string, string>>;
+    const sol = JSON.parse(reponseBruteCorrecte(U(ex), CHAMP_SIGNES_VARIATION)) as Record<string, Record<string, string>>;
     const lignes = courant.locator(".moteur-table-signes tbody tr");
     for (const [i, id] of ["signe", "variation"].entries()) {
       const boutons = lignes.nth(i).locator("td button");
