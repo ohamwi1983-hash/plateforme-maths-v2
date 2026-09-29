@@ -1,5 +1,12 @@
 import type { RequeteHttp, ReponseHttp } from "../lib/httpTypes";
 import { avecGestionErreurs } from "../lib/avecGestionErreurs";
+import { gererAdminProfsListe } from "../lib/routes/admin/profs/index";
+import { gererAdminProfsCreer } from "../lib/routes/admin/profs/creer";
+import { gererAdminProfsInviter } from "../lib/routes/admin/profs/inviter";
+import { gererAdminProfsDesactiver } from "../lib/routes/admin/profs/[id]/desactiver";
+import { gererAdminProfsReactiver } from "../lib/routes/admin/profs/[id]/reactiver";
+import { gererAdminProfsResetMdp } from "../lib/routes/admin/profs/[id]/reset-mdp";
+import { gererProfsMoi } from "../lib/routes/profs/moi";
 import { gererAssignations } from "../lib/routes/assignations";
 import { gererCatalogueGenerateurs } from "../lib/routes/catalogue-generateurs";
 import { gererClasses } from "../lib/routes/classes";
@@ -58,6 +65,56 @@ interface EntreeRoutage {
 const AUCUN_PARAM = (): Record<string, string> => ({});
 
 const TABLE_ROUTAGE: EntreeRoutage[] = [
+  // Rôle admin-prof (RAPPORT §26) : chaque gestionnaire commence par `exigerAdmin` (401 / 403), avant toute validation.
+  {
+    methodes: ["GET"],
+    chemin: "/api/admin/profs",
+    correspond: (s) => s.length === 2 && s[0] === "admin" && s[1] === "profs",
+    extraireParams: AUCUN_PARAM,
+    gestionnaire: gererAdminProfsListe,
+  },
+  {
+    methodes: ["POST"],
+    chemin: "/api/admin/profs/creer",
+    correspond: (s) => s.length === 3 && s[0] === "admin" && s[1] === "profs" && s[2] === "creer",
+    extraireParams: AUCUN_PARAM,
+    gestionnaire: gererAdminProfsCreer,
+  },
+  {
+    methodes: ["POST"],
+    chemin: "/api/admin/profs/inviter",
+    correspond: (s) => s.length === 3 && s[0] === "admin" && s[1] === "profs" && s[2] === "inviter",
+    extraireParams: AUCUN_PARAM,
+    gestionnaire: gererAdminProfsInviter,
+  },
+  {
+    methodes: ["POST"],
+    chemin: "/api/admin/profs/:id/desactiver",
+    correspond: (s) => s.length === 4 && s[0] === "admin" && s[1] === "profs" && s[3] === "desactiver",
+    extraireParams: (s) => ({ id: s[2] }),
+    gestionnaire: gererAdminProfsDesactiver,
+  },
+  {
+    methodes: ["POST"],
+    chemin: "/api/admin/profs/:id/reactiver",
+    correspond: (s) => s.length === 4 && s[0] === "admin" && s[1] === "profs" && s[3] === "reactiver",
+    extraireParams: (s) => ({ id: s[2] }),
+    gestionnaire: gererAdminProfsReactiver,
+  },
+  {
+    methodes: ["POST"],
+    chemin: "/api/admin/profs/:id/reset-mdp",
+    correspond: (s) => s.length === 4 && s[0] === "admin" && s[1] === "profs" && s[3] === "reset-mdp",
+    extraireParams: (s) => ({ id: s[2] }),
+    gestionnaire: gererAdminProfsResetMdp,
+  },
+  {
+    methodes: ["GET"],
+    chemin: "/api/profs/moi",
+    correspond: (s) => s.length === 2 && s[0] === "profs" && s[1] === "moi",
+    extraireParams: AUCUN_PARAM,
+    gestionnaire: gererProfsMoi,
+  },
   {
     methodes: ["POST"],
     chemin: "/api/assignations",

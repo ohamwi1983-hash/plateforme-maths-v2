@@ -1641,7 +1641,8 @@ input.stepper-valeur::-webkit-outer-spin-button {
  * séparation (obsolète depuis que chaque ligne a sa propre bordure de carte).
  */
 #liste-taches,
-#liste-eleves-classe {
+#liste-eleves-classe,
+#liste-profs-admin {
   list-style: none;
   padding: 0;
   margin: 0 0 var(--espace-4);
@@ -1659,7 +1660,8 @@ input.stepper-valeur::-webkit-outer-spin-button {
  * `.item-liste` (formulaires inline édition/transfert, 1 seul enfant `.groupe-champ` — la direction
  * column ne change rien à son rendu).
  */
-#liste-eleves-classe li {
+#liste-eleves-classe li,
+#liste-profs-admin li {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -3597,6 +3599,9 @@ p[id^="statut-"]:not(:empty) {
   min-height: 0;
 }
 
+/* Rôle admin-prof (RAPPORT §26) : `display: flex` (AUTEUR) l'emporterait sur `[hidden]` (UTILISATEUR-AGENT), même piège de cascade que `.nav-flottante[hidden]`. */
+.nav-flottante .onglet-bouton[hidden] { display: none; }
+
 .nav-flottante .onglet-bouton.onglet-actif {
   color: #fff;
   background: linear-gradient(160deg, var(--violet-2), var(--violet-vif));
@@ -4729,3 +4734,16 @@ table.impression-table-resume tr { page-break-inside: avoid; }
   font-size: 12px;
   font-weight: 700;
 }
+
+/* Rôle admin-prof (RAPPORT §26) : code d'invitation affiché EN ENTIER (36 caractères ; un <input> le tronquait à 390 px), sélectionnable d'un geste. Tokens uniquement. */
+.code-invitation {
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--espace-3);
+  font-weight: 700;
+  color: var(--text);
+  word-break: break-all;
+  user-select: all;
+}
+

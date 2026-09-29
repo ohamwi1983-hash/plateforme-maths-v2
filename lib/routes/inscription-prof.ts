@@ -1,6 +1,7 @@
 import type { RequeteHttp, ReponseHttp } from "../httpTypes";
 import { avecGestionErreurs } from "../avecGestionErreurs";
 import { supabaseAdmin } from "../supabaseAdmin";
+import { provisionnerProf } from "../provisionnerProf";
 import { diagApres, diagAvant } from "../diagInvitation"; // DIAG-INVITATION (temporaire, RAPPORT §24)
 
 interface CorpsInscriptionProf {
@@ -29,9 +30,10 @@ function estCorpsValide(corps: unknown): corps is CorpsInscriptionProf {
 
 /**
  * POST /api/inscription-prof — inscription professeur par code d'invitation (prompt "Inscription
- * professeur (par invitation)", Étape 3). Portée explicite : aucune interface de création/gestion
- * des codes n'existe — insérés directement dans `invitations_prof` via Supabase Table Editor par le
- * prof actuel, donc `codeInvitation` n'est PAS normalisé ici (ni trim ni casse forcée au-delà de
+ * professeur (par invitation)", Étape 3). Rôle admin-prof (RAPPORT §26) : un admin génère désormais les
+ * codes par `POST /api/admin/profs/inviter` (liés à un e-mail : `email_cible`, contrôlé ci-dessous) ; les codes
+ * historiques insérés directement dans `invitations_prof` (Supabase Table Editor) restent valables, sans e-mail lié,
+ * donc `codeInvitation` n'est PAS normalisé ici (ni trim ni casse forcée au-delà de
  * `.trim()` sur la comparaison) contrairement aux codes de classe (`eleves`, 6 caractères, casse
  * forcée) : rien n'impose ce format à un code d'invitation, laissé au choix de qui l'insère.
  *
@@ -69,11 +71,19 @@ export const gererInscriptionProf = avecGestionErreurs(async function handler(re
   diagAvant(req.body.codeInvitation, code); // DIAG-INVITATION (temporaire)
   const { data: invitation, error: erreurInvitation } = await admin
     .from("invitations_prof")
-    .select("code, utilise")
+    .select("code, utilise, email_cible")
     .eq("code", code)
     .maybeSingle();
   await diagApres(admin, code, { data: invitation, error: erreurInvitation }); // DIAG-INVITATION (temporaire)
   if (erreurInvitation || !invitation) {
+    res.status(404).json({ erreur: "Code d'invitation invalide" });
+    return;
+  }
+  // Rôle admin-prof (RAPPORT §26) : code lié à un e-mail (généré par un admin). Discordance = MÊME 404 générique que
+  // « code inexistant », et AVANT le test « déjà utilisé » : ni l'existence, ni l'état du code ne fuient à qui n'est pas
+  // la personne visée. `email_cible` nul = code historique inséré en SQL, utilisable par n'importe qui.
+  const emailCible = (invitation as { email_cible?: string | null }).email_cible;
+  if (typeof emailCible === "string" && emailCible.trim() !== "" && emailCible.trim().toLowerCase() !== email.toLowerCase()) {
     res.status(404).json({ erreur: "Code d'invitation invalide" });
     return;
   }
@@ -82,15 +92,9 @@ export const gererInscriptionProf = avecGestionErreurs(async function handler(re
     return;
   }
 
-  const { data: userData, error: erreurCreation } = await admin.auth.admin.createUser({ email, password: req.body.motDePasse, email_confirm: true });
-  if (erreurCreation || !userData.user) {
-    res.status(500).json({ erreur: "Échec de création du compte", detail: erreurCreation?.message });
-    return;
-  }
-
-  const { error: erreurProf } = await admin.from("profs").insert({ id: userData.user.id, nom });
-  if (erreurProf) {
-    res.status(500).json({ erreur: "Échec de création du professeur", detail: erreurProf.message });
+  const resultat = await provisionnerProf(admin, { email, motDePasse: req.body.motDePasse, nom });
+  if (!resultat.ok) {
+    res.status(500).json({ erreur: resultat.etape === "auth" ? "Échec de création du compte" : "Échec de création du professeur", detail: resultat.message });
     return;
   }
 
@@ -109,6 +113,6 @@ export const gererInscriptionProf = avecGestionErreurs(async function handler(re
   res.status(201).json({
     access_token: session.session.access_token,
     refresh_token: session.session.refresh_token,
-    prof: { id: userData.user.id, nom, email },
+    prof: { id: resultat.id, nom, email },
   });
 });

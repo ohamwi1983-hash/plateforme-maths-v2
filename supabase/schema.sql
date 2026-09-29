@@ -10,7 +10,13 @@
 
 create table profs (
   id uuid primary key references auth.users(id),
-  nom text not null
+  nom text not null,
+  -- Rôle admin-prof (RAPPORT §26) : `est_admin` n'est écrit par AUCUNE route ni interface — seul le
+  -- propriétaire du projet l'accorde, par une mise à jour SQL manuelle (RAPPORT §26-F). `actif = false` :
+  -- compte désactivé (jamais supprimé), refusé par `profAuthentifie` (lib/supabaseAdmin.ts) ET banni côté
+  -- Supabase Auth (le prof se connecte directement depuis le navigateur, sans passage serveur).
+  est_admin boolean not null default false,
+  actif boolean not null default true
 );
 
 create table classes (
@@ -258,7 +264,12 @@ create table aides_utilisees (
 create table invitations_prof (
   code text primary key,
   utilise boolean not null default false,
-  cree_le timestamptz not null default now()
+  cree_le timestamptz not null default now(),
+  -- Rôle admin-prof (RAPPORT §26) : e-mail auquel le code est lié. Non nul => `POST /api/inscription-prof` refuse
+  -- (même 404 générique que « code inexistant ») tout autre e-mail ; nul => codes historiques insérés en SQL,
+  -- utilisables par n'importe qui. `cree_par` : l'admin qui a généré le code (traçabilité).
+  email_cible text,
+  cree_par uuid references profs(id)
 );
 
 -- Sécurité (RAPPORT §22) : RLS ACTIVÉ, volontairement SANS AUCUNE police, sur les deux tables dont

@@ -184,3 +184,9 @@ alter table taches enable row level security;
 alter table taches_assignations enable row level security;
 alter table taches_assignations_eleves enable row level security;
 alter table taches_composition enable row level security;
+
+-- Rôle admin-prof (RAPPORT §26) : voir supabase/schema.sql pour la justification complète. Idempotent.
+alter table profs add column if not exists est_admin boolean not null default false;
+alter table profs add column if not exists actif boolean not null default true;
+alter table invitations_prof add column if not exists email_cible text;
+alter table invitations_prof add column if not exists cree_par uuid references profs(id);

@@ -1074,3 +1074,86 @@ Aucun SQL. Cause trouvée grâce au diagnostic du §24 et à `GET /api/config` (
 - Ne traite que cette famille de suffixes : une URL d'un autre projet, une clé d'un autre projet, ou une faute de frappe dans l'hôte ne sont pas détectées.
 - **Non traité (proposition)** : `inscription-prof.ts` répond « invalide » (404) même quand la requête à la base échoue (`erreurInvitation`). Une erreur de requête devrait être un 500 journalisé, pas un message qui accuse l'utilisateur ; le diagnostic §24 la rend visible mais ne la corrige pas. À décider à part.
 - Le diagnostic DIAG-INVITATION (§24) est toujours en place : à retirer après confirmation que l'inscription fonctionne avec la variable corrigée.
+
+
+## §26 : Rôle admin-prof — gestion des comptes professeurs
+
+Décisions D1-D8 validées avant le « Go » (`ANALYSE-admin-prof.md`) ; D3 (garde-fous admin) confirmée **essentielle**. **Migration SQL : OUI, à EXÉCUTER sur la vraie base AVANT la fusion** (§C).
+
+### A. Ce que fait le patron élève, et où le rôle prof s'en écarte (relu avant d'écrire)
+`desactiver-eleve.ts` = `eleves.actif = false` seulement, appliqué à la connexion serveur (`connexion-eleve.ts:92`) et dans les listes ; `reset-mdp-eleve.ts` = `auth.admin.updateUserById(password)` ; `creer-eleve.ts` = `provisionnerEleve`. **Écarts assumés pour les profs** : (1) le prof se connecte directement depuis le navigateur (`prof.html`, `signInWithPassword`), un drapeau seul serait donc sans effet ; (2) `profs` n'a ni `actif` ni e-mail. Constat hors périmètre, **noté sans être corrigé** : `eleveAuthentifie` (`lib/supabaseAdmin.ts`) ne lit pas `eleves.actif` — une session d'élève ouverte survit à sa désactivation, le compte Auth n'est pas banni (à traiter séparément, décision du professeur).
+
+### B. Livré (citations)
+| Sujet | Emplacement |
+|---|---|
+| Schéma canonique | `supabase/schema.sql:18-19` (`profs.est_admin`, `profs.actif`), `:271` (`invitations_prof.email_cible`, `cree_par`) |
+| **Migration idempotente** | `supabase/migrations/cumulatif.sql:188-192` (4 × `add column if not exists`) |
+| Règle d'accès (pure) | `lib/authProf.ts:21` `profDepuisLigne` : seul `actif === false` refuse |
+| `profAuthentifie` | `lib/supabaseAdmin.ts:28` — lit `id, nom, actif, est_admin` (`:37`) à CHAQUE requête ; 17 fichiers de routes l'appelaient déjà : un compte désactivé reçoit 401 partout |
+| Garde admin | `lib/adminAuth.ts:10` `exigerAdmin` : 401 non authentifié / désactivé, **403 « Réservé aux administrateurs »** ; appelé AVANT toute validation de corps |
+| Création partagée | `lib/provisionnerProf.ts:18` (utilisée par `inscription-prof.ts:95` ET `admin/profs/creer.ts`), **supprime le compte Auth si l'insertion `profs` échoue** (`:28`) ; ne connaît pas `est_admin` |
+| Cible d'une action | `lib/adminProfs.ts:30` `chargerCibleProf` (UUID mal formé ou inconnu → 404, jamais une erreur PostgREST) |
+| `GET /api/admin/profs` | `lib/routes/admin/profs/index.ts:21` (`exigerAdmin` `:26`) — e-mails lus dans Auth par lots, pagination `recupererToutesLesLignes` |
+| `POST /api/admin/profs/creer` | `…/creer.ts:15` — corps `{email, motDePasse, nom}` EXACTEMENT (toute autre clé, dont `est_admin`, → 400) ; e-mail déjà pris → 409 |
+| `POST /api/admin/profs/inviter` | `…/inviter.ts:13` — `{email}` seul, `randomUUID`, lié à l'e-mail, `cree_par` |
+| `POST /api/admin/profs/:id/desactiver` | `…/[id]/desactiver.ts:14` — `actif=false` PUIS `ban_duration 876000h` ; jamais soi-même, jamais un admin |
+| `POST /api/admin/profs/:id/reactiver` | `…/[id]/reactiver.ts:11` — lève le ban PUIS `actif=true` |
+| `POST /api/admin/profs/:id/reset-mdp` | `…/[id]/reset-mdp.ts:14` — jamais sur un admin (soi compris) |
+| `GET /api/profs/moi` | `lib/routes/profs/moi.ts:10` — `{id, nom, est_admin}` |
+| Routage | `api/router.ts:71-119` |
+| Inscription liée à l'e-mail | `lib/routes/inscription-prof.ts:85` — `email_cible` non nul et différent (insensible à la casse) → **même 404 générique**, testé AVANT « déjà utilisé » ; nul (codes historiques) → utilisable par tous |
+| Interface | `public/prof.html:221` (bouton d'onglet `hidden`), `:502` (panneau), `:4157` `chargerIdentiteProf`, `:4265` `construireLigneProfAdmin` ; `style.css` (mêmes composants que les élèves, tokens uniquement) |
+
+### C. Migration et ordre de déploiement — **risque réel**
+`profAuthentifie` lit désormais `actif` et `est_admin`. **Tant que `cumulatif.sql` n'a pas été exécuté, la lecture échoue (colonne absente) et TOUTES les routes prof répondent 401.** Ordre : (1) exécuter `supabase/migrations/cumulatif.sql` en entier (idempotent) ; (2) fusionner / déployer ; (3) promouvoir le premier admin (§D). Vérifié sur PostgreSQL 16 local : `schema.sql` sur base neuve (colonnes `est_admin boolean not null default false`, `actif boolean not null default true`, `email_cible text`, `cree_par uuid` avec FK vers `profs`) ; `cumulatif.sql` de `main` rejoué sur une base ANCIENNE avec données, puis deux fois : profs existants → `est_admin=false, actif=true`, invitation historique → `email_cible` et `cree_par` nuls ; RLS toujours actif sur `profs` et `invitations_prof`, `anon` lit 0 ligne de `profs` ; FK `cree_par` refuse un id inconnu.
+
+### D. Bootstrap du premier admin (une seule fois, hors code) — requête testée sur PostgreSQL 16
+Après l'exécution de `cumulatif.sql` et le déploiement, dans le SQL Editor de Supabase :
+```sql
+update profs set est_admin = true
+where id = (select id from auth.users where lower(email) = lower('VOTRE@EMAIL'))
+returning id, nom, est_admin;
+```
+Attendu : **1 ligne** (`est_admin = t`). 0 ligne = e-mail inconnu (aucune erreur, aucune modification). Puis se reconnecter (ou recharger `prof.html`) : `GET /api/profs/moi` doit renvoyer `est_admin: true` et l'onglet « Admin » apparaît. Le statut admin ne s'accorde JAMAIS par l'interface ni l'API (test statique : aucune route n'écrit `est_admin`). Retirer ce statut : `update profs set est_admin = false where id = …`.
+
+### E. Point 4 — liaison code ↔ e-mail : FAIT (D4)
+Faisable sur le schéma réel (`invitations_prof` : `code`, `utilise`, `cree_le`) : deux colonnes nullables. Obligatoire pour les codes générés par l'interface ; les codes historiques (NULL) restent utilisables par n'importe qui. Discordance = 404 générique identique à « code inexistant » (test : réponses identiques, aucun oracle), avant le test « déjà utilisé ». Coût réel : 2 colonnes, 8 lignes dans `inscription-prof.ts`, un champ de formulaire.
+
+### F. Validation
+- `tsc -b` propre ; **28/28 scripts** ; `scripts/test-admin-profs.ts` **117 vérifications** (les VRAIES routes via `api/router.ts`, base en mémoire) : pour chacune des 6 routes admin × {sans jeton, jeton élève, prof non admin (valide ET corps invalide), admin désactivé, mauvaise méthode} → 401 / 403 explicite / 405 sans aucun effet de bord ; `GET /profs/moi` ; liste ; création directe (compte Auth + ligne non admin, `est_admin`/`actif` dans le corps → 400, doublon → 409) ; invitation puis inscription (bon e-mail à la casse près, mauvais e-mail, code déjà utilisé, code historique) ; désactivation (ban 876000h, 5 routes → 401, classe conservée, idempotente, échec du ban → 500 état sûr) ; réactivation ; réinitialisation ; garde-fous (soi-même, autre admin, id inconnu/mal formé) ; le VRAI `profAuthentifie` avec client factice (colonnes lues, désactivé refusé, erreur de lecture refusée) ; compensation de `provisionnerProf` ; aucune écriture de `est_admin` dans `lib/`, `api/`, `src/`.
+- **Mutations vérifiées (19)** : retrait de `exigerAdmin` de chacune des 6 routes, du test `est_admin`, de la règle `actif`, de la lecture des colonnes, de chaque garde-fou (soi, autre admin en désactivation, autre admin en reset), du ban, du contrôle `email_cible` (et son ordre), de la clé `est_admin` acceptée, de la compensation, d'une écriture `est_admin`, de la traduction 409 : chacune fait échouer le test.
+- **Chromium 496/496** (`scenarioAdmin`, 390 px et 1280 px) : prof non admin → aucun onglet et l'API refuse à la main (403, déclaré) ; admin → onglet visible, liste (e-mail Auth, « Administrateur », « (vous) », « Compte désactivé »), aucune action sur un admin, création, code affiché EN ENTIER (un `<input>` le tronquait à 390 px : remplacé par `.code-invitation`), désactivation avec confirmation, réactivation, réinitialisation, pas de défilement horizontal, 5 onglets lisibles. Captures `captures-chromium/{390,1280}-13…16-admin-*.png`.
+- Régression existante inchangée (aucune assertion modifiée ; `profAuthentifie` du harnais partage `profDepuisLigne`).
+
+### G. Limites et constats
+- **Non vérifié** : le comportement réel de GoTrue pour un compte banni (refus de connexion ET de renouvellement de jeton). Le verrou qui compte est côté API (`profAuthentifie`, testé) ; le ban est une deuxième ceinture, à essayer sur la vraie base (désactiver un compte test puis tenter de se connecter).
+- Un jeton d'accès déjà émis reste valide jusqu'à son expiration, mais `profAuthentifie` le refuse à chaque requête (401).
+- Réinitialiser le mot de passe d'un prof ordinaire permet de se connecter à son compte (accès à ses élèves) : pouvoir inhérent, **aucun journal d'audit**. Aucun admin ne peut être désactivé ni réinitialisé par l'API (y compris par lui-même) : le retirer/désactiver = SQL.
+- Pas de liste des invitations en attente (D7) : un code perdu se retrouve par SQL (`select code, email_cible from invitations_prof where not utilise`). Deux codes peuvent être générés pour le même e-mail.
+- Trouvé en testant : dans le harnais Chromium, `prof.html` interrompt son chargement après `chargerClasses` (`Cannot read properties of undefined (reading 'slice')`, `GET /api/eleves?classe_id=undefined`) — antérieur à ce chantier, non corrigé. Conséquence traitée : `chargerIdentiteProf` s'exécute AVANT les autres chargements et a son propre `try/catch`, pour que l'onglet « Admin » ne dépende d'aucun chargement sans rapport.
+- **Ordre des PR (D8)** : celle-ci modifie `lib/routes/inscription-prof.ts` près des lignes `DIAG-INVITATION` (§24, temporaires) ; à fusionner après la PR #13 et le retrait du diagnostic. Le diagnostic est toujours en place.
+
+
+## §27 : Chromium — la vraie cause du chargement interrompu de `prof.html` (faux Supabase) + lecture des erreurs affichées
+
+Correction du §26-G, qui décrivait ce défaut comme « antérieur à ce chantier, non corrigé » sans en avoir cherché la cause : le contournement (`chargerIdentiteProf` d'abord) masquait le symptôme. Aucun code de production touché, aucune migration SQL.
+
+### A. Ce que le contrôle des 4xx (§21) a vu : rien — et il ne pouvait pas le voir
+Trace réelle du chargement de `prof.html` dans le harnais : `GET /api/classes` → **200** `[{"0":{"id":"classe-1","nom":"4A","code":"3NSR33"},"nombre_eleves_actifs":0}]` (objet emballé sous la clé `"0"`), `GET /api/eleves?classe_id=undefined` → **200** `[]`, puis `TypeError: Cannot read properties of undefined (reading 'slice')` dans `rendreBandeauEtMesClasses` (`prof.html:2262`), rattrapé par le `try/catch` de `init` qui écrit « Impossible de charger la configuration : … » dans `#statut-connexion`. **Aucune réponse >= 400, aucune erreur console, aucun `pageerror`** : les trois canaux surveillés étaient muets. Il n'a été découvert que parce que le nouveau scénario attendait `GET /api/profs/moi`, appelé après le plantage.
+Les scénarios `prof` / `poids` existants passaient parce que leurs assertions ne portent que sur ce qui est chargé AVANT l'échec (`chargerCatalogue`) : `chargerTaches` et `chargerTableauDeBordProf` n'ont **jamais** été exécutés en Chromium avant ce correctif.
+
+### B. Cause : le faux Supabase, pas le pont d'API
+`lib/routes/classes.ts:56-62` génère paresseusement le `code` d'une classe qui n'en a pas : `update({code}).eq().select().single()`. PostgREST renvoie **un objet** ; `BaseMemoire.executer()` n'appliquait `.single()` / `.maybeSingle()` qu'à `select`, et renvoyait un **tableau** pour `update` / `insert` / `upsert`. `{ ...classe }` d'un tableau = `{ "0": ligne }`. Les classes du scénario (`creerScenario`) n'ont pas de `code` : le premier `GET /api/classes` prenait toujours cette branche. La route est correcte ; le pont d'API (`demarrerServeur`) relaie fidèlement.
+Correctif : `scripts/support/fauxSupabase.ts` `enUneLigneSiDemande` (`.single()` sans ligne = erreur PGRST116, `.maybeSingle()` sans ligne = `null`), appliqué à `insert` / `upsert` / `update`.
+
+### C. Lecture des erreurs affichées (`scripts/chromium-temoin-technique.ts`)
+`LECTURE_ERREURS_INTERFACE` : à la fermeture de chaque contexte (`contexte.close` enveloppé dans `preparerPage`), le harnais lit `#erreur-fatale-pilote` (erreur fatale du pilote, `eleve.html` / `index.html`) et `#statut-connexion` (« Impossible de charger » / « Erreur inattendue », `prof.html`). `evaluerErreursInterface` les rapporte dans `controlerReponsesHttp` : tout message d'erreur affiché fait échouer le scénario. Témoin : une page qui n'a AUCUN signal HTTP / console / pageerror mais affiche l'erreur est bien lue.
+
+### D. Mesures
+- Avec le correctif : 28/28 scripts (aucune assertion modifiée), **Chromium 498/498** ; `prof.html` charge maintenant `/api/taches` et `/api/profs/tableau-de-bord` (trace : `config · profs/moi · catalogue · classes · eleves?classe_id=classe-1 · taches · tableau-de-bord`, `#statut-connexion` vide).
+- **Mutation** : faux Supabase SANS correctif + garde-fou → **6 échecs** (scénarios `prof` et `admin` × 2 largeurs), message « erreur affichée à l'écran — statut-connexion : Impossible de charger la configuration : Cannot read properties of undefined (reading 'slice') ».
+
+### E. Limites
+- Le garde-fou ne lit que `#erreur-fatale-pilote` et `#statut-connexion` : une erreur écrite dans un autre élément (`#statut-liste-eleves`, `#statut-creer-prof`…) n'est pas vue. Un `catch` qui avale l'erreur SANS rien afficher reste invisible pour tous les canaux.
+- `chargerIdentiteProf` reste appelé en premier (§26) : sa robustesse est voulue, mais la raison invoquée au §26-G (« défaut du harnais antérieur ») est remplacée par ce §27.
+- D'autres écarts de fidélité du faux Supabase sont possibles (il n'implémente ni contraintes ni tous les opérateurs) : chacun se découvre à l'usage.

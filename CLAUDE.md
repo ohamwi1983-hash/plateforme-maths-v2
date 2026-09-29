@@ -198,3 +198,10 @@ génériques (« Code d'invitation invalide »). Ne jamais lire `process.env.SUP
 (`lireSupabaseUrl`, qui retire un suffixe d'API et avertit) ; `scripts/test-url-supabase.ts` le vérifie. La bonne valeur reste
 `https://<ref>.supabase.co`, sans chemin.
 
+## Rôle admin-prof (RAPPORT §26)
+
+- **Toute route `/api/admin/*` commence par `exigerAdmin`** (`lib/adminAuth.ts` : 401 non authentifié ou désactivé, **403** non admin), AVANT toute validation de corps ; `est_admin` est relu en base à chaque requête (`profAuthentifie`), jamais lu dans un jeton ni déduit côté client. L'onglet « Admin » de `prof.html` n'est qu'un affichage (`GET /api/profs/moi`).
+- **`est_admin` n'est écrit par AUCUNE route, ni `provisionnerProf`** : seul le propriétaire du projet l'accorde, en SQL (§26-D). Un admin ne se désactive pas, et aucune désactivation / réinitialisation de mot de passe ne vise un compte admin.
+- Un prof désactivé (`profs.actif = false`) est refusé par `profAuthentifie` (401 partout) ET banni côté Supabase Auth ; tout nouveau site d'authentification de prof passe par `profAuthentifie`.
+- Toute création de compte prof passe par `provisionnerProf` (compensation : le compte Auth est supprimé si la ligne `profs` échoue). Un code d'invitation généré par l'interface est lié à un e-mail (`email_cible`) ; discordance = le même 404 générique que « code inexistant ».
+
