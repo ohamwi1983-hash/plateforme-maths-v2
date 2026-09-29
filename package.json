@@ -9,6 +9,7 @@
     "test-score-partiel": "tsx scripts/test-score-partiel.ts",
     "test-poids-ecran": "tsx scripts/test-poids-ecran.ts",
     "test-cascade": "tsx scripts/test-cascade.ts",
+    "test-verification-racines": "tsx scripts/test-verification-racines.ts",
     "test-texte-math": "tsx scripts/test-texte-math.ts",
     "test-design-system": "tsx scripts/test-design-system.ts",
     "chromium-temoin": "tsx scripts/chromium-temoin-technique.ts"

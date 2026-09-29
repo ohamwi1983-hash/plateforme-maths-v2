@@ -840,3 +840,47 @@ Un générateur qui affiche la donnée confirmée **ne colle jamais la chaîne b
 - Une réussite sur donnée fausse compte pour la compétence de l'écran suivant ; l'erreur initiale reste attribuée à son écran, sans propagation de `codesCompetence` (comportement voulu, non codé).
 - `POST /api/reponses/aide` ne vérifie toujours pas que le champ est l'écran COURANT (préexistant, hors périmètre) ; seul le cas « dépendance non terminée » est refusé.
 - Les sites clients n'ont rien à changer (le moteur ignore déjà les écrans non servis) ; non vérifié en Chromium avec un générateur dépendant (aucun réel n'existe).
+
+
+## §19 : Phase 3b-2 — vérification de la factorisation de gen7 (`racinesChamp1`, `racinesChamp2`) : modules purs
+
+Deuxième des trois PR de gen7 : **modules purs seulement** (`src/generateurs/analyseFonction/racines/`), testés contre l'ancien pilote (`plateforme-maths-pilote` @ `6acc102`, lecture seule, jamais modifié). Aucun `Generateur` gen7 assemblé, aucun enregistrement au registre, aucun autre écran, **aucune modification du contrat, du moteur, du poids ni de la cascade** (3b-3). Aucune migration SQL.
+
+### A. Lecture réelle avant le « Go » (`ANALYSE-phase3b2-racines.md`, validée Q1-Q4)
+- **Confirmé** sur le vrai code, cas par cas : conditions de `C04` (`pilote:src/diagnostic/diagnosticMiseEnEvidence.ts:204-217`), `C05_SIGNE_REPETE`/`C06_SIGNE_OPPOSE` (`pilote:src/diagnostic/diagnosticBinomeProduitRemarquable.ts:26-39`), `RACINE_PARTIELLE` (`pilote:lib/routes/reponses.ts:2085-2089, 430-434`), `traiterChamp1` (`:535-570`), tolérances (1e-6 champ 1 ; 1e-9 champ 2, `racinesExactes: true` dans les 3 constructeurs), saut de l'irréductible (`pilote:lib/champsAttendus.ts:373-378`).
+- **Corrections apportées à ce que la spec 3a et le prompt supposaient** : (1) `RACINE_PARTIELLE` émis sur une valeur non réelle (`sqrt(-1);4`) — défaut de l'ancien code ; (2) **aucun message pédagogique** sur `parse_error` de `racinesChamp1` dans l'ancien pilote (les `catch` de `expressionAlgebrique.ts` ne l'enregistrent pas ; seul le champ 2 le fait) → messages du champ 1 **rédigés**, pas portés ; (3) la table verrouillée par les tests de l'ancien pilote est mince (1 cas C04, 1 RACINE_PARTIELLE, 1 « aucune » ; rien sur C05/C06, `parse_error`, tolérances, formes équivalentes) → table **différentielle** ; (4) volume ≈ 1 030 lignes avec commentaires (≈ 700 de code), pas ~1 300 : cubique, forme canonique/réduite/proportionnelle, mise en évidence généralisée et tout l'irrationnel ne sont **pas portés**, et le tokeniseur/parseur que l'ancien pilote dupliquait dans `diagnosticMiseEnEvidence.ts` est **unique** ici.
+
+### B. Modules (réécrits localement — aucun import de l'ancien pilote)
+- `expressionAlgebrique.ts` (310 l.) — tokeniseur, parseur, évaluation, extraction de racines par échantillonnage, trinôme : comportement de `pilote:src/moteur/expressionAlgebrique.ts`. `expressionNumerique.ts` (276 l.) — évaluateur du champ 2 (`pilote:src/moteur/expressionGenerale.ts` + `normalisationNumerique.ts`) : fonctions `sqrt/cbrt/abs`, barres `|…|`, `x`/`X` → `*` avant lecture. **Deux grammaires distinctes, reproduites telles quelles** (l'unifier changerait des verdicts).
+- `erreurSyntaxe.ts` — la NATURE d'une erreur de lecture est une donnée (l'ancien pilote la reconnaissait en comparant des chaînes de message) ; `messagesSyntaxe.ts:21` (champ 2, textes portés), `:49` (champ 1, rédigés), `:12` échappement du texte d'élève recopié (`$` → `\$`, règle « un `$` tapé reste un `$` »).
+- `verifierRacinesChamp1.ts:106` — statut d'abord (`estCorrecte` `:47`), code ensuite **seulement si `not_equivalent`** : `C04` (`:70`), `C05_SIGNE_REPETE` (`:80`), `C06_SIGNE_OPPOSE` (`:87`), un seul par catégorie (`:94`). `C07_ou_C08` **non émis, non déclaré** (`types.ts`, `CODES_RACINES`).
+- `verifierRacinesChamp2.ts:53` — `[]` = « Pas de racine » (`permetAucune`, jamais correct), expressions numériques, ordre indifférent, 1 valeur ssi racine double, ≥ 3 valeurs faux ; `RACINE_PARTIELLE` par **position** après tri (`:47`, `:69`).
+- `genererRacines.ts:33` (`construireRacines`, déterministe) et `:50` (`genererRacines`, seedée) : **l'ordre des tirages est contractuel pour le `_v1` de gen7** — `a = entierEntre(1,4)`, puis `r` (rejet de 0 pour mise en évidence et produit remarquable, `entierEntre(1,5)` pour le binôme) ; gen7 (3b-3) ajoutera ses tirages APRÈS. Figé par le test (30 couples graine/`a`/`r`).
+- `ecransRacines.ts:14` — les deux écrans (libellés de l'ancien client, aucune aide, `permetAucune`) ; `types.ts` — `CategorieRacines` **exclut** `irreductible`.
+
+### C. Exception `af_irreductible` — « jamais appelés », pas « toujours corrects »
+`ecransRacines("irreductible")` renvoie une liste **vide** (`ecransRacines.ts:15`) : les deux écrans n'existent ni dans `ecrans()` ni dans `champs_attendus`. Aucune fonction de vérification/génération ne compile avec `irreductible` (`// @ts-expect-error` dans le test), et une **garde d'exécution** (`types.ts:35`) lève si le typage est contourné (4 points d'entrée testés). Réel (vrai `api/router.ts`) : `champs_attendus = [debut, fin]`, écrans servis idem, **requête forgée sur `racinesChamp1`/`racinesChamp2` → 400, rien enregistré**, exercice terminé sans jamais les traverser.
+
+### D. Divergences DÉLIBÉRÉES avec l'ancien pilote (les seules)
+1. **Valeur non finie** (`sqrt(-1)`, `1/0`) dans `racinesChamp2` : verdict inchangé, **jamais `RACINE_PARTIELLE`** (`verifierRacinesChamp2.ts:69`) — Q1.
+2. **Liste entièrement vide** : `parse_error` avec message (ancien : `not_equivalent`) — décision D6.
+3. **Le mot `constructor`** : l'ancien `mot in NOMS_FONCTIONS` le lisait comme une fonction (clé du prototype d'objet) de valeur `undefined` → `RACINE_PARTIELLE` possible ; ici `Object.hasOwn` (`expressionNumerique.ts:80`) → identifiant inconnu. Trouvé en sondant, absent de la spec.
+4. **Messages `parse_error`** : champ 1 rédigés (Q2, l'ancien n'en avait pas) ; le caractère recopié est échappé (F7).
+Le reste est **identique**, prouvé ci-dessous.
+
+### E. Preuves (`scripts/test-verification-racines.ts`, `npm run test-verification-racines`, 230 vérifications)
+- **Table de vérité différentielle** (`scripts/support/table-verite-racines-pilote.json`, provenance `docs/extraction-table-verite-racines.md`) : **15 100 cas** (100 exercices × 75 saisies champ 1 + 76 champ 2, produits en appelant le VRAI `traiterAnalyseFonction` de l'ancien pilote, exporté par `sed` dans une copie jetable) — statut, code de compétence et message du champ 2 reproduits à l'identique : **13 820 identiques, 1 280 divergences délibérées exactement comptées (400 liste vide, 480 non finie, 400 `constructor`), 0 non délibérée**. La table exerce `C04`, `C05`, `C06`, `RACINE_PARTIELLE`, > 1 000 `parse_error` par champ ; le test échoue si l'une des divergences n'est plus exercée. La génération est comparée aux constructeurs de l'ancien pilote (`b`, `c`, racines, texte de solution : 100/100 caractère pour caractère).
+- **Cas verrouillés par l'ancien pilote** (`test-taxonomie-gen7.ts:129-135, 228-229, 258-269`, `test-gen7.ts` E2E) : C04 sur 24 exercices, RACINE_PARTIELLE `r0;r1+137`, « aucune » sans code, solution acceptée 100/100.
+- Lecture des saisies : imbrication démesurée sans exception (l'ancien `catch` global), tous les messages passent `verifierBalisageMath`, `$` échappé, comptage par position (`[5 ; 7]` pour `[0 ; 5]` : aucun code).
+- Génération : 9 000 exercices (3 catégories × 3 000 graines), déterministes, invariants tenus (bornes, relations, zéros du trinôme, solution acceptée).
+- **Route réelle** (générateur de test `scripts/support/generateurRacinesTest.ts`, non enregistré en production, composé de ces modules) : `parse_error` + `message_erreur` sous correction immédiate, historique stocké `parse_error → not_equivalent/C04 → correct`, `bug_detecte` = `C05_SIGNE_REPETE` / `RACINE_PARTIELLE`, « Pas de racine » jamais correct ; **sous correction coupée ni verdict ni message** (§13).
+- **Sensibilité par mutation** : détecteur C04 relâché, non-fini autorisé, irréductible non sauté, tirage modifié, échappement retiré — tous détectés.
+
+### F. Non couvert / limites
+- **Code non appelé en production** jusqu'à la 3b-3 (assemblage) : c'est voulu.
+- La table différentielle couvre 100 exercices (a ∈ [1,4], r ∈ [−5,5]\{0} / [1,5]) et 150 saisies-types : elle prouve l'équivalence sur ce corpus, pas sur toute saisie possible.
+- Écho de texte d'élève dans un message d'auteur : seul le caractère fautif (échappé) et l'identifiant (lettres/chiffres) sont recopiés.
+- La ligne « forme factorisée confirmée = 0 » de l'écran `racinesChamp2` (spec 3a §5.1 n°4) est un cas d'usage de la **cascade** (`dependDe: ["racinesChamp1"]`) : 3b-3.
+
+### G. Erratum (comptes de scripts annoncés avant cette section)
+`RAPPORT.md:711` (§15) annonçait « 21 scripts (`smoke-test` + `scripts/test-*.ts`) » : **19** au commit de fusion `dc64fb3` (le chiffre datait d'avant la fusion des deux témoins). `RAPPORT.md:756` (§16) annonçait 21 : **20** (`cb5a3aa`). Les PR #5 annonçaient 22 puis 23 : **21** puis **22**. Cause : le script Chromium était compté en plus alors qu'il était aussi cité à part. Les comptes d'assertions (412, 432, 4 726, 137…) n'étaient pas concernés. Depuis cette section : **23** scripts `smoke-test` + `scripts/test-*.ts`, + Chromium à part.

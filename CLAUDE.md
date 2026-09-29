@@ -164,3 +164,13 @@ serveur). Repli quand la valeur confirmée est inexploitable : vraie valeur si `
 repli déclarée si correction coupée — choisi sur le réglage STATIQUE de la tâche, jamais sur `revele`. Ne
 jamais coller la chaîne brute de l'élève dans un texte d'auteur : décoder puis re-sérialiser.
 
+## Vérification de la factorisation de gen7 (RAPPORT §19)
+
+Les écrans `racinesChamp1`/`racinesChamp2` sont des **modules purs** (`src/generateurs/analyseFonction/racines/`),
+prouvés contre l'ancien pilote par une table de vérité différentielle figée
+(`scripts/support/table-verite-racines-pilote.json`, provenance `docs/extraction-table-verite-racines.md`).
+`irreductible` n'a **aucun** de ces écrans : `ecransRacines("irreductible")` est vide et `CategorieRacines` l'exclut
+du typage — ne jamais lui donner un écran « toujours correct ». L'**ordre des tirages** de `genererRacines` est
+figé (toute modification impose un nouveau `variante_id`). Toute divergence avec l'ancien pilote doit être
+délibérée, listée dans le test et dans `RAPPORT.md` (quatre à ce jour). `C07_ou_C08` n'est jamais émis ni déclaré pour gen7.
+
