@@ -134,10 +134,13 @@ leur conteneur (`font-size: inherit` ou `em` relatifs).
 | `--espace-4` | `24px` | Séparation de blocs |
 | `--espace-5` | `40px` | Grande séparation, base des zones tactiles |
 
-## Tableau de signes plein-bord (phase 3b, RAPPORT §30)
+## Tableau de signes plein-bord (phase 3b, RAPPORT §30-§31)
 
-- **Zone tactile** : `44px` (`--espace-5` + `--espace-1`) en hauteur ET largeur, partout, quel que soit le nombre de colonnes ou de lignes empilées. 9 colonnes × 44 px dépassent 390 px : cas hors périmètre tant qu'aucun générateur n'a plus de 7 colonnes.
+Rendu de **référence stricte** : `docs/reference/tableau-signes.html` (code fourni par le propriétaire du projet, à ouvrir dans un navigateur pour comparer avec la capture Chromium `captures-chromium/*-etendu-10b-carte-tableau-7-colonnes.png`). Ne pas réinterpréter.
+
+- **Cellules, pas des boutons décoratifs** : aucune bordure arrondie, aucun fond, aucune ombre autour d'une valeur ; filets fins `border-top` / `border-right` `1px solid var(--border)` (le dernier de la ligne sans filet droit). Toute la cellule est la zone tactile : **48px** de haut sur les signes, **56px** sur les variations, largeur = celle de la colonne (jamais moins de 44px).
+- **Bande de symboles** entièrement `--surface-sunken` ; **titres de ligne** en bandeau `--surface-sunken` (texte `--text-muted`, gras, `letter-spacing: 0.03em`, **jamais `text-transform`** : `f(x)` resterait `f(x)`) ; aucun titre « TABLEAU DE SIGNES ».
+- **Colonnes de valeur** : fond `--violet-clair` continu sur les lignes de x, de signes et de variations ; valeurs de x en gras `--violet`. Les colonnes d'intervalle de la ligne des x restent vides.
+- **Variations** : 3 grandes cases (`colspan` 3 | 1 | 3 pour 7 colonnes). Le sommet est un glyphe `⌢`/`⌣`. La flèche d'intervalle n'est **jamais** un caractère `↗`/`↘` : on mesure la case (`getBoundingClientRect`), on calcule l'angle réel `atan2(0,42·h ; 0,68·l)`, on trace un trait droit de la bonne longueur, on colle une pointe SVG fixe (`viewBox 0 0 10 10`, jamais étirée) et on pivote le bloc d'un seul coup (`transform: rotate`). Elle est redessinée si la case change de taille (`ResizeObserver`). Couleur = `currentColor` (`--text`, ou la couleur du verdict).
 - **Plein-bord** : le tableau sort de la carte et de la gouttière de page jusqu'aux bords de la colonne de contenu. `--retrait-plein-bord` n'est **pas** un token de `:root` : c'est une propriété de mise en page définie sur `.contenu-page` (`style.css`), somme de quatre termes (padding de la carte `--espace-4`, bordure 1px, padding de `.moteur-exercice` `--espace-3`, gouttière de page). `ecrans.css` la lit avec repli `0px`.
-- **Colonnes de valeur** : fond `--violet-clair` continu sur toutes les lignes ; bande de symboles en `--surface-sunken`.
-- **Titres de section** : petites capitales par `font-size`, `letter-spacing` et `color`, **jamais `text-transform`**.
-
+- 9 colonnes × 44px dépassent 390px : cas hors périmètre tant qu'aucun générateur n'a plus de 7 colonnes.

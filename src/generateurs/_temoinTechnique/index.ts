@@ -308,7 +308,6 @@ function ecranSignesVariation(ex: ExerciceEtendu): EcranTableauSignes {
     type: "tableau_signes",
     consigne: `Complète le tableau de signe et de variation de $f(x) = ${formeF(ex)}$.`,
     aide: { type: "croquis_parabole", a: ex.a, b: ex.b, c: ex.c, marqueS: true, surlignageImf: true, marquesOx: true },
-    titre: "TABLEAU DE SIGNES",
     colonnes: colonnesTableau(ex).map((c) => c.colonne),
     lignes: [
       { id: "signe", libelle: "SIGNE DE $f(x)$" },
@@ -359,7 +358,6 @@ function ecranQuotient(ex: ExerciceEtendu): EcranTableauSignes {
     champ: CHAMP_QUOTIENT,
     type: "tableau_signes",
     consigne: `Complète le tableau de signe de $g(x) = \\dfrac{(${facteur(r1)})(${facteur(r2)})}{${facteur(ex.quotient.pole)}}$.`,
-    titre: "TABLEAU DE SIGNES",
     colonnes,
     lignes: [
       { id: "facteur1", libelle: `SIGNE DE $${facteur(r1)}$` },

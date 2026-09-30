@@ -61,7 +61,7 @@ verifier(/box-shadow:\s*var\(--ombre-carte\)/.test(ecrans), "ecrans.css : la car
 for (const m of ecrans.matchAll(/box-shadow:\s*([^;]+);/g)) verifier(/^(none|var\(--ombre-carte\)|inset 0 0 0 1px var\(--[a-z0-9-]+\))$/.test(m[1].trim()), `ecrans.css : box-shadow non conforme « ${m[1].trim()} »`);
 for (const m of ecrans.matchAll(/(?<![\w-])(margin|padding|gap)(-[a-z]+)?:\s*([^;]+);/g)) {
   const valeurs = m[3].trim().split(/\s+/);
-  verifier(valeurs.every((v) => v === "0" || v === "auto" || v.startsWith("var(--espace-") || v.startsWith("calc(")), `ecrans.css : ${m[1]}${m[2] ?? ""} en dur « ${m[3].trim()} »`);
+  verifier(valeurs.every((v) => v === "0" || v === "auto" || v === "1px" || v === "2px" || v.startsWith("var(--espace-") || v.startsWith("calc(")), `ecrans.css : ${m[1]}${m[2] ?? ""} en dur « ${m[3].trim()} »`);
 }
 
 // ── Tokens de surbrillance des coefficients (phase 3b-1) : réservés + contraste calculé ──

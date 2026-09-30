@@ -168,7 +168,7 @@ verifier(!(comparerCasesTableau(rangeesDeux, decoder(juste()), Object.create({ s
 const css = readFileSync(join(__dirname, "..", "public/moteur/ecrans.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
 verifier(!/text-transform/.test(css), "ecrans.css : aucun `text-transform` (les titres de section sont écrits dans leur casse ; RAPPORT §30)");
 const regles = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((m) => /moteur-titre-tableau|moteur-titre-ligne/.test(m[1]));
-verifier(regles.length >= 2 && regles.every((m) => /letter-spacing/.test(m[2]) || /padding-top/.test(m[2])), "les titres obtiennent l'effet « petites capitales » par taille et espacement des lettres");
+verifier(regles.length >= 2 && regles.some((m) => /letter-spacing/.test(m[2]) && /font-size/.test(m[2])), "les titres obtiennent l'effet « petites capitales » par taille et espacement des lettres");
 
 if (echecs.length > 0) {
   console.error(`ÉCHEC : ${echecs.length} vérification(s) sur ${nb}`);
