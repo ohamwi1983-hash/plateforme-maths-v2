@@ -139,17 +139,17 @@ body {
  */
 .contenu-page {
   padding: var(--espace-4) var(--espace-3) 0;
-  /* Retrait « plein-bord » d'un tableau de signes (RAPPORT §30) : padding de la carte du moteur (--espace-4) + sa
-     bordure (1px) + le padding de `.moteur-exercice` qui l'enveloppe (--espace-3, ecrans.css) + la gouttière latérale
-     ci-dessus. Ces quatre termes sont dispersés dans trois règles : la géométrie est donc VÉRIFIÉE en Chromium
-     (bords du tableau = bords de la colonne, à 390px et à 1280px) — la modifier sans relancer ce test la casse. */
-  --retrait-plein-bord: calc(var(--espace-4) + 1px + var(--espace-3) + var(--espace-3));
+  /* Retrait « plein-bord » d'un tableau de signes (RAPPORT §30, révisé §43) : padding de la carte du moteur (--espace-4) + sa
+     bordure (1px) + la gouttière latérale ci-dessus (`.moteur-exercice` n'a plus de padding propre depuis §43). Ces termes sont
+     dispersés dans plusieurs règles : la géométrie est donc VÉRIFIÉE en Chromium (bords du tableau = bords de la colonne, à 390px
+     et à 1280px) — la modifier sans relancer ce test la casse. */
+  --retrait-plein-bord: calc(var(--espace-4) + 1px + var(--espace-3));
 }
 
 @media (max-width: 600px) {
   .contenu-page {
     padding: var(--espace-3) 14px 0;
-    --retrait-plein-bord: calc(var(--espace-4) + 1px + var(--espace-3) + 14px);
+    --retrait-plein-bord: calc(var(--espace-4) + 1px + 14px);
   }
 }
 

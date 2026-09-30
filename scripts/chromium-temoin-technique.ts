@@ -450,7 +450,11 @@ async function matriceVisuelle(navigateur: any, base: string, largeur: number) {
       }
       await page.waitForSelector(".moteur-ecran");
       const consigne = temoin.ecrans(ex)[indice].consigne;
-      const carte = page.locator(".moteur-ecran").filter({ hasText: consigne });
+      // RAPPORT §43 : un écran déjà répondu (verrouillé) n'est plus une carte mais une LIGNE du rappel, dans la carte de l'écran courant : le verdict
+      // « illisible » obtenu par l'API se lit donc sur la marque de sa ligne (ambre), pas sur une carte d'écran.
+      // (Le DERNIER écran verrouillé termine l'exercice : plus d'écran courant, la relecture montre sa carte comme avant.)
+      const ligneDuRappel = parApi && indice !== 3;
+      const carte = ligneDuRappel ? page.locator(".moteur-ecran-courant") : page.locator(".moteur-ecran").filter({ hasText: consigne });
 
       if (etat === "selectionne") await agirSurComposant(page, ex, indice, "selectionne");
       if (etat === "correct" || etat === "not_equivalent" || (etat === "parse_error" && !parApi)) {
@@ -461,6 +465,16 @@ async function matriceVisuelle(navigateur: any, base: string, largeur: number) {
       const nom = `${l}-matrice-${NOMS_TYPES[indice]}-${etat}`;
       await carte.screenshot({ path: join(CAPTURES, `${nom}.png`) });
 
+      if (ligneDuRappel) {
+        const marque = (await page.locator(".moteur-rappel-marque-parse_error").first().evaluate((el: unknown) => { const st = getComputedStyle(el); return { fond: st.backgroundColor }; })) as { fond: string };
+        verifier(marque.fond === RGB.ambre, `${nom} : la ligne du rappel de l'écran « illisible » porte la marque ambre, obtenu ${marque.fond}`);
+        const segment = (await page.locator(".moteur-segment-fait-parse_error").first().evaluate((el: unknown) => getComputedStyle(el).backgroundColor)) as string;
+        verifier(segment === RGB.ambre, `${nom} : le segment de progression de cet écran est ambre, obtenu ${segment}`);
+        const erreursApi = journal.erreursConsole.filter((m) => !/fonts\.g|net::ERR_FAILED/.test(m));
+        verifier(journal.pageerrors.length === 0 && erreursApi.length === 0, `${nom} : erreurs JS/console : ${[...journal.pageerrors, ...erreursApi].join(" | ")}`);
+        await contexte.close();
+        continue;
+      }
       // ── Assertions de style calculé sur la carte concernée ──
       const style = (await carte.evaluate((el: unknown) => { const st = getComputedStyle(el); return { filet: st.borderTopColor, fond: st.backgroundColor, largeurFilet: st.borderTopWidth, rayon: st.borderRadius, ombre: st.boxShadow }; })) as { filet: string; fond: string; largeurFilet: string; rayon: string; ombre: string };
       const attendu: Record<string, [string, string] | null> = { correct: [RGB.vert, RGB.vertClair], not_equivalent: [RGB.danger, RGB.dangerClair], parse_error: [RGB.ambre, RGB.ambreClair] };
@@ -982,10 +996,11 @@ async function scenarioEtendu(navigateur: any, base: string, largeur: number) {
   verifier((await courant.locator(".moteur-solution .moteur-math").count()) >= 3, `${l} étendu : « Réponse attendue » (texte d'auteur) rend ses mathématiques`);
   await page.screenshot({ path: cap("06-axe-verrouille-revele"), fullPage: true });
   await suivante().click();
-  await page.waitForSelector(".moteur-ecran-termine");
-  const resume = page.locator(".moteur-ecran-termine").filter({ hasText: "Donne l'axe de symétrie" }).locator(".moteur-valeur");
-  verifier((await resume.innerText()).includes("$x$"), `${l} étendu : « Ta réponse » affiche le « $x$ » tapé par l'élève tel quel`);
-  verifier((await resume.locator(".moteur-math").count()) === 3, `${l} étendu : dans « Ta réponse », seuls les 3 libellés d'auteur sont mathématiques ; le texte de l'élève ne l'est jamais`);
+  // RAPPORT §43 : l'écran verrouillé est désormais une LIGNE du « Ce qu'on sait déjà » ; sa valeur est la réponse d'ÉLÈVE, rendue comme avant.
+  await page.waitForSelector(".moteur-rappel-ligne:has(.moteur-rappel-nom)");
+  const resume = page.locator(".moteur-rappel-ligne").filter({ hasText: "Axe" }).locator(".moteur-rappel-valeur");
+  verifier((await resume.innerText()).includes("$x$"), `${l} étendu : la ligne du rappel affiche le « $x$ » tapé par l'élève tel quel`);
+  verifier((await resume.locator(".moteur-math").count()) === 3, `${l} étendu : dans la ligne du rappel, seuls les 3 libellés d'auteur sont mathématiques ; le texte de l'élève ne l'est jamais`);
 
   // ── Écran 5 : intervalle ──
   await page.waitForSelector(".moteur-intervalle");
@@ -1479,8 +1494,8 @@ async function assignerGen7(s: Scenario, categorie: CategorieAnalyseFonction, gr
 }
 
 /**
- * Une partie COMPLÈTE par catégorie, au clic : 8 écrans (6 pour af_irreductible), mathématiques rendues par KaTeX, panneau
- * « Ce que tu sais déjà » en correction immédiate, tableau à 7 ou 3 colonnes avec valeurs numériques, fin de tâche.
+ * Une partie COMPLÈTE par catégorie, au clic : 8 écrans (6 pour af_irreductible), mathématiques rendues par KaTeX, rappel
+ * « Ce qu'on sait déjà » et progression en correction immédiate, tableau à 7 ou 3 colonnes avec valeurs numériques, fin de tâche.
  */
 async function scenarioGen7Parties(navigateur: any, base: string, largeur: number) {
   const l = `${largeur}`;
@@ -1499,11 +1514,14 @@ async function scenarioGen7Parties(navigateur: any, base: string, largeur: numbe
       const consigne: string = await lireConsigneGen7(page);
       verifier(await courant.locator(".moteur-consigne .katex").count() >= 1 && (await page.locator(".moteur-math-source").count()) === 0, `${e} / ${champ} : la consigne est rendue par KaTeX (aucun repli en source)`);
       if (!["racinesChamp1", "racinesChamp2", "racinesReconnaissance"].includes(champ)) verifier(consigne.startsWith("Étudie la fonction suivante"), `${e} / ${champ} : l'énoncé de la fonction est répété (« ${consigne.slice(0, 50)} »)`);
+      // RAPPORT §43 : « Ce qu'on sait déjà » est le rappel du moteur (une ligne par écran répondu, marque ✓ sous correction immédiate), plus une ligne de consigne.
+      verifier(!consigne.includes("Ce que tu sais déjà"), `${e} / ${champ} : plus de ligne « Ce que tu sais déjà » dans la consigne`);
+      verifier((await page.locator(".moteur-question-titre").innerText()) === `Question ${i + 1} sur ${champs.length}` && (await page.locator(".moteur-rappel-ligne-correct").count()) === i && (await page.locator(".moteur-rappel-ligne-courant").count()) === 1, `${e} / ${champ} : « Question ${i + 1} sur ${champs.length} », ${i} ligne(s) répondue(s) juste, 1 ligne en cours`);
+      verifier((await page.locator(".moteur-progression-etiquette").innerText()).includes(`${Math.round((i / champs.length) * 100)} %`), `${e} / ${champ} : progression ${Math.round((i / champs.length) * 100)} %`);
       if (i === 0) {
-        verifier(!consigne.includes("Ce que tu sais déjà"), `${e} : aucun panneau avant la première réponse`);
         await page.screenshot({ path: cap("01-coefficients"), fullPage: true });
       } else if (champ === "allure" || champ === "axeSommet" || champ === "domaineImage") {
-        verifier(consigne.includes("Ce que tu sais déjà") && consigne.split("\n").length >= 3, `${e} / ${champ} : panneau « Ce que tu sais déjà » sur sa ligne (${consigne.split("\n").length} lignes)`);
+        verifier((await page.locator(".moteur-rappel-ligne-correct .moteur-rappel-nom").first().innerText()).startsWith("Coefficients"), `${e} / ${champ} : le rappel commence par « Coefficients » avec sa valeur`);
         vusPanneau++;
       }
       if (champ === "tableauSignes") {
@@ -1511,9 +1529,10 @@ async function scenarioGen7Parties(navigateur: any, base: string, largeur: numbe
         verifier((await courant.locator(".moteur-rangee-signe td button, .moteur-ligne-tableau tr:first-child td button").count()) === n, `${e} : la ligne de signe compte ${n} cases`);
         const valeurs = await courant.locator(".moteur-table-structure .katex").count();
         verifier(valeurs >= n, `${e} : les valeurs de x et symboles du tableau sont rendus par KaTeX (${valeurs})`);
-        verifier(consigne.includes("Ce que tu sais déjà"), `${e} : panneau avant le tableau`);
-        if (categorie !== "irreductible") verifier(/racine/.test(consigne), `${e} : les racines figurent dans le panneau avant le tableau`);
-        else verifier(!/racine/.test(consigne.split("\n").find((x) => x.startsWith("Ce que")) ?? ""), `${e} : aucune racine dans le panneau d'af_irreductible`);
+        const noms: string[] = await page.locator(".moteur-rappel-ligne-correct .moteur-rappel-nom").allInnerTexts();
+        verifier(noms.length === champs.length - 1 && noms[0]!.startsWith("Coefficients"), `${e} : le rappel liste les ${champs.length - 1} écrans précédents (${noms.join(" | ")})`);
+        if (categorie !== "irreductible") verifier(noms.some((x) => x.startsWith("Racines")), `${e} : les racines figurent dans le rappel avant le tableau`);
+        else verifier(!noms.some((x) => x.startsWith("Racines")), `${e} : aucune ligne « Racines » dans le rappel d'af_irreductible`);
         await verifierPleinBord(page, `${e} : tableau`, largeur);
       }
       if (champ === "racinesChamp2") verifier(/D'après ta factorisation/.test(consigne), `${e} : l'équation de racinesChamp2 est celle de la factorisation confirmée`);
@@ -1551,7 +1570,7 @@ async function scenarioGen7Coupe(navigateur: any, base: string, largeur: number)
   const passer = (etape: string, derniere = false) =>
     validerEtSuivreGen7(page, { verdict: false, entre: async () => void verifier(derniere ? !(await sansVerdict()) : await sansVerdict(), `${l} gen7 coupé / ${etape} : ${derniere ? "la réponse qui termine la tâche la révèle" : "aucun verdict ni solution affichés après « Valider »"}`) });
   for (const champ of ["coefficients", "allure", "axeSommet", "domaineImage", "racinesReconnaissance"]) {
-    verifier(!(await lireConsigneGen7(page)).includes("Ce que tu sais déjà"), `${l} gen7 coupé / ${champ} : jamais de panneau sous correction coupée`);
+    verifier(!(await lireConsigneGen7(page)).includes("Ce que tu sais déjà") && (await page.locator(".moteur-rappel-marque-correct, .moteur-rappel-marque-not_equivalent, .moteur-rappel-marque-parse_error").count()) === 0, `${l} gen7 coupé / ${champ} : le rappel n'a que des marques neutres, jamais une coche ni une couleur de verdict`);
     await repondreGen7(page, ex, champ);
     await passer(champ);
   }
@@ -1569,7 +1588,7 @@ async function scenarioGen7Coupe(navigateur: any, base: string, largeur: number)
   const annotations = (await courant.locator(".moteur-table-structure .katex-mathml annotation").allTextContents()).map((t: string) => t.trim());
   const symboles = annotations.filter((t: string) => /^x_(1|2|S)$/.test(t)).length;
   verifier(symboles >= 3 && annotations.every((t: string) => !/\d/.test(t.replace(/x_[12]/, "x_"))), `${l} gen7 coupé : le tableau montre x_1, x_S, x_2 (${symboles}) et aucune valeur numérique de x (${JSON.stringify(annotations)})`);
-  verifier((await sansVerdict()) && !(await lireConsigneGen7(page)).includes("Ce que tu sais déjà"), `${l} gen7 coupé : toujours ni verdict ni panneau devant le tableau`);
+  verifier((await sansVerdict()) && (await page.locator(".moteur-rappel-marque-neutre").count()) === 7 && (await page.locator(".moteur-rappel-marque-correct, .moteur-rappel-marque-not_equivalent, .moteur-rappel-marque-parse_error").count()) === 0, `${l} gen7 coupé : toujours ni verdict ni coche devant le tableau : 7 lignes neutres`);
   await page.screenshot({ path: join(CAPTURES, `${l}-gen7-coupe-tableau-symbolique.png`), fullPage: true });
   await repondreGen7(page, ex, "tableauSignes");
   await passer("tableauSignes", true);
@@ -1809,7 +1828,8 @@ async function scenarioApercuRetour(navigateur: any, base: string, largeur: numb
     await popup.waitForSelector(".moteur-ecran-courant .moteur-retour .moteur-statut");
     if (retour) {
       await popup.getByRole("button", { name: "Écran suivant" }).click();
-      await popup.waitForFunction(`document.querySelectorAll(".moteur-ecran-termine").length === 1`);
+      // RAPPORT §43 : l'écran répondu est une ligne du rappel (marque neutre sous correction coupée) portant « Modifier ma réponse ».
+      await popup.waitForFunction(`document.querySelectorAll(".moteur-rappel-ligne-neutre").length === 1`);
       verifier((await popup.getByRole("button", { name: "Modifier ma réponse" }).count()) === 1, `${l} : dans l'aperçu, l'écran répondu propose « Modifier ma réponse »`);
       await popup.screenshot({ path: join(CAPTURES, `${largeur}-apercu-retour-modifier.png`), fullPage: true });
     } else {
