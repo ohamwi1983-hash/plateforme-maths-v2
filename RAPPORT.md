@@ -1519,3 +1519,19 @@ Retour du propriétaire : dans l'aperçu (téléphone), les écrans répondus n'
 **Validation (export propre `git archive` du commit `8b1cfa5`, `npm ci`).** `tsc -b` OK ; 40 scripts `test-*` / `smoke*` : 0 échec ; `npm run chromium-temoin` : 2073 vérifications (390 px et 1280 px, dont le nouveau `scenarioReponseVisible` : verdict montré dans les deux cas, `.moteur-solution` absent case décochée, présent case cochée) ; `npm run chromium-design` : 222 vérifications. Captures : `captures-chromium/{390,1280}-reponse-visible-{cochee,decochee}.png`.
 - **Échec intermédiaire, cause établie (pas un « flake »)** : 1 échec à 1280 px seulement dans `scenarioEtendu` (`chromium-temoin-technique.ts`, attente de `.moteur-solution`). Depuis §42, une tâche à case cochée montre aussi la solution d'un écran RÉUSSI : `waitForSelector(".moteur-solution")` se satisfaisait d'une solution déjà à l'écran avant le rendu de celle de l'écran courant. Corrigé en attendant `courant.locator(".moteur-solution")` ; aucun code de production touché.
 - **Non couvert, à savoir** : les cas d'un exercice à plusieurs essais avec chrono `par_ecran` sous case décochée sont testés en fonction pure (`construireChampVue`, chrono écoulé sans réponse) mais pas en navigateur.
+
+## §45 : quand la solution est montrée, la cascade repart de la VRAIE valeur (précise D-A de §38, demande du propriétaire)
+
+**Demande.** Avec « Afficher la réponse attendue une fois les essais épuisés » cochée, l'élève voit la solution de chaque écran raté ; or les écrans suivants continuaient à s'appuyer sur sa réponse FAUSSE (§18, §38). Incohérent : on lui montre la vraie valeur puis on lui pose la suite sur la fausse.
+
+**Livré.**
+- `projeterExercice` (`lib/etatExercice.ts:96`) ne transmet à `projeter` que les réponses `statut === "correct"` quand `solutionMontree` (`solutionMontreeEnCours`, §42, seule définition). Filtre unique au point de substitution : aucun code de gen7 modifié. Contrat documenté dans `lib/contratGenerateur.ts` (doc de `projeter`).
+- **Inchangé** : correction coupée et immédiate SANS la case (rien n'a été montré : la méthode juste appliquée à une donnée fausse reste acceptée, §38) ; réponse correcte : point de départ comme avant.
+- Effets vérifiés côté serveur : énoncé de `allure` (vraie fonction, plus « d'après les coefficients que tu as donnés »), allure jugée sur la vraie fonction (la méthode juste sur SES coefficients devient fausse), `racinesChamp2` (vraie factorisation), `domaineImage` (vraie ordonnée), tableau de signes (vraies valeurs de x, jugé sur la vraie fonction).
+
+**Tests.** Nouveau `scripts/test-cascade-revelee.ts` (26 vérifications, 3 régimes × 5 scénarios, VRAI routeur). Tests existants mis à jour car ils supposaient la case cochée par défaut de `creerTache` : `test-cascade.ts`, `test-cascade-gen7-coefficients.ts`, `test-route-gen7.ts`, `test-cascade-tableau-gen7.ts` (option `reponse_visible: false` pour le régime « immédiat », section « 4 bis » pour le régime révélé). Chromium : `assignerGen7` reçoit une option `visible` (`scripts/chromium-temoin-technique.ts:1467`) ; `scenarioGen7Cascade` (l.1592) et `scenarioGen7CascadeTableau` (l.1829, trois régimes : immédiat sans la case, coupé, immédiat avec la case) — 2081 vérifications au total.
+
+**À savoir.**
+- **HYPOTHÈSE assumée** : « solution montrée » = réglage statique de la tâche, pas l'état d'un champ. Une réponse fausse avec essais restants ne déclenche rien (l'écran dépendant n'est de toute façon servi qu'une fois le champ terminé, `dependDe`).
+- **Conséquence pédagogique** : sous la case cochée, un élève qui se trompe aux coefficients ne peut plus « gagner » les écrans suivants par cohérence interne ; il repart de la vraie fonction. C'est le comportement demandé ; il rend ce régime plus exigeant que les deux autres.
+- `ContexteProjection.correctionImmediate` n'est plus lu par aucun générateur (conservé dans le contrat).

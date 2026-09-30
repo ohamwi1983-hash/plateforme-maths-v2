@@ -1464,8 +1464,8 @@ async function ouvrirTacheGen7(navigateur: any, base: string, largeur: number, s
 }
 
 /** Assigne (API réelle) une tâche d'UNE variante gen7 avec la graine voulue ; renvoie l'exercice régénéré. */
-async function assignerGen7(s: Scenario, categorie: CategorieAnalyseFonction, graine: number, options: { feedback?: boolean; tentatives?: number; retour?: boolean } = {}): Promise<{ ex: ExerciceAnalyseFonction; tacheId: string }> {
-  const tacheId = creerTache(s, { nom: `gen7 ${categorie}`, autoriser_retour_arriere: options.retour ?? false, feedback_immediat: options.feedback ?? true, tentatives_supplementaires: options.tentatives ?? 0, reponse_visible: true, variantes: [{ variante_id: `af_${categorie}`, nombre_exercices: 1 }] });
+async function assignerGen7(s: Scenario, categorie: CategorieAnalyseFonction, graine: number, options: { feedback?: boolean; tentatives?: number; retour?: boolean; visible?: boolean } = {}): Promise<{ ex: ExerciceAnalyseFonction; tacheId: string }> {
+  const tacheId = creerTache(s, { nom: `gen7 ${categorie}`, autoriser_retour_arriere: options.retour ?? false, feedback_immediat: options.feedback ?? true, tentatives_supplementaires: options.tentatives ?? 0, reponse_visible: options.visible ?? true, variantes: [{ variante_id: `af_${categorie}`, nombre_exercices: 1 }] });
   const origine = Math.random;
   Math.random = () => graine / 2 ** 32;
   try {
@@ -1590,11 +1590,12 @@ async function scenarioGen7Coupe(navigateur: any, base: string, largeur: number)
  * SON ordonnée du sommet, et [0 ; +∞[ est accepté (verdict « Bonne réponse » sous correction immédiate, rien de visible sous correction coupée).
  */
 async function scenarioGen7Cascade(navigateur: any, base: string, largeur: number) {
+  // RAPPORT §45 : la cascade sur la réponse FAUSSE de l'élève ne vit que là où rien n'a été montré : immédiate SANS « Afficher la réponse attendue », et coupée.
   for (const feedback of [true, false]) {
     const l = `${largeur} gen7 cascade ${feedback ? "immédiat" : "coupé"}`;
     const s: Scenario = creerScenario();
     installerBase(s.base);
-    const { ex } = await assignerGen7(s, "mise_en_evidence", 12345, { feedback });
+    const { ex } = await assignerGen7(s, "mise_en_evidence", 12345, { feedback, visible: false });
     const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
     const courant = page.locator(".moteur-ecran-courant");
     /** « Valider », attend le retour serveur, puis renvoie le geste « suite » (à appeler pour passer à l'écran suivant). */
@@ -1826,11 +1827,13 @@ async function scenarioApercuRetour(navigateur: any, base: string, largeur: numb
  * immédiate ses valeurs de x sont les siennes (0 ; 0,4 ; 0,8), en correction coupée elles restent symboliques.
  */
 async function scenarioGen7CascadeTableau(navigateur: any, base: string, largeur: number) {
-  for (const feedback of [true, false]) {
-    const l = `${largeur} gen7 cascade tableau ${feedback ? "immédiat" : "coupé"}`;
+  // Trois régimes (RAPPORT §45) : immédiate SANS la case et coupée = cascade sur SA fonction, valeurs de x symboliques ; immédiate AVEC la case = la fausse réponse a
+  // été révélée, le tableau repart de la VRAIE fonction, valeurs de x numériques.
+  for (const [feedback, visible] of [[true, false], [false, false], [true, true]] as const) {
+    const l = `${largeur} gen7 cascade tableau ${visible ? "immédiat + réponse affichée" : feedback ? "immédiat" : "coupé"}`;
     const s: Scenario = creerScenario();
     installerBase(s.base);
-    const { ex } = await assignerGen7(s, "mise_en_evidence", 12345, { feedback });
+    const { ex } = await assignerGen7(s, "mise_en_evidence", 12345, { feedback, visible });
     const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
     const courant = page.locator(".moteur-ecran-courant");
     const valider = async () => {
@@ -1856,16 +1859,19 @@ async function scenarioGen7CascadeTableau(navigateur: any, base: string, largeur
     }
     await page.waitForSelector(".moteur-table-structure");
     const entetes = ((await page.evaluate(`[...document.querySelectorAll(".moteur-ecran-courant .moteur-rangee-x td")].map((td) => td.querySelector("annotation")?.textContent?.trim() ?? "")`)) as string[]).filter((t) => t !== "");
-    if (feedback) verifier(JSON.stringify(entetes) === JSON.stringify(["0", "0.4", "0.8"]), `${l} : la ligne des x montre SES valeurs (${JSON.stringify(entetes)})`);
-    else verifier(entetes.join() === "x_1,x_S,x_2", `${l} : correction coupée, valeurs symboliques (${JSON.stringify(entetes)})`);
-    await page.screenshot({ path: join(CAPTURES, `${largeur}-gen7-cascade-tableau-${feedback ? "immediat" : "coupe"}.png`), fullPage: true });
-    // le tableau de SA fonction (a < 0 : − 0 + + + 0 −, ⌢) est accepté
-    const eff = fonctionEffective(projeterGen7(ex, [{ champ: "coefficients", reponseBrute: JSON.stringify({ a: "-5", b: "4", c: "0" }), statut: "not_equivalent" }], { correctionImmediate: feedback, solutionMontree: feedback }));
+    // graine 12345 de ce scénario : f(x) = x² + 5x, racines −5 et 0, sommet −5/2 ; SES coefficients (−5, 4, 0) donneraient 0 ; 2/5 ; 4/5.
+    if (visible) verifier(JSON.stringify(entetes) === JSON.stringify(["-5", "-\\dfrac{5}{2}", "0"]), `${l} : la ligne des x montre les valeurs de la VRAIE fonction (${JSON.stringify(entetes)})`);
+    else verifier(entetes.join() === "x_1,x_S,x_2", `${l} : aucune solution montrée, valeurs symboliques (${JSON.stringify(entetes)})`);
+    await page.screenshot({ path: join(CAPTURES, `${largeur}-gen7-cascade-tableau-${visible ? "revele" : feedback ? "immediat" : "coupe"}.png`), fullPage: true });
+    // sans solution montrée : le tableau de SA fonction (a < 0 : − 0 + + + 0 −, ⌢) est accepté ; avec la case : celui de la VRAIE fonction
+    // (le filtre « seules les réponses correctes » vit dans `projeterExercice` : appelé ici directement, on lui applique la même règle)
+    const confirmees = visible ? [] : [{ champ: "coefficients", reponseBrute: JSON.stringify({ a: "-5", b: "4", c: "0" }), statut: "not_equivalent" as const }];
+    const eff = fonctionEffective(projeterGen7(ex, confirmees, { correctionImmediate: feedback, solutionMontree: visible }));
     await remplirTableauGen7(page, ex, solutionTableauGen7(eff));
     await courant.getByRole("button", { name: "Valider", exact: true }).click();
     await page.waitForSelector(".moteur-ecran-courant .moteur-retour .moteur-statut");
     const statut = s.base.table("reponses").find((r) => r.champ === "tableauSignes")?.statut;
-    verifier(statut === "correct", `${l} : le tableau de SA fonction est accepté (${statut})`);
+    verifier(statut === "correct", `${l} : le tableau ${visible ? "de la VRAIE fonction" : "de SA fonction"} est accepté (${statut})`);
     verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
     await contexte.close();
   }

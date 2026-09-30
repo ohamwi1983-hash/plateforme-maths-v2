@@ -89,7 +89,12 @@ export function projeterExercice(regenere: ExerciceRegenere, reponsesConfirmees:
     if (regenere.ecrans.some((e) => e.dependDe !== undefined)) throw new Error(`${regenere.generateur.variante_id} : un écran déclare dependDe mais le générateur n'a pas de projeter()`);
     return { exercice: regenere.exercice, ecrans: regenere.ecrans };
   }
-  const exercice = regenere.generateur.projeter(regenere.exercice, [...reponsesConfirmees], { correctionImmediate: contexte.reglages.feedback_immediat, solutionMontree: solutionMontreeEnCours(contexte.reglages) });
+  const solutionMontree = solutionMontreeEnCours(contexte.reglages);
+  // RAPPORT §45 : quand la solution est montrée (correction immédiate + « Afficher la réponse attendue »), tout champ terminé non réussi a été RÉVÉLÉ avec
+  // sa solution : les écrans suivants repartent de la VRAIE valeur, jamais de la réponse fausse de l'élève. Seules les réponses CORRECTES sont donc
+  // transmises à `projeter` (filtre placé ici, point de substitution unique : aucun générateur n'a à le refaire). Sans solution montrée, inchangé (§18, §38).
+  const confirmees = solutionMontree ? reponsesConfirmees.filter((r) => r.statut === "correct") : [...reponsesConfirmees];
+  const exercice = regenere.generateur.projeter(regenere.exercice, confirmees, { correctionImmediate: contexte.reglages.feedback_immediat, solutionMontree });
   const ecrans = regenere.generateur.ecrans(exercice);
   if (ecrans.map((e) => e.champ).join("\u0000") !== regenere.ecrans.map((e) => e.champ).join("\u0000")) {
     throw new Error(`${regenere.generateur.variante_id} : la projection ne doit jamais changer la liste des champs (champs_attendus est figé à l'assignation)`);
