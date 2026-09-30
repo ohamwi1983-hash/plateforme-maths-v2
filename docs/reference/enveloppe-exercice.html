@@ -5,70 +5,85 @@
      composants d'écran et le tableau de signes ont leurs propres références : composants-ecran.html, tableau-signes.html).
      Reconstruite à partir du design cible du propriétaire (captures Chromium du gen7 de l'ancien pilote + son `style.css`), exprimée
      UNIQUEMENT avec les valeurs des tokens de `:root` (public/style.css) : aucune valeur nouvelle.
-     UN seul gabarit, pour toutes les largeurs : carte arrondie (celle des références de composants, padding 24) contenant le panneau
-     « en creux » ; lien, surtitre et titre au-dessus. ÉCART ASSUMÉ avec la cible : son mobile (≤ 600 px) est plein-bord (bandeau gris qui touche
-     la bannière, feuille blanche sans arrondi), ce qui contredit la référence stricte des composants (carte arrondie, padding 24, vérifiée à
-     390 px) ; à trancher par le propriétaire avant d'y toucher.
+     Ordre, à toutes les largeurs : [lien + titres] → [panneau gris : progression + « Ce qu'on sait déjà »] → [carte blanche de l'écran].
+     Le panneau gris est AU-DESSUS de la carte, jamais dedans : sa bordure basse EST la bordure haute de la carte.
+       - BUREAU (> 600 px) : les deux blocs font la largeur de la colonne et forment un bloc aux angles arrondis (gris en haut, blanc en bas) ;
+         lien et titres sont sur le fond de la page.
+       - MOBILE (≤ 600 px) : tout est bord à bord. Le bandeau gris (lien + titres) touche la bannière violette et a la couleur du panneau gris ;
+         le panneau gris (filets haut et bas, sans bord latéral) et la carte blanche (sans arrondi, sans bord latéral) font la largeur de l'écran.
      scripts/chromium-fidelite-design.ts rend ce fichier et l'application à 390 et 1280 px et compare les styles CALCULÉS.
      Les états d'une ligne du rappel : fait (juste / faux / illisible / sans verdict), courant. « Sans verdict » = correction coupée :
      aucune couleur de verdict, jamais une coche — un élève juste et un élève faux voient la MÊME ligne. -->
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<body style="margin:0;background:#FAF9FC;font-family:'Inter',sans-serif;color:#1C1730;">
-
-<!-- ════════════ BUREAU (> 600 px) : colonne de 720 px, gouttière 16 px, carte de 688 px ════════════ -->
-<div data-ref="enveloppe" style="max-width:688px;">
-  <div data-ref="retour" style="display:flex;width:fit-content;align-items:center;gap:8px;padding:0;margin:0 0 16px;font-family:'Inter',sans-serif;font-size:14px;font-weight:700;color:#7C3AED;">
-    <span data-ref="retour-puce" style="width:30px;height:30px;border-radius:50%;background:#F1EBFC;display:flex;align-items:center;justify-content:center;font-size:15px;line-height:1;flex-shrink:0;">←</span>
-    <span data-ref="retour-libelle">Mes tâches</span>
-  </div>
-  <div data-ref="titres" style="margin:0 0 16px;">
-    <div data-ref="surtitre" style="font-family:'Inter',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.06em;color:#6E6785;margin-bottom:3px;">EXERCICE 1 SUR 1</div>
-    <div data-ref="titre" style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;letter-spacing:-0.01em;color:#1C1730;margin:0;">Question 3 sur 8</div>
-  </div>
-
-  <div data-ref="carte" style="background:#FFFFFF;border:1px solid #E9E4F3;border-radius:20px;box-shadow:0 10px 24px -18px rgba(59,20,112,.3);padding:24px;display:flex;flex-direction:column;gap:12px;">
-    <div data-ref="rappel" style="background:#F6F3FB;border:1px solid #E9E4F3;border-radius:13px;padding:14px 16px;margin-bottom:8px;">
-      <div data-ref="progression-etiquette" style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;color:#6E6785;margin-bottom:8px;"><span>Progression</span><span>25 %</span></div>
-      <div data-ref="piste" style="height:12px;background:#F1EBFC;border-radius:20px;overflow:hidden;display:flex;gap:5px;margin-bottom:18px;">
-        <span data-ref="segment-fait" style="flex:1;background:#16A34A;border-radius:20px;"></span>
-        <span style="flex:1;background:#16A34A;border-radius:20px;"></span>
-        <span data-ref="segment-courant" style="flex:1;background:#7C3AED;border-radius:20px;"></span>
-        <span data-ref="segment-avenir" style="flex:1;background:#E9E4F3;border-radius:20px;"></span>
-        <span style="flex:1;background:#E9E4F3;border-radius:20px;"></span>
-        <span style="flex:1;background:#E9E4F3;border-radius:20px;"></span>
-        <span style="flex:1;background:#E9E4F3;border-radius:20px;"></span>
-        <span style="flex:1;background:#E9E4F3;border-radius:20px;"></span>
-      </div>
-      <div data-ref="rappel-titre" style="font-size:12px;font-weight:700;letter-spacing:0.04em;color:#6E6785;margin-bottom:10px;">CE QU'ON SAIT DÉJÀ</div>
-      <ol data-ref="rappel-liste" style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;">
-        <li data-ref="ligne-juste" style="display:flex;align-items:flex-start;gap:10px;">
-          <span data-ref="marque-juste" style="flex:none;width:20px;height:20px;border-radius:50%;background:#16A34A;color:#FFFFFF;font-size:12px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center;">✓</span>
-          <span data-ref="libelle" style="font-size:13px;font-weight:700;color:#1C1730;">Coefficients :</span>
-          <span data-ref="valeur" style="font-family:'Fraunces',serif;font-size:14px;color:#1C1730;margin-left:2px;">a = 2 ; b = -8 ; c = 0</span>
-        </li>
-        <li data-ref="ligne-faux" style="display:flex;align-items:flex-start;gap:10px;">
-          <span data-ref="marque-faux" style="flex:none;width:20px;height:20px;border-radius:50%;background:#B3261E;color:#FFFFFF;font-size:12px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center;">✕</span>
-          <span style="font-size:13px;font-weight:700;color:#1C1730;">Allure :</span>
-          <span style="font-family:'Fraunces',serif;font-size:14px;color:#1C1730;margin-left:2px;">a &gt; 0</span>
-        </li>
-        <li data-ref="ligne-illisible" style="display:flex;align-items:flex-start;gap:10px;">
-          <span data-ref="marque-illisible" style="flex:none;width:20px;height:20px;border-radius:50%;background:#E08A2E;color:#FFFFFF;font-size:12px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center;">!</span>
-          <span style="font-size:13px;font-weight:700;color:#1C1730;">Sommet :</span>
-          <span style="font-family:'Fraunces',serif;font-size:14px;color:#1C1730;margin-left:2px;">x = 2</span>
-        </li>
-        <li data-ref="ligne-neutre" style="display:flex;align-items:flex-start;gap:10px;">
-          <span data-ref="marque-neutre" style="flex:none;width:20px;height:20px;border-radius:50%;background:#F1EBFC;color:#3B1470;font-size:12px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center;">•</span>
-          <span style="font-size:13px;font-weight:700;color:#1C1730;">Domaine / Image :</span>
-          <span style="font-family:'Fraunces',serif;font-size:14px;color:#1C1730;margin-left:2px;">ℝ ; [-8 ; +∞[</span>
-        </li>
-        <li data-ref="ligne-courant" style="display:flex;align-items:flex-start;gap:10px;">
-          <span data-ref="marque-courant" style="flex:none;width:20px;height:20px;border-radius:50%;border:2px solid #7C3AED;color:#7C3AED;font-size:11px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center;box-sizing:border-box;">5</span>
-          <span data-ref="libelle-courant" style="font-size:13px;font-style:italic;color:#6E6785;">Racines — en cours</span>
-        </li>
-      </ol>
+<style>
+  body { margin: 0; background: #FAF9FC; font-family: 'Inter', sans-serif; color: #1C1730; line-height: 1.5; }
+  .env { max-width: 688px; }
+  .suivi { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
+  .rappel { background: #F6F3FB; border: 1px solid #E9E4F3; border-radius: 20px 20px 0 0; padding: 14px 24px; margin: 0; }
+  .carte { background: #FFFFFF; border: 1px solid #E9E4F3; border-top-width: 0; border-radius: 0 0 20px 20px; box-shadow: 0 10px 24px -18px rgba(59,20,112,.3); padding: 24px; display: flex; flex-direction: column; gap: 12px; }
+  @media (max-width: 600px) {
+    .env { max-width: none; }
+    .suivi { background: #F6F3FB; padding: 16px 16px 20px; gap: 12px; margin-bottom: 0; }
+    .rappel { border-width: 1px 0; border-radius: 0; padding: 14px 16px; }
+    .carte { border-width: 0 0 1px; border-radius: 0; padding: 20px 16px 24px; }
+  }
+</style>
+<body>
+<div data-ref="enveloppe" class="env">
+  <div data-ref="suivi" class="suivi">
+    <div data-ref="retour" style="display:flex;width:fit-content;align-items:center;gap:8px;padding:0;margin:0;font-family:'Inter',sans-serif;font-size:14px;font-weight:700;color:#7C3AED;">
+      <span data-ref="retour-puce" style="width:30px;height:30px;border-radius:50%;background:#F1EBFC;display:flex;align-items:center;justify-content:center;font-size:15px;line-height:1;flex-shrink:0;">←</span>
+      <span data-ref="retour-libelle">Mes tâches</span>
     </div>
+    <div data-ref="titres" style="margin:0;">
+      <div data-ref="surtitre" style="font-family:'Inter',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.06em;color:#6E6785;margin-bottom:3px;">EXERCICE 1 SUR 1</div>
+      <div data-ref="titre" style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;letter-spacing:-0.01em;color:#1C1730;margin:0;">Question 3 sur 8</div>
+    </div>
+  </div>
+
+  <div data-ref="rappel" class="rappel">
+    <div data-ref="progression-etiquette" style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;color:#6E6785;margin-bottom:8px;"><span>Progression</span><span>25 %</span></div>
+    <div data-ref="piste" style="height:12px;background:#F1EBFC;border-radius:20px;overflow:hidden;display:flex;gap:5px;margin-bottom:18px;">
+      <span data-ref="segment-fait" style="flex:1;background:#16A34A;border-radius:20px;"></span>
+      <span style="flex:1;background:#16A34A;border-radius:20px;"></span>
+      <span data-ref="segment-courant" style="flex:1;background:#7C3AED;border-radius:20px;"></span>
+      <span data-ref="segment-avenir" style="flex:1;background:#E9E4F3;border-radius:20px;"></span>
+      <span style="flex:1;background:#E9E4F3;border-radius:20px;"></span>
+      <span style="flex:1;background:#E9E4F3;border-radius:20px;"></span>
+      <span style="flex:1;background:#E9E4F3;border-radius:20px;"></span>
+      <span style="flex:1;background:#E9E4F3;border-radius:20px;"></span>
+    </div>
+    <div data-ref="rappel-titre" style="font-size:12px;font-weight:700;letter-spacing:0.04em;color:#6E6785;margin-bottom:10px;">CE QU'ON SAIT DÉJÀ</div>
+    <ol data-ref="rappel-liste" style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;">
+      <li data-ref="ligne-juste" style="display:flex;align-items:flex-start;gap:10px;">
+        <span data-ref="marque-juste" style="flex:none;width:20px;height:20px;border-radius:50%;background:#16A34A;color:#FFFFFF;font-size:12px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center;">✓</span>
+        <span data-ref="libelle" style="font-size:13px;font-weight:700;color:#1C1730;">Coefficients :</span>
+        <span data-ref="valeur" style="font-family:'Fraunces',serif;font-size:14px;color:#1C1730;margin-left:2px;">a = 2 ; b = -8 ; c = 0</span>
+      </li>
+      <li data-ref="ligne-faux" style="display:flex;align-items:flex-start;gap:10px;">
+        <span data-ref="marque-faux" style="flex:none;width:20px;height:20px;border-radius:50%;background:#B3261E;color:#FFFFFF;font-size:12px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center;">✕</span>
+        <span style="font-size:13px;font-weight:700;color:#1C1730;">Allure :</span>
+        <span style="font-family:'Fraunces',serif;font-size:14px;color:#1C1730;margin-left:2px;">a &gt; 0</span>
+      </li>
+      <li data-ref="ligne-illisible" style="display:flex;align-items:flex-start;gap:10px;">
+        <span data-ref="marque-illisible" style="flex:none;width:20px;height:20px;border-radius:50%;background:#E08A2E;color:#FFFFFF;font-size:12px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center;">!</span>
+        <span style="font-size:13px;font-weight:700;color:#1C1730;">Sommet :</span>
+        <span style="font-family:'Fraunces',serif;font-size:14px;color:#1C1730;margin-left:2px;">x = 2</span>
+      </li>
+      <li data-ref="ligne-neutre" style="display:flex;align-items:flex-start;gap:10px;">
+        <span data-ref="marque-neutre" style="flex:none;width:20px;height:20px;border-radius:50%;background:#F1EBFC;color:#3B1470;font-size:12px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center;">•</span>
+        <span style="font-size:13px;font-weight:700;color:#1C1730;">Domaine / Image :</span>
+        <span style="font-family:'Fraunces',serif;font-size:14px;color:#1C1730;margin-left:2px;">ℝ ; [-8 ; +∞[</span>
+      </li>
+      <li data-ref="ligne-courant" style="display:flex;align-items:flex-start;gap:10px;">
+        <span data-ref="marque-courant" style="flex:none;width:20px;height:20px;border-radius:50%;border:2px solid #7C3AED;color:#7C3AED;font-size:11px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center;box-sizing:border-box;">5</span>
+        <span data-ref="libelle-courant" style="font-size:13px;font-style:italic;color:#6E6785;">Racines — en cours</span>
+      </li>
+    </ol>
+  </div>
+
+  <div data-ref="carte" class="carte">
     <div data-ref="consigne" style="font-weight:600;line-height:1.4;">Pour trouver les racines de f, on considère l'équation. Quelle est la méthode la plus rapide ?</div>
   </div>
 </div>
-
 </body>

@@ -1555,3 +1555,32 @@ de l'écran validé. Périmètre : interface élève (`eleve.html`) ; `prof.html
 **Non traité (hors périmètre, à décider).** Écran « Résultat de l'exercice » et récapitulatif de session (la cible) ; le tableau de session de l'ancien pilote déborde à 390 px (signalé par l'autre session : à ne pas reproduire) ; pastille « Tentative n/3 » et aides (gardées telles quelles, décision du propriétaire) ; `ContexteProjection.correctionImmediate` n'est plus lu par aucun générateur depuis la suppression de `ligneFaits` (champ conservé pour l'instant).
 
 **Validation (export propre `git archive` du commit `091fb09`, `npm ci`).** `tsc -b` OK ; 40 scripts `test-*` / `smoke*` : 0 échec ; `npm run chromium-temoin` : 2247 vérifications (390 px et 1280 px) ; `npm run chromium-design` : 516 vérifications (dont l'enveloppe à 390 et 1280 px). Captures : `captures-chromium/fidelite-app-enveloppe-{390,1280}.png`, `fidelite-app-enveloppe-coupe-{390,1280}.png`, `{390,1280}-gen7-*`.
+
+## §44 : Assemblage de l'enveloppe — gris AU-DESSUS du blanc, bord à bord sur mobile (retour du propriétaire sur §43)
+
+**Retour (captures de test sur téléphone, image 1 = cible, image 2 = §43).** Le design n'était pas respecté : (1) la largeur du bloc blanc doit être celle de l'écran ; (2) le bloc gris « Ce qu'on sait déjà » ne doit pas être
+contenu dans le bloc blanc, mais AU-DESSUS, sa bordure basse étant la bordure haute du blanc, et avoir lui aussi la largeur de l'écran ; (3) l'espace entre la bannière violette et le bloc gris doit avoir la couleur du bloc gris.
+
+**Cause (mienne).** En §43 j'avais gardé la carte arrondie à toutes les largeurs (point 1 de ma liste de décisions « à confirmer ») et placé le panneau DANS la carte, pour ne pas contredire la référence stricte de `composants-ecran.html`. Le propriétaire
+tranche : la cible prime sur mobile. Cela rend caduque cette décision et change la carte de tous les composants (voir « Conséquences »).
+
+**Livré.**
+- **DOM** : le rappel est un FRÈRE placé avant la carte (`public/moteur/moteur.js:131`), plus un enfant. La couleur de verdict ne touche donc que la carte (le gris n'en hérite plus).
+- **Bureau (> 600 px)** : panneau gris et carte blanche de même largeur, un seul bloc aux angles arrondis (gris en haut, blanc en bas) ; la carte n'a plus de bord haut : la bordure basse du gris EST le haut du blanc (`ecrans.css:271`, `.moteur-rappel + .moteur-ecran`).
+- **Mobile (≤ 600 px)** (`ecrans.css:277` et suivantes) : tout est bord à bord. Le bandeau gris (lien + titres) touche la bannière violette et a la couleur du panneau ; panneau gris (filets haut et bas) et carte blanche font la largeur de l'écran (sans arrondi, sans bord latéral, padding 16 px).
+  Les gouttières de la page sont annulées par `--gouttiere-page` / `--marge-haute-page` (`public/style.css:144`, `:155`), valeurs de mise en page et non des tokens (la gouttière mobile de 14 px n'est pas dans l'échelle). Bug évité en route : `.moteur-exercice { max-width: 100% }`
+  empêchait les marges négatives d'élargir le bloc (largeur 362 au lieu de 390) : `max-width: none` sous 600 px.
+- **Référence** `docs/reference/enveloppe-exercice.html` réécrite : même ordre, gabarit unique avec une requête `@media (max-width: 600px)`.
+
+**Mesuré en Chromium** (`scripts/chromium-fidelite-design.ts`, **573 vérifications** dont la géométrie de §44) : à 390 px, carte blanche, panneau gris et bandeau ont la largeur exacte de l'écran (390), le bandeau touche la bannière (0 px), bandeau et panneau ont la même couleur et se touchent ;
+à 1280 px comme à 390, le panneau gris n'est pas un descendant de la carte, a la même largeur et le même bord gauche, et son bas est le haut de la carte (0 px).
+
+**Conséquences (documentées, pas cachées).**
+1. **La carte des composants n'est plus celle de `composants-ecran.html` par son enveloppe** (bord haut, rayons, padding latéral, largeur). `P_CARTE` (`chromium-fidelite-design.ts:41`) ne compare plus que le fond, l'ombre, le bord bas et le padding bas ; ce que la carte CONTIENT (consigne, champs, boutons, espacements) reste mesuré contre la référence des composants, les 222 vérifications de contenu sont inchangées. Décision du propriétaire, à son initiative.
+2. **Tableau de signes** : `--retrait-plein-bord` vaut 16 px sur mobile (`style.css:158`), le padding de la carte déjà bord à bord ; 24 + 1 + gouttière sur bureau (inchangé). `verifierPleinBord` (`chromium-temoin-technique.ts`) exige maintenant, sous 600 px, un tableau de la largeur exacte de la carte (et non plus qui en sorte) et un padding de carte de 16 px.
+3. **Cohérence avec les cartes du tableau de bord** : la carte d'écran garde l'ombre et le fond de `.carte-tache` ; le rayon et le filet n'en sont plus comparés.
+4. **Test de design system** (`scripts/test-design-system.ts`, l.51 et l.55) : le seuil d'une requête `@media (max-width: 600px)` n'est pas une « longueur en dur » ; `0` est admis comme valeur de `border-radius` (angle droit) — la règle « aucun rayon en dur » reste pour toute autre valeur.
+
+**À confirmer (décision mienne sur un point non tranché).** **Sur bureau**, la cible de l'ancien pilote montrait le panneau gris DANS la carte ; j'ai appliqué la règle énoncée (« au-dessus, bord haut = bord bas ») à toutes les largeurs : un bloc gris en haut / blanc en bas, même largeur. Dis-moi si tu préfères l'ancien rendu bureau.
+
+**Validation** : voir la section ci-dessous (export propre du commit final).

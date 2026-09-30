@@ -106,13 +106,14 @@
   color: var(--text);
 }
 
-/* Panneau « en creux » DANS la carte de l'écran : progression puis rappel des écrans déjà répondus. */
+/* Panneau gris « en creux » AU-DESSUS de la carte blanche de l'écran courant (RAPPORT §44) : progression puis rappel des écrans déjà répondus.
+   Sa bordure basse EST la bordure haute de la carte (voir « Assemblage » plus bas). */
 .moteur-rappel {
-  margin-bottom: var(--espace-2);
-  padding: calc(var(--espace-3)*0.875) var(--espace-3); /* 14px 16px */
+  margin: 0;
+  padding: calc(var(--espace-3)*0.875) var(--espace-4); /* 14px 24px : aligné sur le contenu de la carte (24px + 1px de bordure) */
   background: var(--surface-sunken);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius) var(--radius) 0 0;
 }
 
 .moteur-progression-etiquette {
@@ -259,6 +260,53 @@
 .moteur-ecran-termine {
   background: var(--surface-sunken);
   box-shadow: none;
+}
+
+/* ── Assemblage de l'enveloppe (RAPPORT §44) ────────────────────────────────────────────────────────────────────────
+   Bureau : le panneau gris et la carte blanche forment UN bloc — la bordure basse du gris est la bordure haute du blanc (la carte n'a pas de
+   bord haut, les angles hauts sont au gris, les angles bas à la carte) ; la couleur de verdict ne touche que les autres bords de la carte.
+   Mobile (≤ 600 px, comme la cible) : bord à bord — le bandeau gris (lien, titre, progression) touche la bannière violette sans espace d'une
+   autre couleur, la carte blanche fait la largeur de l'écran (sans arrondi, sans bord latéral). Les gouttières de la page sont annulées par
+   `--gouttiere-page` / `--marge-haute-page` (style.css). */
+.moteur-rappel + .moteur-ecran {
+  margin-top: calc(-1*var(--espace-3)); /* annule le `gap` de `.moteur-exercice` : les deux blocs se touchent */
+  border-top-width: 0;
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+
+@media (max-width: 600px) {
+  .moteur-exercice {
+    max-width: none;
+    margin-inline: calc(-1*var(--gouttiere-page,0px));
+    margin-top: calc(-1*var(--marge-haute-page,0px));
+  }
+
+  /* Tout ce qui n'est pas bord à bord garde la gouttière de la page. */
+  .moteur-exercice > :not(.moteur-suivi):not(.moteur-rappel):not(.moteur-ecran-courant) {
+    margin-inline: calc(1*var(--gouttiere-page,0px));
+  }
+
+  .moteur-suivi {
+    gap: calc(var(--espace-3)*0.75);
+    padding: var(--espace-3) var(--espace-3) calc(var(--espace-3)*1.25);
+    background: var(--surface-sunken);
+  }
+
+  .moteur-suivi + .moteur-rappel {
+    margin-top: calc(-1*var(--espace-3)); /* annule le `gap` : le bandeau et le panneau gris se touchent */
+  }
+
+  .moteur-rappel {
+    padding-inline: var(--espace-3);
+    border-width: 1px 0;
+    border-radius: 0;
+  }
+
+  .moteur-rappel + .moteur-ecran {
+    padding: calc(var(--espace-3)*1.25) var(--espace-3) var(--espace-4);
+    border-width: 0 0 1px;
+    border-radius: 0;
+  }
 }
 
 .moteur-consigne {

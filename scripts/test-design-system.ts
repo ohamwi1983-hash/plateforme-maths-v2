@@ -47,9 +47,12 @@ verifier(ecrans.length > 500, "public/moteur/ecrans.css vide ou introuvable");
 verifier(!/#[0-9a-fA-F]{3,8}\b/.test(ecrans), "ecrans.css : couleur hexadécimale en dur");
 verifier(!/\b(rgb|rgba|hsl|hsla)\(/.test(ecrans), "ecrans.css : couleur rgb()/hsl() en dur");
 for (const m of ecrans.matchAll(/font-family:\s*([^;]+);/g)) verifier(/^var\(--font-(corps|marque)\)$/.test(m[1].trim()), `ecrans.css : font-family en dur « ${m[1].trim()} »`);
-for (const m of ecrans.matchAll(/(?<![\w.-])(\d+(?:\.\d+)?)px\b/g)) verifier(m[1] === "1" || m[1] === "2" || m[1] === "0", `ecrans.css : longueur en dur « ${m[0]} » (utiliser l'échelle --espace-* ou --radius*)`);
+// Le seuil d'une requête `@media (max-width: 600px)` est celui de `style.css` (mobile), pas une longueur de composant : il n'est pas vérifié ici.
+const ecransHorsRequetes = ecrans.replace(/@media\s*\([^)]*\)/g, "@media");
+for (const m of ecransHorsRequetes.matchAll(/(?<![\w.-])(\d+(?:\.\d+)?)px\b/g)) verifier(m[1] === "1" || m[1] === "2" || m[1] === "0", `ecrans.css : longueur en dur « ${m[0]} » (utiliser l'échelle --espace-* ou --radius*)`);
 verifier(!/\brem\b|\d+rem\b/.test(ecrans), "ecrans.css : unité rem en dur");
-for (const m of ecrans.matchAll(/border-radius:\s*([^;]+);/g)) verifier(/var\(--radius(-sm)?\)/.test(m[1]) || m[1].trim() === "50%", `ecrans.css : border-radius en dur « ${m[1].trim()} »`);
+// `0` (angle droit) est admis : chaque valeur d'un `border-radius` est `0`, `50%` ou un token de rayon (l'enveloppe plein-bord et l'assemblage des blocs, RAPPORT §44).
+for (const m of ecrans.matchAll(/border-radius:\s*([^;]+);/g)) verifier(m[1].trim().split(/\s+/).every((v) => v === "0" || v === "50%" || /^var\(--radius(-sm)?\)$/.test(v)), `ecrans.css : border-radius en dur « ${m[1].trim()} »`);
 // Alias locaux (`--etat-*`) : autorisés SEULEMENT s'ils sont définis exclusivement par `var(--token)` existant.
 const aliasLocaux = new Set<string>();
 for (const m of ecrans.matchAll(/^\s*(--[a-z0-9-]+):\s*([^;]+);/gm)) {

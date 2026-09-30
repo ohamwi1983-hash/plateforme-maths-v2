@@ -500,7 +500,9 @@ async function matriceVisuelle(navigateur: any, base: string, largeur: number) {
       // Cohérence avec les cartes existantes (carte de tâche du tableau de bord = `.item-liste`) : même ombre, même rayon.
       if (etat === "defaut" && (await page.locator(".moteur-ecran-courant").count()) > 0) {
         const carteCourante = (await page.locator(".moteur-ecran-courant").evaluate((el: unknown) => { const st = getComputedStyle(el); return { ombre: st.boxShadow, rayon: st.borderRadius, filet: st.borderTopColor + " " + st.borderTopWidth, fond: st.backgroundColor }; })) as { ombre: string; rayon: string; filet: string; fond: string };
-        verifier(carteCourante.ombre === ombreCarteDashboard && `${carteCourante.rayon}|${carteCourante.filet}|${carteCourante.fond}` === rayonCarteDashboard, `${nom} : la carte d'écran doit avoir la même ombre/rayon/filet/fond que .carte-tache du tableau de bord (${carteCourante.ombre} vs ${ombreCarteDashboard})`);
+        // RAPPORT §44 : la carte est le bloc blanc de l'enveloppe (angles hauts droits, bord haut partagé avec le panneau gris, bord à bord sous 600 px) : seuls
+        // l'ombre et le fond restent ceux de `.carte-tache` ; le rayon et le filet de la carte sont mesurés contre `enveloppe-exercice.html` (chromium-design).
+        verifier(carteCourante.ombre === ombreCarteDashboard && carteCourante.fond === rayonCarteDashboard.split("|")[2], `${nom} : la carte d'écran doit avoir la même ombre et le même fond que .carte-tache du tableau de bord (${carteCourante.ombre} vs ${ombreCarteDashboard})`);
         verifier(carteCourante.ombre === "rgba(59, 20, 112, 0.3) 0px 10px 24px -18px", `${nom} : l'ombre doit résoudre à la valeur historique inchangée, obtenu ${carteCourante.ombre}`);
       }
       const erreursUtiles = journal.erreursConsole.filter((m) => !/fonts\.g|net::ERR_FAILED/.test(m));
@@ -698,9 +700,12 @@ async function verifierPleinBord(page: any, etiquette: string, largeur: number) 
   verifier(ok(m.g, m.corpsG) && ok(m.d, m.corpsD), `${etiquette} (${largeur}px) : le tableau touche les bords de la colonne de contenu (tableau ${m.g}→${m.d}, colonne ${m.corpsG}→${m.corpsD})`);
   if (largeur <= 720) verifier(m.g <= 1 && m.d >= m.fenetre - 1, `${etiquette} (${largeur}px) : sur mobile le tableau touche les bords de l'ÉCRAN (${m.g}→${m.d} sur ${m.fenetre})`);
   else verifier(ok(m.d - m.g, 720), `${etiquette} (${largeur}px) : sur bureau le tableau fait la largeur de la colonne (720px), pas de l'écran (${m.d - m.g})`);
-  verifier(m.g < m.carteG && m.d > m.carteD, `${etiquette} (${largeur}px) : le tableau sort de la carte des deux côtés`);
+  // RAPPORT §44 : sous 600 px la carte est bord à bord (le tableau en touche donc les bords, sans les dépasser) ; sur bureau il sort de la carte des deux côtés.
+  if (largeur <= 600) verifier(ok(m.g, m.carteG) && ok(m.d, m.carteD), `${etiquette} (${largeur}px) : le tableau fait la largeur de la carte bord à bord (${m.g}→${m.d} contre ${m.carteG}→${m.carteD})`);
+  else verifier(m.g < m.carteG && m.d > m.carteD, `${etiquette} (${largeur}px) : le tableau sort de la carte des deux côtés`);
   verifier(m.titreG === null || ok(m.titreG, m.consG), `${etiquette} (${largeur}px) : les titres de ligne s'alignent sur le texte de la carte (${Math.round(m.titreG)} contre ${Math.round(m.consG)}) malgré le plein-bord`);
-  verifier(m.consG - m.carteG >= 24 && m.carteD - m.consD >= 24, `${etiquette} (${largeur}px) : le reste de la carte GARDE son padding (consigne à ${m.consG - m.carteG}px du bord gauche, ${m.carteD - m.consD}px du droit)`);
+  const paddingCarte = largeur <= 600 ? 16 : 24; // RAPPORT §44 : carte bord à bord à 16 px de padding sous 600 px
+  verifier(m.consG - m.carteG >= paddingCarte && m.carteD - m.consD >= paddingCarte, `${etiquette} (${largeur}px) : le reste de la carte GARDE son padding (consigne à ${m.consG - m.carteG}px du bord gauche, ${m.carteD - m.consD}px du droit)`);
 }
 
 /** Valeur courante lue dans l'`aria-label` d'une case (« … : + . Toucher pour changer. ») ; « vide » = `?`. */

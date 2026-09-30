@@ -126,9 +126,10 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
 
     let carteCourante = null;
     if (ecranCourant) {
-      // Pendant la résolution : UNE carte (l'écran courant, qui porte la couleur du verdict) ; les écrans déjà répondus sont les lignes du rappel.
+      // Pendant la résolution : le panneau gris du rappel est AU-DESSUS de la carte blanche de l'écran courant (bordure basse du gris = bordure haute du
+      // blanc, RAPPORT §44), jamais dedans ; la carte seule porte la couleur du verdict. Les écrans déjà répondus sont les lignes du rappel.
+      racine.appendChild(construireRappel(exercice, { infosParChamp, ecransParChamp, indexCourant, retour }));
       const carte = creer("section", "moteur-ecran moteur-ecran-courant");
-      carte.appendChild(construireRappel(exercice, { infosParChamp, ecransParChamp, indexCourant, retour }));
       carte.appendChild(creer("p", "moteur-consigne", ecranCourant.consigne, { math: true }));
       carteCourante = { carte, ecran: ecranCourant, info: infosParChamp.get(ecranCourant.champ), modification: edition !== null };
       racine.appendChild(carte);
