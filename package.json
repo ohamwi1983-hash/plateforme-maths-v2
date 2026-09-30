@@ -17,7 +17,8 @@
     "test-texte-math": "tsx scripts/test-texte-math.ts",
     "test-design-system": "tsx scripts/test-design-system.ts",
     "test-structure-tableau": "tsx scripts/test-structure-tableau.ts",
-    "chromium-temoin": "tsx scripts/chromium-temoin-technique.ts"
+    "chromium-temoin": "tsx scripts/chromium-temoin-technique.ts",
+    "chromium-design": "tsx scripts/chromium-fidelite-design.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4"

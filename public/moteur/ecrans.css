@@ -59,7 +59,7 @@
 
   display: flex;
   flex-direction: column;
-  gap: var(--espace-3);
+  gap: calc(var(--espace-3)*0.75); /* 12px : espacement des blocs de la référence validée (RAPPORT §32) */
   padding: var(--espace-4);
   background: var(--surface);
   border: 1px solid var(--border);
@@ -123,9 +123,14 @@
   cursor: pointer;
 }
 
+/* Référence validée : bordure 2px, padding 9px 18px, 0,95em (15,2px), ombre nommée. Les valeurs 9px / 18px ne sont pas des
+   tokens : multiples EXACTS de l'échelle (1,125 × --espace-2 / --espace-3). */
 .moteur-bouton-principal {
   background: var(--violet-vif);
-  border-color: var(--violet-vif);
+  border: 2px solid var(--violet-vif);
+  padding: calc(var(--espace-2)*1.125) calc(var(--espace-3)*1.125);
+  font-size: 0.95em;
+  box-shadow: var(--ombre-bouton);
   color: var(--surface);
 }
 
@@ -143,6 +148,7 @@
 
 .moteur-bouton:disabled {
   cursor: not-allowed;
+  box-shadow: none;
   background: var(--surface-sunken);
   border-color: var(--border);
   color: var(--text-muted);
@@ -162,14 +168,18 @@
   flex-wrap: wrap;
 }
 
-/* ── Champ de saisie (champ_expression, lignes de liste_valeurs) ── */
-.moteur-champ {
+/* ── Champ de saisie (champ_expression, lignes de liste_valeurs) ──
+   `.moteur-ecran .moteur-champ` (0,2,0) et non `.moteur-champ` (0,1,0) : `style.css` a `input[type="text"]` (0,1,1) qui écrasait
+   le fond en creux et le padding (audit E1, RAPPORT §32). Référence : fond `--surface-sunken`, padding 10px 12px, 0,95em.
+   La hauteur minimale de 44px (cible tactile) est conservée. */
+.moteur-ecran .moteur-champ {
   box-sizing: border-box;
+  margin: 0; /* `input` (style.css) ajoute une marge : l'espacement vient du gap de la carte, 12px */
   width: 100%;
   min-height: calc(var(--espace-5) + var(--espace-1));
-  padding: var(--espace-2) var(--espace-3);
+  padding: calc(var(--espace-2)*1.25) calc(var(--espace-3)*0.75);
   font-family: var(--font-corps);
-  font-size: inherit;
+  font-size: 0.95em;
   color: var(--text);
   background: var(--surface-sunken);
   border: 1px solid var(--border);
@@ -192,13 +202,14 @@
 }
 
 .moteur-choix {
+  position: relative;
   display: flex;
   margin: 0; /* neutralise `label { margin-bottom }` (style.css) */
   font-size: inherit;
   align-items: center;
   gap: var(--espace-3);
   min-height: calc(var(--espace-5) + var(--espace-1));
-  padding: var(--espace-2) var(--espace-3);
+  padding: calc(var(--espace-2)*1.25) calc(var(--espace-3)*0.875); /* 10px 14px, référence */
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--border);
@@ -206,20 +217,28 @@
   cursor: pointer;
 }
 
+/* Le radio natif reste dans l'arbre d'accessibilité (clavier : flèches et Tab, lecteurs d'écran) mais n'est plus VISIBLE, comme
+   dans la référence : jamais `display: none` ni `visibility: hidden`. Le focus clavier se lit sur l'option entière. */
 .moteur-choix input {
-  flex: none;
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
   margin: 0;
-  accent-color: var(--violet-vif);
+  pointer-events: none;
 }
 
-/* Sélectionné, avant validation : bordure de 2px (filet de 1px + anneau intérieur de 1px : aucun
-   décalage de mise en page), fond violet clair, texte violet, gras. */
+.moteur-choix:has(input:focus-visible) {
+  outline: 2px solid var(--violet-vif);
+  outline-offset: 2px;
+}
+
+/* Sélectionné, avant validation (référence) : VRAIE bordure de 2px violette, fond violet clair, texte violet foncé, gras. */
 .moteur-choix:has(input:checked) {
   color: var(--violet);
   font-weight: 600;
   background: var(--violet-clair);
-  border-color: var(--violet-vif);
-  box-shadow: inset 0 0 0 1px var(--violet-vif);
+  border: 2px solid var(--violet-vif);
 }
 
 /* Champ verrouillé : la sélection prend les couleurs du verdict (violet par défaut si le serveur n'a rien dit). */
@@ -227,10 +246,13 @@
   color: var(--etat-texte);
   background: var(--etat-fond);
   border-color: var(--etat-bordure);
-  box-shadow: inset 0 0 0 1px var(--etat-bordure);
 }
 
 /* ── Liste de valeurs ── */
+.moteur-liste-zone > .moteur-bouton-secondaire {
+  font-size: 0.9em; /* référence : 14,4px (hauteur tactile de 44px conservée) */
+}
+
 .moteur-liste-valeurs {
   display: flex;
   flex-direction: column;
@@ -258,7 +280,8 @@
   flex: none;
   min-width: calc(var(--espace-5) + var(--espace-1));
   padding: var(--espace-2);
-  font-size: 1.4em;
+  font-size: 1.125em; /* 18px, référence */
+  font-weight: 400;
   line-height: 1;
   color: var(--text-muted);
   background: transparent;
@@ -636,7 +659,7 @@
 .moteur-champs-multiples {
   display: flex;
   flex-direction: column;
-  gap: var(--espace-3);
+  gap: var(--espace-2); /* référence : 8px entre deux champs */
 }
 
 .moteur-sous-champ-texte {
@@ -648,6 +671,7 @@
 
 .moteur-sous-champ-libelle {
   flex: none;
+  min-width: var(--espace-4); /* 24px : « a = », « b = », « c = » alignent leurs champs (référence) */
   margin: 0; /* neutralise `label { margin-bottom }` (style.css) */
   font-family: var(--font-corps); /* `legend` (style.css) prend la police de marque */
   font-size: inherit;
@@ -715,20 +739,44 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--espace-2);
+  gap: calc(var(--espace-1)*1.5); /* 6px, référence */
 }
 
-.moteur-champ-borne {
-  flex: 1 1 calc(var(--espace-5) * 3);
-  width: auto;
-  min-width: 0;
-}
-
-.moteur-bouton.moteur-bouton-crochet {
+/* Bornes : 64px de large, texte centré, padding 8px 10px, 0,9em (référence) ; hauteur minimale de 44px conservée. */
+.moteur-ecran .moteur-champ-borne {
   flex: none;
-  min-width: calc(var(--espace-5) + var(--espace-1));
-  padding: var(--espace-2);
-  font-size: 1.2em;
+  width: calc(var(--espace-5)*1.6);
+  min-width: 0;
+  padding: var(--espace-2) calc(var(--espace-3)*0.625);
+  font-size: 0.9em;
+  text-align: center;
+}
+
+/* Crochets : ronds de 32×32px, bordure violette pleine, fond blanc (référence). La CIBLE TACTILE de 44×44px est conservée par
+   un pseudo-élément qui déborde de 6px de chaque côté (vérifié par `elementFromPoint`, scripts/chromium-fidelite-design.ts). */
+.moteur-bouton.moteur-bouton-crochet {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: calc(var(--espace-5)*0.8);
+  height: calc(var(--espace-5)*0.8);
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--violet-vif);
+  font-size: 0.9em;
+  font-weight: 700;
+}
+
+.moteur-bouton.moteur-bouton-crochet::after {
+  content: "";
+  position: absolute;
+  inset: calc(var(--espace-2)*-1); /* -8px du bord INTERNE (la bordure de 2px est déjà dedans) = 6px de chaque côté : 44×44 */
 }
 
 .moteur-bouton.moteur-bouton-infini {

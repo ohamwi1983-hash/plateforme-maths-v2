@@ -85,6 +85,10 @@
      `.item-liste`, `.item-eleve`, `.carte-formulaire`…) — nommée, pas modifiée. */
   --ombre-carte: 0 10px 24px -18px rgba(59,20,112,.3);
 
+  /* Ombre du bouton principal (« Valider » du moteur) : valeur de la référence validée (docs/reference/composants-ecran.html),
+     nommée pour ne jamais être recopiée. */
+  --ombre-bouton: 0 8px 16px -6px rgba(124,58,237,.45);
+
   /* Typographie : Fraunces (titres, marque), Inter (corps). */
   --font-marque: "Fraunces", serif;
   --font-corps: "Inter", sans-serif;

@@ -85,7 +85,7 @@ export default {
       const retirer = document.createElement("button");
       retirer.type = "button";
       retirer.className = "moteur-bouton moteur-bouton-secondaire moteur-bouton-retirer";
-      retirer.textContent = "×";
+      retirer.textContent = "\u{1F5D1}"; // 🗑 (référence) ; le contrôle reste un vrai bouton de 44px avec son aria-label
       retirer.setAttribute("aria-label", "Retirer cette valeur");
       retirer.addEventListener("click", () => {
         if (entrees.length === 1) {
