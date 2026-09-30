@@ -135,6 +135,33 @@ leur conteneur (`font-size: inherit` ou `em` relatifs).
 | `--espace-4` | `24px` | Séparation de blocs |
 | `--espace-5` | `40px` | Grande séparation, base des zones tactiles |
 
+## Enveloppe de l'exercice (RAPPORT §43)
+
+Référence : `docs/reference/enveloppe-exercice.html` (exprimée **uniquement** avec les tokens ci-dessus : aucune valeur nouvelle, aucun
+token ajouté). `npm run chromium-design` la rend et la compare à l'application à 390 et 1280 px. Ce qui entoure l'écran courant :
+
+| Élément | Règle |
+|---|---|
+| Lien « Mes tâches » | puce ronde de 30 px `--violet-clair` + libellé 14 px gras `--violet-vif` ; zone tactile ≥ 44 px par pseudo-élément |
+| Surtitre | 11 px gras, `0.06em`, `--text-muted` : « EXERCICE i SUR m · nom de la tâche » (majuscules ÉCRITES dans le texte, jamais `text-transform`, RAPPORT §30 ; le nom de la tâche reste tel que saisi) |
+| Titre | `--font-marque` 20 px gras, `-0.01em` : « Question k sur N » |
+| Panneau du rappel | DANS la carte de l'écran courant : `--surface-sunken`, filet `--border`, `--radius-sm`, padding 14 × 16 px |
+| Piste de progression | 12 px de haut, fond `--violet-clair`, pilule ; un segment par écran |
+| Ligne du rappel | marque ronde de 20 px + nom (13 px gras) + réponse d'ÉLÈVE (`--font-marque` 14 px) ; l'écran courant : cercle numéroté `--violet-vif` |
+
+**Marques et segments** (couleur = le verdict que le **serveur** a décidé de montrer, `info.statut`) : `correct` → `--vert-vif` (✓), `not_equivalent`
+→ `--danger` (✕), `parse_error` → `--ambre` (!), **sans verdict** (correction coupée, `statut = null`) → marque `--violet-clair` (•) et segment
+`--violet-2` : **jamais une coche ni une couleur de verdict**, un élève juste et un élève faux voient la même chose. La couleur de la CARTE de
+l'écran courant (vert, rouge, jaune) est inchangée. Aucune ligne du rappel n'utilise les classes `moteur-statut-*` : les sélecteurs `:has(.moteur-statut-…)`
+de la carte les lisent, une ligne ancienne colorerait à tort la carte courante.
+
+**Écart assumé avec la cible** : son mobile (≤ 600 px) est plein-bord (feuille sans arrondi, bandeau gris qui touche la bannière). Cela contredit la
+référence stricte des composants (`composants-ecran.html` : carte arrondie, padding 24, mesurée à 390 px) ; la carte validée est donc gardée à toutes les
+largeurs. Le retrait plein-bord du tableau de signes (`--retrait-plein-bord`) n'inclut plus de padding de `.moteur-exercice` (supprimé) : 24 px de carte + 1 px
+de bordure + la gouttière de `.contenu-page` (16 px, 14 px sous 600 px).
+
+Graisse 700 : utilisée par le lien, les étiquettes et les marques de l'enveloppe (la règle d'usage ci-dessus ne listait que 600).
+
 ## Tableau de signes plein-bord (phase 3b, RAPPORT §30-§31)
 
 Rendu de **référence stricte** : `docs/reference/tableau-signes.html` (code fourni par le propriétaire du projet, à ouvrir dans un navigateur pour comparer avec la capture Chromium `captures-chromium/*-etendu-10b-carte-tableau-7-colonnes.png`). Ne pas réinterpréter.

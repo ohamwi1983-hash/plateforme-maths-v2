@@ -93,7 +93,6 @@
   font-family: var(--font-corps);
   font-size: 0.6875em;
   font-weight: 700;
-  text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-muted);
 }
@@ -152,7 +151,6 @@
   margin: 0 0 calc(var(--espace-2)*1.25); /* 10px */
   font-size: 0.75em;
   font-weight: 700;
-  text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-muted);
 }

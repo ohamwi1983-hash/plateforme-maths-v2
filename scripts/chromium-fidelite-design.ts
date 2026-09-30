@@ -266,7 +266,7 @@ async function main(): Promise<void> {
   {
     const refEnveloppe = readFileSync(join(RACINE, "docs/reference/enveloppe-exercice.html"), "utf8");
     const P_LIEN = ["display", "alignItems", "gap", "color", "fontFamily", "fontSize", "fontWeight"];
-    const P_TXT = ["color", "fontFamily", "fontSize", "fontWeight", "textTransform", "letterSpacing", "fontStyle"];
+    const P_TXT = ["color", "fontFamily", "fontSize", "fontWeight", "letterSpacing", "fontStyle"];
     const P_PANNEAU = ["backgroundColor", "borderTopColor", "borderTopWidth", "borderTopStyle", "borderTopLeftRadius", ...PADDING];
     const P_PISTE = ["display", "gap", "backgroundColor", "borderTopLeftRadius", "overflowX"];
     const P_SEGMENT = ["backgroundColor", "borderTopLeftRadius"];

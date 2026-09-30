@@ -186,7 +186,8 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
     });
     const titres = creer("div", "moteur-titres");
     const morceaux = [];
-    if (Number.isInteger(rang) && Number.isInteger(total)) morceaux.push(`Exercice ${rang} sur ${total}`);
+    // Majuscules ÉCRITES (jamais `text-transform`, RAPPORT §30 : il déformerait un nom de tâche contenant « f(x) ») ; le nom de la tâche reste tel que saisi.
+    if (Number.isInteger(rang) && Number.isInteger(total)) morceaux.push(`EXERCICE ${rang} SUR ${total}`);
     if (exercice.tache.nom) morceaux.push(exercice.tache.nom);
     if (morceaux.length > 0) titres.appendChild(creer("p", "moteur-surtitre", morceaux.join(" · ")));
     const n = exercice.champs.length;
@@ -223,7 +224,7 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
       const etat = i === indexCourant ? "courant" : repondu(c) ? "fait-" + (MARQUES_RAPPEL[c.statut]?.etat ?? MARQUES_RAPPEL.neutre.etat) : "avenir";
       piste.appendChild(creer("span", "moteur-segment moteur-segment-" + etat));
     });
-    bloc.append(etiquette, piste, creer("p", "moteur-rappel-titre", "Ce qu'on sait déjà"));
+    bloc.append(etiquette, piste, creer("p", "moteur-rappel-titre", "CE QU'ON SAIT DÉJÀ"));
 
     const liste = creer("ol", "moteur-rappel-liste");
     champs.forEach((c, i) => {
