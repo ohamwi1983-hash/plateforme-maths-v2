@@ -232,18 +232,21 @@ export function effectifDepuisReponses(f: FonctionSecondDegre, reponsesConfirmee
 
 /**
  * `Generateur.projeter` de gen7 : l'exercice EFFECTIF vu par l'élève. Ne dépend que des réponses CONFIRMÉES et du réglage statique
- * `correctionImmediate`, qui ne choisit plus que l'AFFICHAGE du tableau et le panneau de faits, jamais quelle donnée sert de départ.
+ * `correctionImmediate` (panneau de faits : le VERDICT est visible) et `solutionMontree` (valeurs vraies du tableau, repli de `racinesChamp2` :
+ * la SOLUTION a pu être montrée), qui ne choisissent plus que l'AFFICHAGE, jamais quelle donnée sert de départ.
  *  - Coefficients, sommet, ordonnée : `effectifDepuisReponses` (RAPPORT §38).
  *  - `racinesChamp2` : réponse confirmée à `racinesChamp1` « utilisable » = elle se lit (`analyserExpression`) et donne 1 ou 2 racines
  *    réelles. **Dans les deux régimes** (§33-D la réservait à la correction coupée, D-A du propriétaire l'étend : une méthode juste sur
  *    une donnée fausse réussit, qu'on ait ou non montré la vraie).
  *  - `statut === "correct"` : la factorisation de l'élève est celle de l'énoncé (à 1e-6 près) — les racines attendues restent les VRAIES
  *    (jamais celles d'une factorisation « presque » juste), seul l'affichage est celui de l'élève.
- *  - Inexploitable : correction immédiate -> vraie factorisation ; correction coupée -> équation DÉVELOPPÉE de l'énoncé (publique), racines
- *    vraies. Jamais un texte qui ne suivrait pas le réglage STATIQUE de la tâche (jamais `revele`).
+ *  - Inexploitable : solution montrée (immédiate + case cochée) -> vraie factorisation ; sinon (correction coupée, ou immédiate case décochée)
+ *    -> équation DÉVELOPPÉE de l'énoncé (publique), racines vraies. Jamais un texte qui ne suivrait pas le réglage STATIQUE de la tâche (jamais `revele`).
  */
 export function projeterAnalyseFonction(ex: ExerciceAnalyseFonction, reponsesConfirmees: readonly ReponseConfirmee[], contexte: ContexteProjection): ExerciceAnalyseFonction {
-  const affichageTableau = contexte.correctionImmediate ? "vraies" : "symboliques";
+  // Valeurs vraies du tableau : seulement si la solution a pu être MONTRÉE (correction immédiate ET « Afficher la réponse attendue »,
+  // RAPPORT §42) ; sinon elles rappelleraient, sans qu'on la leur ait donnée, la solution de `axeSommet` / `racinesChamp2`.
+  const affichageTableau = contexte.solutionMontree ? "vraies" : "symboliques";
   // Panneau « Ce que tu sais déjà » (RAPPORT §33) : seuls les écrans RÉUSSIS y figurent, et jamais sous correction coupée (un fait est
   // la bonne valeur : le montrer avant la fin de la tâche révélerait la réponse). Un écran raté n'y figure jamais, même révélé.
   const corrects = contexte.correctionImmediate ? reponsesConfirmees.filter((r) => r.statut === "correct").map((r) => r.champ) : [];
@@ -265,7 +268,7 @@ export function projeterAnalyseFonction(ex: ExerciceAnalyseFonction, reponsesCon
     effectif,
     affichageTableau,
     corrects,
-    zeros: contexte.correctionImmediate
+    zeros: contexte.solutionMontree
       ? { racines: vraiesRacines, factorisationLatex: vraieLatex, origine: "solution" }
       : { racines: vraiesRacines, factorisationLatex: equationCanonique(ex.fonction), origine: "enonce" },
   };

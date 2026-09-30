@@ -223,9 +223,9 @@ async function main() {
   verifier(r1.corps.solution_attendue === undefined, "reponse_visible=false : pas de solution après un échec");
   const ligne1 = s.base.table("reponses")[0];
   verifier(ligne1.statut === "parse_error" && ligne1.indice_utilise === true && ligne1.bug_detecte === null, "ligne reponses : statut, indice_utilise (dérivé du serveur), bug_detecte");
-  // 2e échec : tentatives épuisées => révélation forcée + code de compétence stocké.
+  // 2e échec : tentatives épuisées => verdict + verrouillage + code de compétence stocké ; SANS solution (reponse_visible=false, RAPPORT §42 : la case commande la révélation).
   const r2 = await poster(CHAMP_SOMME, String(exercice.a - exercice.b));
-  verifier(r2.corps.statut === "not_equivalent" && r2.corps.verrouille === true && r2.corps.revele === true && r2.corps.solution_attendue === String(exercice.a + exercice.b), `épuisement : ${JSON.stringify(r2.corps)}`);
+  verifier(r2.corps.statut === "not_equivalent" && r2.corps.verrouille === true && r2.corps.revele === false && r2.corps.solution_attendue === undefined, `épuisement, reponse_visible=false : verdict sans solution ni revele : ${JSON.stringify(r2.corps)}`);
   verifier(s.base.table("reponses")[1].bug_detecte === CODE_ERREUR_CALCUL, "le code de compétence doit être stocké dans bug_detecte");
   verifier(r2.corps.champ_courant === CHAMP_PARITE, "après épuisement, l'écran suivant devient courant");
   verifier((await poster(CHAMP_SOMME, "1")).statut === 409, "champ terminé : 409");
@@ -245,10 +245,10 @@ async function main() {
   verifier(tdb.corps.en_cours.some((t: any) => t.tache_id === tacheId), "la tâche non commencée doit être « en cours »");
   verifier(tdb.corps.serieActuelle === 3, `série : 3 bonnes réponses consécutives attendues, obtenu ${tdb.corps.serieActuelle}`);
   const champSomme = effectuee.exercices[0].champs.find((c: any) => c.champ === CHAMP_SOMME);
-  verifier(champSomme.revele === true && champSomme.solution_attendue === String(exercice.a + exercice.b), "tableau de bord : champ révélé avec sa solution");
+  verifier(champSomme.revele === false && champSomme.solution_attendue === null && champSomme.statut === "not_equivalent", "tableau de bord : champ épuisé, reponse_visible=false : verdict sans solution (RAPPORT §42)");
 
   // Chrono : un champ déjà réussi reste réussi une fois le chrono écoulé ; un champ en cours est révélé.
-  const tacheChrono = creerTache(s, { nom: "chrono", chrono_mode: "par_ecran", chrono_duree_secondes: 60, variantes: [{ variante_id: VARIANTE_TEMOIN, nombre_exercices: 1 }] });
+  const tacheChrono = creerTache(s, { nom: "chrono", reponse_visible: true, chrono_mode: "par_ecran", chrono_duree_secondes: 60, variantes: [{ variante_id: VARIANTE_TEMOIN, nombre_exercices: 1 }] });
   await appeler("assignations", "POST", { jeton: jetonProf, corps: { tache_id: tacheChrono, eleve_ids: ["eleve-1"] } });
   const exChrono = s.base.table("exercices_assignes").find((l) => l.tache_id === tacheChrono)!;
   const exerciceChrono = temoin.generer(Number(exChrono.graine));

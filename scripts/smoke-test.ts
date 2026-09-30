@@ -199,13 +199,17 @@ const NB_TIRAGES = 500;
   if (vueIncorrecteEnCours.statut !== "not_equivalent" || vueIncorrecteEnCours.solution_attendue !== null) {
     throw new Error(`construireChampVue : échec en cours avec tentatives restantes ne doit PAS révéler la solution même si reponse_visible=true, obtenu ${JSON.stringify(vueIncorrecteEnCours)}`);
   }
-  // Une fois le champ réellement révélé (tentatives épuisées), la révélation est forcée MÊME si la
-  // tâche a reponse_visible=false — SOUS CORRECTION IMMÉDIATE ACTIVE (mécanisme préexistant conservé).
+  // Champ épuisé (RAPPORT §42) : la solution n'est montrée QUE si « Afficher la réponse attendue » est cochée (`reponse_visible`). Case décochée :
+  // verdict et verrouillage, mais ni solution ni `revele`. (Avant §42, la révélation était forcée quel que soit le réglage.)
   const etatRevelee = { tentativesUtilisees: 3, terminee: true, reussie: false, revelee: true, score: 0 };
   const reglagesFeedbackSansReponseVisible: import("../lib/reglagesCorrection").ReglagesCorrection = { feedback_immediat: true, reponse_visible: false };
   const vueRevelee = construireChampVue("champ1", reponseIncorrecte, solutionTexte, reglagesFeedbackSansReponseVisible, false, etatRevelee);
-  if (vueRevelee.solution_attendue !== solutionTexte || vueRevelee.revele !== true || vueRevelee.statut !== "not_equivalent") {
-    throw new Error(`construireChampVue : tentatives épuisées (correction immédiate active) -> révélation forcée même avec reponse_visible=false, obtenu ${JSON.stringify(vueRevelee)}`);
+  if (vueRevelee.solution_attendue !== null || vueRevelee.revele !== false || vueRevelee.statut !== "not_equivalent") {
+    throw new Error(`construireChampVue : tentatives épuisées, correction immédiate SANS reponse_visible -> verdict sans solution ni revele, obtenu ${JSON.stringify(vueRevelee)}`);
+  }
+  const vueReveleeVisible = construireChampVue("champ1", reponseIncorrecte, solutionTexte, reglagesVisibles, false, etatRevelee);
+  if (vueReveleeVisible.solution_attendue !== solutionTexte || vueReveleeVisible.revele !== true || vueReveleeVisible.statut !== "not_equivalent") {
+    throw new Error(`construireChampVue : tentatives épuisées, correction immédiate AVEC reponse_visible -> révélation, obtenu ${JSON.stringify(vueReveleeVisible)}`);
   }
   // SOUS CORRECTION IMMÉDIATE COUPÉE : l'épuisement d'un champ ne révèle RIEN (ni verdict, ni solution, ni
   // `revele`) — un échec n'est pas plus visible qu'une réussite ; la révélation n'a lieu qu'à la fin de la

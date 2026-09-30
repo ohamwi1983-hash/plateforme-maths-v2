@@ -241,9 +241,15 @@ export interface ReponseConfirmee {
   statut: StatutVerification;
 }
 
-/** Réglage statique de la tâche transmis à `Generateur.projeter` (RAPPORT §18). */
+/** Réglages statiques de la tâche transmis à `Generateur.projeter` (RAPPORT §18, §42). */
 export interface ContexteProjection {
+  /** Correction immédiate : l'élève voit son VERDICT (`statut`) dès la soumission. */
   correctionImmediate: boolean;
+  /**
+   * La vraie valeur d'un champ a pu être MONTRÉE à l'élève (`solutionMontreeEnCours` : correction immédiate ET « Afficher la réponse
+   * attendue »). C'est le seul réglage qui autorise un énoncé ou un tableau à reprendre une vraie valeur que l'élève n'a pas trouvée.
+   */
+  solutionMontree: boolean;
 }
 
 export interface EtatActuel {
@@ -305,10 +311,11 @@ export interface Generateur<TExercice = unknown> {
    * ensuite cet exercice effectif (jamais l'exercice brut) : point de substitution UNIQUE.
    * Pure et déterministe ; ne dépend que des confirmations des champs de `dependDe` de chaque écran.
    * Valeur inexploitable (non analysable, hors domaine, ou champ terminé sans réponse — chrono) : repli.
-   * `correctionImmediate` (réglage STATIQUE de la tâche, jamais `revele`) : `true` → repli sur la vraie
+   * `solutionMontree` (réglage STATIQUE de la tâche, jamais `revele`) : `true` → repli sur la vraie
    * valeur (elle vient d'être révélée) ; `false` → donnée de repli DÉCLARÉE par le générateur, distincte de
-   * la vraie valeur (sous correction coupée rien n'est révélé avant la fin de la tâche : la vraie valeur ne
-   * doit pas fuiter par l'énoncé suivant). Absente : aucun écran ne peut déclarer `dependDe`.
+   * la vraie valeur (correction coupée, OU correction immédiate sans « Afficher la réponse attendue » : la
+   * vraie valeur n'a pas été montrée et ne doit pas fuiter par l'énoncé suivant). `correctionImmediate`
+   * seul ne suffit pas à ce choix (RAPPORT §42). Absente : aucun écran ne peut déclarer `dependDe`.
    */
   projeter?(exercice: TExercice, reponsesConfirmees: ReponseConfirmee[], contexte: ContexteProjection): TExercice;
   /** Solution lisible d'un champ (affichée seulement si le réglage de tâche ou la révélation le permet). */

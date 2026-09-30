@@ -497,6 +497,36 @@ async function matriceVisuelle(navigateur: any, base: string, largeur: number) {
 }
 
 /** Nouvelle tentative après `not_equivalent` (essais restants) : la nouvelle sélection reste VIOLETTE, jamais rouge — la carte garde le verdict précédent. */
+/** RAPPORT §42 : « Afficher la réponse attendue » commande la solution d'un champ épuisé (correction immédiate, 1 essai) : mesuré dans le navigateur. */
+async function scenarioReponseVisible(navigateur: any, base: string, largeur: number) {
+  for (const visible of [false, true]) {
+    imposerProfilAssignation("base");
+    const l = `${largeur}`;
+    const s: Scenario = creerScenario();
+    installerBase(s.base);
+    const tacheId = creerTache(s, { nom: `Réponse ${visible ? "visible" : "masquée"}`, feedback_immediat: true, reponse_visible: visible, tentatives_supplementaires: 0, variantes: [{ variante_id: VARIANTE_TEMOIN, nombre_exercices: 1 }] });
+    await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tacheId, eleve_ids: ["eleve-1"] } });
+    const ligne = s.base.table("exercices_assignes").find((x) => x.eleve_id === "eleve-1")!;
+    const ex = temoin.generer(Number(ligne.graine));
+    const { page, contexte, journal } = await preparerPage(navigateur, base, largeur, largeur < 600 ? 800 : 900, "eleve:eleve-1", "e1@x", `localStorage.setItem("eleve-profil-cache", JSON.stringify({ affichage: "Test eleve-1", prenom: "Test", nom: "eleve-1" }));`);
+    await page.goto(base + "/eleve.html");
+    await page.waitForSelector(".carte-tache");
+    await page.locator(".carte-tache").click();
+    await page.waitForSelector(".moteur-ecran-courant");
+    await page.locator(".moteur-ecran-courant .moteur-champ").fill(String(ex.a - ex.b)); // fausse ; 1 seul essai : le champ est épuisé
+    await page.locator(".moteur-ecran-courant .moteur-bouton-principal").click();
+    await page.waitForSelector(".moteur-statut-not_equivalent");
+    const nom = visible ? "case cochée" : "case décochée";
+    await page.getByRole("button", { name: "Question suivante" }).waitFor({ state: "visible" });
+    verifier((await page.locator(".moteur-statut-not_equivalent").count()) >= 1, `${l} ${nom} : le verdict est montré dans les deux cas`);
+    verifier((await page.locator(".moteur-solution").count()) === (visible ? 1 : 0), `${l} ${nom} : « Réponse attendue » ${visible ? "affichée" : "ABSENTE"} (obtenu ${await page.locator(".moteur-solution").count()})`);
+    verifier(!(await page.locator("body").innerText()).includes(String(ex.a + ex.b)) || visible, `${l} ${nom} : la somme attendue ${ex.a + ex.b} n'apparaît nulle part dans la page`);
+    await page.screenshot({ path: join(CAPTURES, `${l}-reponse-visible-${visible ? "cochee" : "decochee"}.png`), fullPage: true });
+    verifier(journal.pageerrors.length === 0, `${l} ${nom} : erreurs JS non interceptées : ${journal.pageerrors.join(" | ")}`);
+    await contexte.close();
+  }
+}
+
 async function scenarioRetentative(navigateur: any, base: string, largeur: number) {
   imposerProfilAssignation("base"); // scénario d'ORIGINE : les 4 écrans du profil « base »
   const l = `${largeur}`;
@@ -758,7 +788,7 @@ async function scenarioEtendu(navigateur: any, base: string, largeur: number) {
   const s: Scenario = creerScenario();
   installerBase(s.base);
   const l = `${largeur}`;
-  const tacheId = creerTache(s, { nom: "Tâche témoin étendu", aide_activee: true, aide_penalite_pourcent: 25, tentatives_supplementaires: 1, feedback_immediat: true, reponse_visible: false, variantes: [{ variante_id: VARIANTE_TEMOIN, nombre_exercices: 2 }] });
+  const tacheId = creerTache(s, { nom: "Tâche témoin étendu", aide_activee: true, aide_penalite_pourcent: 25, tentatives_supplementaires: 1, feedback_immediat: true, reponse_visible: true, variantes: [{ variante_id: VARIANTE_TEMOIN, nombre_exercices: 2 }] });
   const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tacheId, eleve_ids: ["eleve-1"] } });
   verifier(a.statut === 201, `${l} étendu : assignation préalable : ${a.statut}`);
 
@@ -946,8 +976,9 @@ async function scenarioEtendu(navigateur: any, base: string, largeur: number) {
   verifier((await courant.locator(".moteur-message-syntaxe .moteur-math").count()) >= 1 && s.base.table("reponses").some((r) => r.champ === CHAMP_AXE && r.bug_detecte === "TEMOIN_AXE_NOTATION"), `${l} étendu : « valeur juste sans x = » : parse_error, message balisé, code de compétence stocké`);
   await courant.locator("#mc-axe-axeTexte").fill("x = 999");
   await courant.locator("#mc-axe-xS").fill("$x$"); // texte d'élève contenant des délimiteurs
-  await valider().click(); // 2e et dernière tentative : verrouillage, révélation (correction immédiate active)
-  await page.waitForSelector(".moteur-solution");
+  await valider().click(); // 2e et dernière tentative : verrouillage, révélation (correction immédiate active ET « Afficher la réponse attendue » cochée, RAPPORT §42)
+  // Sous « Afficher la réponse attendue », un écran RÉUSSI montre aussi sa solution : attendre celle de l'écran COURANT (jamais une solution déjà à l'écran).
+  await courant.locator(".moteur-solution").waitFor({ state: "visible" });
   verifier((await courant.locator(".moteur-solution .moteur-math").count()) >= 3, `${l} étendu : « Réponse attendue » (texte d'auteur) rend ses mathématiques`);
   await page.screenshot({ path: cap("06-axe-verrouille-revele"), fullPage: true });
   await suivante().click();
@@ -1829,7 +1860,7 @@ async function scenarioGen7CascadeTableau(navigateur: any, base: string, largeur
     else verifier(entetes.join() === "x_1,x_S,x_2", `${l} : correction coupée, valeurs symboliques (${JSON.stringify(entetes)})`);
     await page.screenshot({ path: join(CAPTURES, `${largeur}-gen7-cascade-tableau-${feedback ? "immediat" : "coupe"}.png`), fullPage: true });
     // le tableau de SA fonction (a < 0 : − 0 + + + 0 −, ⌢) est accepté
-    const eff = fonctionEffective(projeterGen7(ex, [{ champ: "coefficients", reponseBrute: JSON.stringify({ a: "-5", b: "4", c: "0" }), statut: "not_equivalent" }], { correctionImmediate: feedback }));
+    const eff = fonctionEffective(projeterGen7(ex, [{ champ: "coefficients", reponseBrute: JSON.stringify({ a: "-5", b: "4", c: "0" }), statut: "not_equivalent" }], { correctionImmediate: feedback, solutionMontree: feedback }));
     await remplirTableauGen7(page, ex, solutionTableauGen7(eff));
     await courant.getByRole("button", { name: "Valider", exact: true }).click();
     await page.waitForSelector(".moteur-ecran-courant .moteur-retour .moteur-statut");
@@ -2012,6 +2043,8 @@ async function main() {
       controlerReponsesHttp(`${largeur} matrice visuelle`);
       await scenarioRetentative(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} retentative`);
+      await scenarioReponseVisible(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} réponse visible`);
       await scenarioEtendu(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} étendu`);
       await scenarioProf(navigateur, url, largeur);

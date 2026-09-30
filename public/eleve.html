@@ -1074,7 +1074,7 @@
           : t.correction_immediate === true
             ? "retour en arrière désactivé (sans effet sous correction immédiate : décochez-la puis cochez « Autoriser le retour en arrière »)"
             : "retour en arrière désactivé (case « Autoriser le retour en arrière » non cochée)";
-        document.getElementById("bandeau-reglages-apercu").textContent = `Réglages : correction immédiate ${t.correction_immediate === true ? "activée" : "coupée"} · ${retour}.`;
+        document.getElementById("bandeau-reglages-apercu").textContent = `Réglages : correction immédiate ${t.correction_immediate === true ? "activée" : "coupée"}${t.correction_immediate === true ? (t.reponse_visible === true ? " (réponse attendue affichée)" : " (réponse attendue NON affichée)") : ""} · ${retour}.`;
         demarrerFluxPasAPas(t);
       }
       return true;

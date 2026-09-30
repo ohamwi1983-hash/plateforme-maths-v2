@@ -28,6 +28,7 @@
     "test-completion-unique": "tsx scripts/test-completion-unique.ts",
     "test-reglage-retour-arriere": "tsx scripts/test-reglage-retour-arriere.ts",
     "test-retour-arriere": "tsx scripts/test-retour-arriere.ts",
+    "test-reponse-visible": "tsx scripts/test-reponse-visible.ts",
     "chromium-temoin": "tsx scripts/chromium-temoin-technique.ts",
     "chromium-design": "tsx scripts/chromium-fidelite-design.ts"
   },

@@ -100,7 +100,7 @@ const textesDe = (e: EcranDeclare): string[] => {
 for (const categorie of CATEGORIES) {
   for (const graine of GRAINES.slice(0, 80)) {
     const brut = genererExercice(categorie, graine);
-    for (const [nom, ex] of [["brut", brut], ["projeté (immédiat)", projeterAnalyseFonction(brut, [], { correctionImmediate: true })], ["projeté (coupé)", projeterAnalyseFonction(brut, [], { correctionImmediate: false })]] as const) {
+    for (const [nom, ex] of [["brut", brut], ["projeté (immédiat)", projeterAnalyseFonction(brut, [], { correctionImmediate: true, solutionMontree: true })], ["projeté (coupé)", projeterAnalyseFonction(brut, [], { correctionImmediate: false, solutionMontree: false })]] as const) {
       const ecrans = ecransAnalyseFonction(ex);
       const champs = ecrans.map((e) => e.champ);
       const attendu = categorie === "irreductible" ? ATTENDUS.filter((c) => c !== "racinesChamp1" && c !== "racinesChamp2") : ATTENDUS;
@@ -134,7 +134,7 @@ for (const categorie of CATEGORIES) {
 for (const categorie of CATEGORIES) {
   for (const graine of GRAINES) {
     const ex = genererExercice(categorie, graine);
-    for (const projete of [ex, projeterAnalyseFonction(ex, [], { correctionImmediate: true }), projeterAnalyseFonction(ex, [], { correctionImmediate: false })]) {
+    for (const projete of [ex, projeterAnalyseFonction(ex, [], { correctionImmediate: true, solutionMontree: true }), projeterAnalyseFonction(ex, [], { correctionImmediate: false, solutionMontree: false })]) {
       for (const champ of champsAnalyseFonction(categorie)) {
         const brute = reponseBruteCorrecteAnalyseFonction(projete, champ);
         const r = verifierAnalyseFonction(projete, champ, brute);
@@ -169,14 +169,14 @@ const jugerZeros = (e: ExerciceAnalyseFonction, valeurs: string[]) => verifierAn
 
 // A1. Correction immédiate, factorisation juste (écrite autrement) : affichage de l'élève, racines vraies.
 {
-  const p = projeterAnalyseFonction(me, [conf(CHAMP_RACINES_FACTORISATION, "(4x)(x+2) = 0", "correct")], { correctionImmediate: true });
+  const p = projeterAnalyseFonction(me, [conf(CHAMP_RACINES_FACTORISATION, "(4x)(x+2) = 0", "correct")], { correctionImmediate: true, solutionMontree: true });
   verifier(zerosDe(p).origine === "eleve" && zerosDe(p).racines.join() === vraies && !zerosDe(p).factorisationLatex.includes("(4x)(x+2)"), `A1 : factorisation juste de l'élève, ré-écrite (${zerosDe(p).factorisationLatex})`);
   verifier(zerosDe(p).factorisationLatex === "(4x)(x + 2)", `A1 : re-sérialisation LaTeX propre (${zerosDe(p).factorisationLatex})`);
   verifier(jugerZeros(p, ["-2", "0"]) === "correct", "A1 : « −2 ; 0 » juste");
 }
 // A2. Correction coupée, factorisation FAUSSE mais exploitable : l'équation et les racines sont celles de l'élève.
 {
-  const p = projeterAnalyseFonction(me, [conf(CHAMP_RACINES_FACTORISATION, "3x(x-2)", "not_equivalent")], { correctionImmediate: false });
+  const p = projeterAnalyseFonction(me, [conf(CHAMP_RACINES_FACTORISATION, "3x(x-2)", "not_equivalent")], { correctionImmediate: false, solutionMontree: false });
   verifier(zerosDe(p).origine === "eleve" && zerosDe(p).racines.join() === "0,2" && zerosDe(p).factorisationLatex === "3x(x - 2)", `A2 : correction coupée, la donnée de départ est celle de l'élève (${JSON.stringify(zerosDe(p))})`);
   verifier(jugerZeros(p, ["0", "2"]) === "correct" && jugerZeros(p, ["-2", "0"]) === "not_equivalent", "A2 : une méthode juste sur une donnée fausse RÉUSSIT ; les vraies racines ne réussissent plus (§18)");
   verifier(zerosDe(genererExercice("mise_en_evidence", 12345)).racines.join() === vraies, "A2 : l'exercice brut n'est jamais modifié (projection pure)");
@@ -184,7 +184,7 @@ const jugerZeros = (e: ExerciceAnalyseFonction, valeurs: string[]) => verifierAn
 // A3. Correction immédiate, réponse fausse RÉVÉLÉE. §33-D : vraie factorisation. RAPPORT §38 (D-A du propriétaire, cascade uniforme dans les deux
 // régimes) : la factorisation de l'élève, fausse mais exploitable, reste la donnée de départ — comme en correction coupée (A2).
 {
-  const p = projeterAnalyseFonction(me, [conf(CHAMP_RACINES_FACTORISATION, "3x(x-2)", "not_equivalent")], { correctionImmediate: true });
+  const p = projeterAnalyseFonction(me, [conf(CHAMP_RACINES_FACTORISATION, "3x(x-2)", "not_equivalent")], { correctionImmediate: true, solutionMontree: true });
   verifier(zerosDe(p).origine === "eleve" && zerosDe(p).racines.join() === "0,2" && zerosDe(p).factorisationLatex === "3x(x - 2)", `A3 : correction immédiate, réponse révélée mais exploitable → SA factorisation (${JSON.stringify(zerosDe(p))})`);
   verifier(jugerZeros(p, ["0", "2"]) === "correct" && jugerZeros(p, ["-2", "0"]) === "not_equivalent", "A3 : une méthode juste sur SA donnée réussit aussi sous correction immédiate");
 }
@@ -200,8 +200,8 @@ const INEXPLOITABLES: [string, string, ReponseConfirmee["statut"]][] = [
   ["valeur non finie", "1/0*x", "not_equivalent"],
 ];
 for (const [nom, brute, statut] of INEXPLOITABLES) {
-  const coupe = projeterAnalyseFonction(me, [conf(CHAMP_RACINES_FACTORISATION, brute, statut)], { correctionImmediate: false });
-  const immediat = projeterAnalyseFonction(me, [conf(CHAMP_RACINES_FACTORISATION, brute, statut)], { correctionImmediate: true });
+  const coupe = projeterAnalyseFonction(me, [conf(CHAMP_RACINES_FACTORISATION, brute, statut)], { correctionImmediate: false, solutionMontree: false });
+  const immediat = projeterAnalyseFonction(me, [conf(CHAMP_RACINES_FACTORISATION, brute, statut)], { correctionImmediate: true, solutionMontree: true });
   verifier(zerosDe(coupe).origine === "enonce" && zerosDe(coupe).racines.join() === vraies && zerosDe(coupe).factorisationLatex === "4x^2 + 8x", `A4 « ${nom} » : correction coupée → équation développée PUBLIQUE, racines vraies (${JSON.stringify(zerosDe(coupe))})`);
   verifier(zerosDe(immediat).origine === "solution" && zerosDe(immediat).factorisationLatex === "4x(x + 2)", `A4 « ${nom} » : correction immédiate → vraie factorisation`);
   verifier(!JSON.stringify(zerosDe(coupe)).includes("(x + 2)"), `A4 « ${nom} » : sous correction coupée, la vraie factorisation ne fuit pas`);
@@ -213,7 +213,7 @@ for (const [brute, attendu] of [["x^2-4", "-2,2"], ["2x-6", "3,3"], ["(x-3)^2", 
 }
 // A6. Un `statut: correct` garde les VRAIES racines, même si l'écriture de l'élève en donnerait de légèrement différentes.
 {
-  const p = projeterAnalyseFonction(me, [conf(CHAMP_RACINES_FACTORISATION, "4x(x+2.0000001)", "correct")], { correctionImmediate: false });
+  const p = projeterAnalyseFonction(me, [conf(CHAMP_RACINES_FACTORISATION, "4x(x+2.0000001)", "correct")], { correctionImmediate: false, solutionMontree: false });
   verifier(zerosDe(p).racines.join() === vraies && zerosDe(p).origine === "eleve", "A6 : « correct » (tolérance 1e-6) → racines attendues exactes");
 }
 // A7. Le filtrage serveur : racinesChamp2 n'est servi qu'une fois racinesChamp1 terminé.
@@ -228,8 +228,8 @@ for (const categorie of CATEGORIES) {
   const ex = genererExercice(categorie, 12345);
   const tab = (e: ExerciceAnalyseFonction) => ecransAnalyseFonction(e).find((s) => s.champ === "tableauSignes")!;
   const serie = (e: EcranDeclare) => (e.type === "tableau_signes" ? e.colonnes : []);
-  const immediat = serie(tab(projeterAnalyseFonction(ex, [], { correctionImmediate: true })));
-  const coupe = serie(tab(projeterAnalyseFonction(ex, [], { correctionImmediate: false })));
+  const immediat = serie(tab(projeterAnalyseFonction(ex, [], { correctionImmediate: true, solutionMontree: true })));
+  const coupe = serie(tab(projeterAnalyseFonction(ex, [], { correctionImmediate: false, solutionMontree: false })));
   verifier(immediat.filter((c) => c.genre === "valeur").every((c) => /^\$-?[\d\\]/.test(c.valeur ?? "") && c.symbole !== undefined), `B ${categorie} : correction immédiate → valeurs numériques + symboles`);
   verifier(coupe.filter((c) => c.genre === "valeur").every((c) => /^\$x_(1|2|S)\$$/.test(c.valeur ?? "") && c.symbole === undefined), `B ${categorie} : correction coupée → valeurs SYMBOLIQUES, pas de bande de symboles`);
   verifier(!/[0-9]/.test(JSON.stringify(coupe.map((c) => [c.libelle, c.valeur, c.symbole])).replace(/x_[12]/g, "x_")), `B ${categorie} : correction coupée → aucun chiffre dans le tableau servi (${JSON.stringify(coupe.map((c) => c.libelle))})`);
@@ -239,7 +239,7 @@ for (const categorie of CATEGORIES) {
   verifier(!ecransServis(ecransAnalyseFonction(ex), new Set(["coefficients", "axeSommet"]), false).some((s) => s.champ === "tableauSignes") === (categorie !== "irreductible"), `B ${categorie} : tableau non servi tant que ses prédécesseurs ne sont pas terminés`);
   // La vérification du tableau ne dépend PAS de l'affichage.
   const brute = reponseBruteCorrecteAnalyseFonction(ex, "tableauSignes");
-  verifier(verifierAnalyseFonction(projeterAnalyseFonction(ex, [], { correctionImmediate: false }), "tableauSignes", brute).statut === "correct", `B ${categorie} : le tableau attendu est celui de la vraie fonction, quel que soit l'affichage`);
+  verifier(verifierAnalyseFonction(projeterAnalyseFonction(ex, [], { correctionImmediate: false, solutionMontree: false }), "tableauSignes", brute).statut === "correct", `B ${categorie} : le tableau attendu est celui de la vraie fonction, quel que soit l'affichage`);
 }
 
 // ── 5. Entrées hostiles (texte de l'élève) ──
@@ -249,8 +249,8 @@ for (const hostile of ["__proto__", "constructor", "toString", "{\"a\":1}", "'; 
       let sain = true;
       let z;
       try {
-        z = zerosDe(projeterAnalyseFonction(me, [conf(CHAMP_RACINES_FACTORISATION, hostile, statut)], { correctionImmediate: immediat }));
-        const texte = ecransAnalyseFonction(projeterAnalyseFonction(me, [conf(CHAMP_RACINES_FACTORISATION, hostile, statut)], { correctionImmediate: immediat })).map((e) => e.consigne).join(" ");
+        z = zerosDe(projeterAnalyseFonction(me, [conf(CHAMP_RACINES_FACTORISATION, hostile, statut)], { correctionImmediate: immediat, solutionMontree: immediat }));
+        const texte = ecransAnalyseFonction(projeterAnalyseFonction(me, [conf(CHAMP_RACINES_FACTORISATION, hostile, statut)], { correctionImmediate: immediat, solutionMontree: immediat })).map((e) => e.consigne).join(" ");
         sain = verifierBalisageMath(texte).length === 0 && !texte.includes("<script") && !texte.includes("textcolor") && !texte.includes("DROP TABLE");
       } catch (erreur) {
         sain = false;
@@ -261,8 +261,8 @@ for (const hostile of ["__proto__", "constructor", "toString", "{\"a\":1}", "'; 
   }
 }
 verifier(factorisationVersLatex("__proto__") === null && racinesDeFactorisation("constructor") === null, "« __proto__ » et « constructor » : illisibles, jamais un membre du prototype");
-verifier(projeterAnalyseFonction(genererExercice("irreductible", 5), [conf(CHAMP_RACINES_FACTORISATION, "x(x-1)", "correct")], { correctionImmediate: true }).zeros === null, "af_irreductible : aucune donnée de racines même si une réponse forgée existe");
-verifier(ecransAnalyseFonction(me).map((e) => e.champ).join() === ecransAnalyseFonction(projeterAnalyseFonction(me, [conf(CHAMP_RACINES_FACTORISATION, "3x(x-2)", "not_equivalent")], { correctionImmediate: false })).map((e) => e.champ).join(), "la projection ne change JAMAIS la liste des champs (champs_attendus figé à l'assignation)");
+verifier(projeterAnalyseFonction(genererExercice("irreductible", 5), [conf(CHAMP_RACINES_FACTORISATION, "x(x-1)", "correct")], { correctionImmediate: true, solutionMontree: true }).zeros === null, "af_irreductible : aucune donnée de racines même si une réponse forgée existe");
+verifier(ecransAnalyseFonction(me).map((e) => e.champ).join() === ecransAnalyseFonction(projeterAnalyseFonction(me, [conf(CHAMP_RACINES_FACTORISATION, "3x(x-2)", "not_equivalent")], { correctionImmediate: false, solutionMontree: false })).map((e) => e.champ).join(), "la projection ne change JAMAIS la liste des champs (champs_attendus figé à l'assignation)");
 
 // ── 6. Panneau « Ce que tu sais déjà » : texte de consigne, seulement les écrans RÉUSSIS qui PRÉCÈDENT, jamais sous correction coupée ──
 {
@@ -275,11 +275,11 @@ verifier(ecransAnalyseFonction(me).map((e) => e.champ).join() === ecransAnalyseF
       const f = brut.fonction;
       const bonnes = ordre.map((champ) => conf(champ, reponseBruteCorrecteAnalyseFonction(brut, champ), "correct"));
       // aucune réponse, ou correction coupée avec TOUT confirmé : jamais de panneau
-      for (const [nom, ex] of [["brut", brut], ["aucune réponse", projeterAnalyseFonction(brut, [], { correctionImmediate: true })], ["coupé, tout réussi", projeterAnalyseFonction(brut, bonnes, { correctionImmediate: false })]] as const) {
+      for (const [nom, ex] of [["brut", brut], ["aucune réponse", projeterAnalyseFonction(brut, [], { correctionImmediate: true, solutionMontree: true })], ["coupé, tout réussi", projeterAnalyseFonction(brut, bonnes, { correctionImmediate: false, solutionMontree: false })]] as const) {
         verifier(ecransAnalyseFonction(ex).every((e) => !e.consigne.includes(PANNEAU)), `${categorie}/${graine} ${nom} : aucun panneau`);
       }
       for (let k = 0; k <= ordre.length; k++) {
-        const ex = projeterAnalyseFonction(brut, bonnes.slice(0, k), { correctionImmediate: true });
+        const ex = projeterAnalyseFonction(brut, bonnes.slice(0, k), { correctionImmediate: true, solutionMontree: true });
         ordre.forEach((champ, i) => {
           const c = consigneDe2(ex, champ);
           const reussis = ordre.slice(0, Math.min(i, k));
@@ -299,19 +299,19 @@ verifier(ecransAnalyseFonction(me).map((e) => e.champ).join() === ecransAnalyseF
         });
       }
       // un écran RATÉ (même révélé par la correction immédiate) n'est jamais rappelé
-      const rate = projeterAnalyseFonction(brut, [conf("coefficients", "{}", "not_equivalent"), conf("allure", reponseBruteCorrecteAnalyseFonction(brut, "allure"), "correct")], { correctionImmediate: true });
+      const rate = projeterAnalyseFonction(brut, [conf("coefficients", "{}", "not_equivalent"), conf("allure", reponseBruteCorrecteAnalyseFonction(brut, "allure"), "correct")], { correctionImmediate: true, solutionMontree: true });
       const cAxe = consigneDe2(rate, "axeSommet");
       verifier(cAxe.includes("parabole tournée vers le ") && !cAxe.includes("$a = ") && !cAxe.includes(`$b = ${f.b}$`), `${categorie}/${graine} : un écran raté n'est jamais rappelé (${cAxe.split("\n")[1] ?? ""})`);
       // un écran ne rappelle jamais SA propre réponse
-      const seul = projeterAnalyseFonction(brut, bonnes.slice(0, 1), { correctionImmediate: true });
+      const seul = projeterAnalyseFonction(brut, bonnes.slice(0, 1), { correctionImmediate: true, solutionMontree: true });
       verifier(!consigneDe2(seul, "coefficients").includes(PANNEAU), `${categorie}/${graine} : l'écran coefficients ne rappelle pas ses propres coefficients`);
     }
   }
   // Le panneau ne change ni la liste des champs ni le nombre d'écrans (champs_attendus figé à l'assignation).
   const brut = genererExercice("mise_en_evidence", 12345);
   const tous = ["coefficients", "allure", "axeSommet", "domaineImage", "racinesReconnaissance", "racinesChamp1", "racinesChamp2", "tableauSignes"].map((c) => conf(c, reponseBruteCorrecteAnalyseFonction(brut, c), "correct"));
-  verifier(ecransAnalyseFonction(projeterAnalyseFonction(brut, tous, { correctionImmediate: true })).map((e) => e.champ).join() === champsAnalyseFonction("mise_en_evidence").join(), "le panneau ne change pas la liste des champs");
-  const tab = consigneDe2(projeterAnalyseFonction(brut, tous, { correctionImmediate: true }), "tableauSignes");
+  verifier(ecransAnalyseFonction(projeterAnalyseFonction(brut, tous, { correctionImmediate: true, solutionMontree: true })).map((e) => e.champ).join() === champsAnalyseFonction("mise_en_evidence").join(), "le panneau ne change pas la liste des champs");
+  const tab = consigneDe2(projeterAnalyseFonction(brut, tous, { correctionImmediate: true, solutionMontree: true }), "tableauSignes");
   verifier(tab.includes("racines $x_1 = -2$ et $x_2 = 0$") && tab.includes("sommet $S(-1\\,;\\,-4)$") && tab.includes("$\\mathrm{im}\\,f = [-4\\,;\\,+\\infty[$"), `panneau complet de 4x²+8x avant le tableau : « ${tab.split("\n")[1]} »`);
 }
 
