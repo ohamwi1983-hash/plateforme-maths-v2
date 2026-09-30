@@ -93,6 +93,9 @@ async function mesurer(page: any, sel: string): Promise<Element | null> {
 }
 const distance = async (page: any, de: string, a: string): Promise<number | null> =>
   (await page.evaluate(`((de, a) => { const cherche = (s) => s === "@aide" ? [...document.querySelectorAll(".moteur-ecran-courant button")].find((b) => /indice/i.test(b.textContent)) : document.querySelector(s); const x = cherche(de), y = cherche(a); return x && y ? Math.round((y.getBoundingClientRect().top - x.getBoundingClientRect().bottom) * 10) / 10 : null; })(${JSON.stringify(de)}, ${JSON.stringify(a)})`)) as number | null;
+/** Décalage vertical de `a` par rapport à `de`, HAUT À HAUT (le panneau gris est DANS la carte depuis RAPPORT §47 : le « bas → haut » n'a plus de sens). */
+const decalageHaut = async (page: any, de: string, a: string): Promise<number | null> =>
+  (await page.evaluate(`((de, a) => { const x = document.querySelector(de), y = document.querySelector(a); return x && y ? Math.round((y.getBoundingClientRect().top - x.getBoundingClientRect().top) * 100) / 100 : null; })(${JSON.stringify(de)}, ${JSON.stringify(a)})`)) as number | null;
 /** État NEUTRE avant mesure : ni focus, ni survol (le survol d'un bouton secondaire change son fond). */
 const flou = async (page: any) => {
   await page.evaluate("document.activeElement && document.activeElement.blur && document.activeElement.blur()");
@@ -300,7 +303,7 @@ async function main(): Promise<void> {
       await page.goto(srv.url + "/eleve.html");
       await page.waitForSelector(".carte-tache");
       await page.locator(".carte-tache").click();
-      await page.waitForSelector(".moteur-rappel + .moteur-ecran-courant");
+      await page.waitForSelector(".moteur-ecran-courant > .moteur-rappel");
       return { page, ctx };
     }
 
@@ -319,7 +322,7 @@ async function main(): Promise<void> {
         "retour→surtitre": await distance(pR, Rf("retour"), Rf("surtitre")),
         "surtitre→titre": await distance(pR, Rf("surtitre"), Rf("titre")),
         "titre→panneau gris": await distance(pR, Rf("titre"), Rf("rappel")),
-        "panneau gris→carte": await distance(pR, Rf("rappel"), Rf("carte")),
+        "carte→panneau gris (haut à haut)": await decalageHaut(pR, Rf("carte"), Rf("rappel")),
         "étiquette→piste": await distance(pR, Rf("progression-etiquette"), Rf("piste")),
         "piste→titre du rappel": await distance(pR, Rf("piste"), Rf("rappel-titre")),
         "titre du rappel→liste": await distance(pR, Rf("rappel-titre"), Rf("rappel-liste")),
@@ -341,15 +344,20 @@ async function main(): Promise<void> {
         comparer(`enveloppe ${l}`, "panneau du rappel", RM["rappel"]!, await A(".moteur-rappel"), [...P_PANNEAU, "borderLeftWidth", "borderBottomWidth", "borderBottomColor", "borderTopRightRadius", "borderBottomLeftRadius"]);
         comparer(`enveloppe ${l}`, "bandeau lien + titres", RM["suivi"]!, await A(".moteur-suivi"), ["backgroundColor", ...PADDING, "display", "flexDirection", "gap"]);
         comparer(`enveloppe ${l}`, "carte blanche", RM["carte"]!, await A(".moteur-ecran-courant"), ["backgroundColor", "boxShadow", "borderTopWidth", "borderBottomWidth", "borderLeftWidth", "borderRightWidth", "borderTopLeftRadius", "borderTopRightRadius", "borderBottomLeftRadius", ...PADDING]);
-        // Géométrie (RAPPORT §44) : le panneau gris est AU-DESSUS de la carte, pas dedans ; leurs largeurs sont égales ; la bordure basse du gris est la bordure haute du
-        // blanc (aucun espace entre les deux) ; sous 600 px tout est bord à bord et le bandeau gris touche la bannière violette, de la couleur du panneau gris.
-        const geo = (await page.evaluate(`(() => { const r = (s) => { const e = document.querySelector(s); const b = e.getBoundingClientRect(); return { x: b.left, l: b.width, haut: b.top, bas: b.bottom, fond: getComputedStyle(e).backgroundColor, dedans: e.closest(".moteur-ecran-courant") !== null }; }; return { ban: r(".barre-app"), suivi: r(".moteur-suivi"), rappel: r(".moteur-rappel"), carte: r(".moteur-ecran-courant"), vw: innerWidth }; })()`)) as Record<string, any>;
-        verifier(!geo.rappel.dedans && Math.abs(geo.rappel.l - geo.carte.l) <= 0.6 && Math.abs(geo.rappel.x - geo.carte.x) <= 0.6, `enveloppe ${l} : le panneau gris est AU-DESSUS de la carte (pas dedans), de même largeur et même bord gauche (${JSON.stringify([geo.rappel.x, geo.rappel.l, geo.carte.x, geo.carte.l])})`);
-        verifier(Math.abs(geo.rappel.bas - geo.carte.haut) <= 0.6, `enveloppe ${l} : le bas du panneau gris est le haut de la carte blanche (${geo.rappel.bas} / ${geo.carte.haut})`);
+        // Géométrie (RAPPORT §47, qui remplace celle de §44 sur bureau ; le mobile y est inchangé) : le panneau gris est le PREMIER enfant de la carte.
+        // Bureau : encadré en retrait (1 px de bord + 24 px de padding de chaque côté), dans la carte. Mobile (≤ 600 px) : le panneau est AU-DESSUS du blanc,
+        // bord à bord, au ras du haut de la carte ; carte, panneau et bandeau font la largeur de l'écran ; le bandeau gris touche la bannière violette,
+        // de la couleur du panneau gris.
+        const geo = (await page.evaluate(`(() => { const r = (s) => { const e = document.querySelector(s); const b = e.getBoundingClientRect(); return { x: b.left, l: b.width, haut: b.top, bas: b.bottom, fond: getComputedStyle(e).backgroundColor, dedans: e.parentElement !== null && e.parentElement.classList.contains("moteur-ecran-courant"), premier: e.parentElement !== null && e.parentElement.firstElementChild === e }; }; return { ban: r(".barre-app"), suivi: r(".moteur-suivi"), rappel: r(".moteur-rappel"), carte: r(".moteur-ecran-courant"), consigne: r(".moteur-ecran-courant > .moteur-consigne"), vw: innerWidth }; })()`)) as Record<string, any>;
+        verifier(geo.rappel.dedans && geo.rappel.premier, `enveloppe ${l} : le panneau gris est le PREMIER enfant de la carte de l'écran courant`);
+        verifier(geo.rappel.bas <= geo.consigne.haut + 0.6, `enveloppe ${l} : le panneau gris est AU-DESSUS de la consigne (${geo.rappel.bas} / ${geo.consigne.haut})`);
         if (largeur <= 600) {
           verifier(geo.carte.l === geo.vw && geo.rappel.l === geo.vw && geo.suivi.l === geo.vw && geo.carte.x === 0 && geo.rappel.x === 0 && geo.suivi.x === 0, `enveloppe ${l} : carte blanche, panneau gris et bandeau font la LARGEUR DE L'ÉCRAN (${geo.vw} px) : ${JSON.stringify([geo.suivi.l, geo.rappel.l, geo.carte.l])}`);
+          verifier(Math.abs(geo.rappel.haut - geo.carte.haut) <= 0.6, `enveloppe ${l} : le panneau gris est au ras du haut de la carte blanche (${geo.rappel.haut} / ${geo.carte.haut})`);
           verifier(Math.abs(geo.suivi.haut - geo.ban.bas) <= 0.6, `enveloppe ${l} : le bandeau gris touche la bannière violette (${geo.ban.bas} / ${geo.suivi.haut})`);
           verifier(geo.suivi.fond === geo.rappel.fond && Math.abs(geo.suivi.bas - geo.rappel.haut) <= 0.6, `enveloppe ${l} : le bandeau et le panneau gris ont la même couleur et se touchent (${geo.suivi.fond} / ${geo.rappel.fond})`);
+        } else {
+          verifier(Math.abs(geo.rappel.x - geo.carte.x - 25) <= 0.6 && Math.abs(geo.carte.l - geo.rappel.l - 50) <= 0.6, `enveloppe ${l} : le panneau gris est un encadré EN RETRAIT de 25 px de chaque côté (1 px de bord + 24 px de padding) : ${JSON.stringify([geo.rappel.x - geo.carte.x, geo.carte.l - geo.rappel.l])}`);
         }
         comparer(`enveloppe ${l}`, "étiquette de progression", RM["progression-etiquette"]!, await A(".moteur-progression-etiquette"), ["display", "justifyContent", "color", "fontSize", "fontWeight"]);
         comparer(`enveloppe ${l}`, "piste", RM["piste"]!, await A(".moteur-piste"), P_PISTE);
@@ -374,7 +382,7 @@ async function main(): Promise<void> {
           "retour→surtitre": await distance(page, ".moteur-lien-retour", ".moteur-surtitre"),
           "surtitre→titre": await distance(page, ".moteur-surtitre", ".moteur-question-titre"),
           "titre→panneau gris": await distance(page, ".moteur-question-titre", ".moteur-rappel"),
-          "panneau gris→carte": await distance(page, ".moteur-rappel", ".moteur-ecran-courant"),
+          "carte→panneau gris (haut à haut)": await decalageHaut(page, ".moteur-ecran-courant", ".moteur-rappel"),
           "étiquette→piste": await distance(page, ".moteur-progression-etiquette", ".moteur-piste"),
           "piste→titre du rappel": await distance(page, ".moteur-piste", ".moteur-rappel-titre"),
           "titre du rappel→liste": await distance(page, ".moteur-rappel-titre", ".moteur-rappel-liste"),

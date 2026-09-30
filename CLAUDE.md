@@ -137,16 +137,18 @@ les fonds de carte) est calculé par le test.
 
 Le CSS source ne prouve rien : une règle de `ecrans.css` peut être écrasée par une règle plus spécifique de `style.css` (cas de `.moteur-champ`, corrigé en §32). Les cinq composants (champ, QCM, liste, champs multiples, intervalle) ont une référence EXACTE dans `docs/reference/composants-ecran.html` (le tableau de signes dans `docs/reference/tableau-signes.html`, l'enveloppe de l'exercice et l'assemblage de la carte dans `docs/reference/enveloppe-exercice.html`, RAPPORT §43-§44) ; `npm run chromium-design` rend la référence et l'application dans le même Chromium et compare les styles calculés. Toute retouche visuelle d'un composant se règle sur ce fichier, jamais sur une description ; un écart admis se documente dans le RAPPORT (hauteurs tactiles de 44px, bouton d'aide, ±∞). Un nouveau composant d'écran exige sa référence AVANT d'être construit. Les scénarios Chromium cliquent l'OPTION d'un QCM (label), jamais le radio natif, masqué visuellement mais jamais `display: none`.
 
-## Enveloppe de l'exercice : un écran à la fois, progression, « Ce qu'on sait déjà » (RAPPORT §43, assemblage §44)
+## Enveloppe de l'exercice : un écran à la fois, progression, « Ce qu'on sait déjà » (RAPPORT §43 ; assemblage §44, refait en §47)
 
 `public/moteur/moteur.js` (`afficher`, `construireEntete`, `construireRappel`, `ligneFaite`) construit, pour **tous** les générateurs, dans cet ordre : le lien « Mes tâches »
-+ « EXERCICE i SUR m · tâche » + « Question k sur N » (`.moteur-suivi`), le panneau gris de progression et du rappel (`.moteur-rappel`), puis la carte blanche de l'écran
-courant (`.moteur-ecran-courant`, qui seule porte la couleur vert / rouge / jaune). Référence : `docs/reference/enveloppe-exercice.html`, comparée en Chromium par
++ « EXERCICE i SUR m · tâche » + « Question k sur N » (`.moteur-suivi`), puis la carte de l'écran courant (`.moteur-ecran-courant`, qui seule porte la couleur vert / rouge / jaune) dont le
+**premier enfant** est le panneau gris de progression et du rappel (`.moteur-rappel`). Référence : `docs/reference/enveloppe-exercice.html`, comparée en Chromium par
 `npm run chromium-design` (à 390 et 1280 px).
-- **Le panneau gris est AU-DESSUS de la carte blanche, jamais dedans** (sa bordure basse est la bordure haute de la carte). Sous 600 px tout est **bord à bord** : le bandeau gris
-  touche la bannière violette (même couleur que le panneau), la carte blanche fait la largeur de l'écran (sans arrondi ni bord latéral, padding 16 px). Les gouttières de la page
-  sont annulées par `--gouttiere-page` / `--marge-haute-page` (`.contenu-page`, `style.css`). Ne jamais remettre le rappel dans la carte : il ne serait plus de la couleur du bandeau
-  et la carte changerait de couleur avec lui.
+- **Le panneau gris est le PREMIER ENFANT de la carte courante** (RAPPORT §47, jamais un frère) ; sa mise en page dépend de la largeur, en CSS seul (`ecrans.css`, bloc « Assemblage »).
+  **Bureau (> 600 px)** : un encadré en retrait dans la carte (filet, arrondi `--radius-sm`, padding 14 × 16), comme l'ancien pilote ; le verdict colore la carte, jamais l'encadré.
+  **Sous 600 px** (INCHANGÉ depuis §44, vérifié au pixel près) : tout est **bord à bord** — le bandeau gris touche la bannière violette (même couleur que le panneau), le panneau est
+  AU-DESSUS du blanc, filets haut et bas, sans bord latéral (il annule le padding latéral de la carte par des marges négatives) ; la carte blanche fait la largeur de l'écran (sans
+  arrondi, sans bord latéral, sans padding haut). Les gouttières de la page sont annulées par `--gouttiere-page` / `--marge-haute-page` (`.contenu-page`, `style.css`). Ne jamais
+  réintroduire un élément englobant autour du panneau et de la carte, ni déplacer le rappel par script selon la largeur : c'est la structure unique + le CSS qui portent les deux mises en page.
 - **Le rappel ne dérive QUE de l'état que le serveur expose** (`exercice.champs` : `verrouille`, `modifiable`, `statut`, `valeur_saisie`, `solution_attendue`) :
   aucun verdict inventé côté navigateur. `statut === null` (correction coupée) donne une marque et un segment NEUTRES (•, `--violet-2`), **jamais une coche ni une
   couleur de verdict** ; la valeur montrée est la réponse d'ÉLÈVE (`resumer`), jamais la solution (sauf « Réponse attendue » sur une ligne non réussie, si le serveur
@@ -155,8 +157,8 @@ courant (`.moteur-ecran-courant`, qui seule porte la couleur vert / rouge / jaun
 - **`EcranDeclare.nom`** (optionnel, texte d'auteur, court, unique dans l'exercice, identique pour tous les élèves) est le libellé d'une ligne ; absent, « Question n ».
   Posé sur gen7 (`NOMS_ECRANS`, `ecrans.ts`) et le témoin. Le rappel **remplace** l'ancienne ligne de consigne « Ce que tu sais déjà » de gen7 (`ligneFaits`, supprimée) : ne
   jamais remettre un rappel dans un texte de consigne.
-- **Sans écran courant** (exercice terminé, tâche antérieure, remise à venir du retour en arrière), la RELECTURE reste celle d'avant : une carte par écran (énoncé, « Ta **Sous 600 px, ces blocs de relecture sont AUSSI bord à bord** (RAPPORT §46) : chaque enfant direct de `.moteur-exercice` (`.moteur-ecran-termine`, `.moteur-fin` / `.moteur-remise`, `.moteur-message`) fait la largeur de l'écran, sans arrondi ni bord latéral ; il n'existe plus de « gouttière » rendue aux enfants. Mesuré par `verifierBlocsRelecturePleineLargeur` (Chromium).
-  réponse », verdict, solution, « Modifier ma réponse »). Le rappel compact ne porte pas l'énoncé.
+- **Sans écran courant** (exercice terminé, tâche antérieure, remise à venir du retour en arrière), la RELECTURE reste celle d'avant : une carte par écran (énoncé, « Ta
+  réponse », verdict, solution, « Modifier ma réponse »). Le rappel compact ne porte pas l'énoncé. **Sous 600 px, ces blocs de relecture sont AUSSI bord à bord** (RAPPORT §46) : chaque enfant direct de `.moteur-exercice` (`.moteur-ecran-termine`, `.moteur-fin` / `.moteur-remise`, `.moteur-message`) fait la largeur de l'écran, sans arrondi ni bord latéral ; il n'existe plus de « gouttière » rendue aux enfants. Mesuré par `verifierBlocsRelecturePleineLargeur` (Chromium).
 - La carte des composants n'est plus celle de `composants-ecran.html` par son enveloppe (bord haut, rayons, largeur, padding latéral : `enveloppe-exercice.html`) ; cette
   référence reste celle de ce que la carte CONTIENT. `--retrait-plein-bord` (`style.css`) vaut 16 px sur mobile (carte bord à bord) : la modifier sans relancer
   `npm run chromium-temoin` la casse.

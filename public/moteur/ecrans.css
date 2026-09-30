@@ -106,14 +106,15 @@
   color: var(--text);
 }
 
-/* Panneau gris « en creux » AU-DESSUS de la carte blanche de l'écran courant (RAPPORT §44) : progression puis rappel des écrans déjà répondus.
-   Sa bordure basse EST la bordure haute de la carte (voir « Assemblage » plus bas). */
+/* Panneau gris « en creux » de progression et de rappel des écrans déjà répondus (RAPPORT §47) : PREMIER enfant de la carte de l'écran courant.
+   Bureau : un encadré en retrait dans la carte (filet, arrondi `--radius-sm`, comme l'ancien pilote). Mobile : bord à bord, au-dessus du blanc
+   (voir « Assemblage » plus bas). Il ne porte jamais la couleur du verdict : c'est la carte qui la porte. */
 .moteur-rappel {
   margin: 0;
-  padding: calc(var(--espace-3)*0.875) var(--espace-4); /* 14px 24px : aligné sur le contenu de la carte (24px + 1px de bordure) */
+  padding: calc(var(--espace-3)*0.875) var(--espace-3); /* 14px 16px */
   background: var(--surface-sunken);
   border: 1px solid var(--border);
-  border-radius: var(--radius) var(--radius) 0 0;
+  border-radius: var(--radius-sm);
 }
 
 .moteur-progression-etiquette {
@@ -262,18 +263,12 @@
   box-shadow: none;
 }
 
-/* ── Assemblage de l'enveloppe (RAPPORT §44) ────────────────────────────────────────────────────────────────────────
-   Bureau : le panneau gris et la carte blanche forment UN bloc — la bordure basse du gris est la bordure haute du blanc (la carte n'a pas de
-   bord haut, les angles hauts sont au gris, les angles bas à la carte) ; la couleur de verdict ne touche que les autres bords de la carte.
-   Mobile (≤ 600 px, comme la cible) : bord à bord — le bandeau gris (lien, titre, progression) touche la bannière violette sans espace d'une
-   autre couleur, la carte blanche fait la largeur de l'écran (sans arrondi, sans bord latéral). Les gouttières de la page sont annulées par
-   `--gouttiere-page` / `--marge-haute-page` (style.css). */
-.moteur-rappel + .moteur-ecran {
-  margin-top: calc(-1*var(--espace-3)); /* annule le `gap` de `.moteur-exercice` : les deux blocs se touchent */
-  border-top-width: 0;
-  border-radius: 0 0 var(--radius) var(--radius);
-}
-
+/* ── Assemblage de l'enveloppe (RAPPORT §47, qui remplace la règle « bloc joint » de §44 sur bureau) ──────────────────────────────────────
+   Bureau : UNE carte (l'écran courant) dont le premier enfant est le panneau gris en retrait ; la couleur du verdict entoure tout, l'encadré reste gris.
+   Mobile (≤ 600 px, comme la cible) : INCHANGÉ depuis §44, obtenu en CSS seul — le bandeau gris (lien, titre, progression) touche la bannière violette
+   sans espace d'une autre couleur, le panneau gris est AU-DESSUS du blanc (filets haut et bas, sans bord latéral) et la carte blanche fait la largeur
+   de l'écran (sans arrondi, sans bord latéral) : le panneau annule le padding latéral de la carte (marges négatives), et la carte n'a pas de
+   padding haut. Les gouttières de la page sont annulées par `--gouttiere-page` / `--marge-haute-page` (style.css). */
 @media (max-width: 600px) {
   .moteur-exercice {
     max-width: none;
@@ -304,19 +299,20 @@
     background: var(--surface-sunken);
   }
 
-  .moteur-suivi + .moteur-rappel {
+  .moteur-suivi + .moteur-ecran-courant {
     margin-top: calc(-1*var(--espace-3)); /* annule le `gap` : le bandeau et le panneau gris se touchent */
   }
 
-  .moteur-rappel {
-    padding-inline: var(--espace-3);
-    border-width: 1px 0;
+  .moteur-ecran-courant {
+    padding: 0 var(--espace-3) var(--espace-4);
+    border-width: 0 0 1px;
     border-radius: 0;
   }
 
-  .moteur-rappel + .moteur-ecran {
-    padding: calc(var(--espace-3)*1.25) var(--espace-3) var(--espace-4);
-    border-width: 0 0 1px;
+  .moteur-ecran-courant > .moteur-rappel {
+    margin: 0 calc(-1*var(--espace-3)) calc(var(--espace-3)*0.5); /* plein-bord ; 8 px + le `gap` de 12 px = les 20 px d'avant entre le panneau et la consigne */
+    padding-inline: var(--espace-3);
+    border-width: 1px 0;
     border-radius: 0;
   }
 }

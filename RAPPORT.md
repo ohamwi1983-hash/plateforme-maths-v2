@@ -1615,3 +1615,19 @@ tranche : la cible prime sur mobile. Cela rend caduque cette décision et change
 - `chromium-design` : 573 vérifications inchangées (la référence `enveloppe-exercice.html` décrit l'écran courant, pas la relecture).
 
 **À savoir.** Le récapitulatif n'a PAS de référence dans le design cible du propriétaire (l'écran de fin / récapitulatif de session de l'ancien pilote n'est pas porté) : ce choix (cartes de relecture « en creux » bord à bord, séparées par le fond de page) est une décision de ma part, à confirmer visuellement sur `390 retour-01-panneau-remise.png` et `390 retour-04-apres-remise.png`.
+
+## §47 : bureau — le panneau « Ce qu'on sait déjà » passe DANS la carte (choix B du propriétaire), mobile inchangé
+
+**Demande.** Après comparaison en images (bloc joint « A » contre gris dans la carte « B »), le propriétaire choisit **B sur bureau, mobile inchangé** : sur grand écran le panneau gris est un encadré en retrait dans la carte, comme l'ancien pilote (`.recap-cumulatif`) ; sous 600 px, rien ne change (gris AU-DESSUS du blanc, bord à bord, §44).
+
+**Livré (une seule structure, deux mises en page en CSS).**
+- `public/moteur/moteur.js:132` : le panneau du rappel est le **premier enfant** de la carte de l'écran courant (il était son frère précédent). Aucun élément englobant, aucun déplacement par script selon la largeur.
+- `public/moteur/ecrans.css:109` : `.moteur-rappel` = encadré (filet, arrondi `--radius-sm`, padding 14 × 16). Bloc « Assemblage » `ecrans.css:266` : la règle « bloc joint » de §44 disparaît ; sous 600 px, `.moteur-ecran-courant > .moteur-rappel` (l.312) annule le padding latéral de la carte par des marges négatives, la carte perd son padding haut, `.moteur-suivi + .moteur-ecran-courant` annule le `gap` — on retrouve exactement la mise en page de §44.
+- Référence `docs/reference/enveloppe-exercice.html` restructurée (rappel dans la carte, encadré sur bureau, marges négatives sur mobile) ; `docs/design-system.md` et `CLAUDE.md` (section Enveloppe) mis à jour. **Correction d'une erreur de §46** : la phrase ajoutée à CLAUDE.md avait été insérée au milieu d'une puce ; remise à sa place.
+- `scripts/chromium-fidelite-design.ts:347` : géométrie réécrite (panneau = premier enfant ; bureau : retrait de 25 px de chaque côté = 1 px de bord + 24 px de padding ; mobile : carte, panneau et bandeau à la largeur de l'écran, panneau au ras du haut de la carte, bandeau gris collé à la bannière) ; la distance « panneau→carte » devient « carte→panneau, HAUT À HAUT » (`decalageHaut`, l.97).
+
+**Preuve que le mobile est inchangé.** Capture `fidelite-app-enveloppe-390.png` rendue AVANT (commit `cdc1107`, export séparé) et APRÈS, comparées pixel à pixel dans Chromium (canvas) : **0 pixel différent** (390 × 971). Le bureau, lui, change comme voulu (959 → 972 px de haut à 1280).
+
+**Vérification.** `chromium-design` : 575 vérifications ; `chromium-temoin` : 2313 ; `test-design-system` : 642.
+
+**À savoir.** Le panneau ne porte JAMAIS la couleur du verdict : le vert / rouge / jaune colore la carte, l'encadré reste gris (sinon un échec serait plus visible qu'une réussite sous correction coupée, et le rappel perdrait sa couleur). Entre 601 et ~720 px (petite tablette, téléphone en paysage), la mise en page « bureau » s'applique : à valider visuellement si ce cas compte.
