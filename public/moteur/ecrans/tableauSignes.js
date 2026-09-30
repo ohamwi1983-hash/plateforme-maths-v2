@@ -2,17 +2,20 @@ import { rendreTexte } from "../rendreTexte.js";
 import { versTexteBrut } from "../texteMath.js";
 
 /**
- * Composant d'écran « tableau_signes » : une case par (ligne, colonne), chacune parcourant les valeurs
- * autorisées au toucher. L'état des cases est l'ÉTAT D'ÉDITION, privé à ce composant ; `reponseBrute`
- * = objet JSON `{ [ligneId]: { [colonneId]: valeur } }`, produit uniquement par `lireReponse()`, et
- * seulement quand TOUTES les cases sont renseignées (sinon `null` : rien à confirmer — ce n'est pas
- * une vérification de justesse, seulement de complétude de la saisie).
+ * Composant d'écran « tableau_signes » : une case par cellule résolue, chacune parcourant SES valeurs au toucher.
+ * L'état des cases est l'ÉTAT D'ÉDITION, privé à ce composant ; `reponseBrute` = objet JSON
+ * `{ [ligneId]: { [ancre]: valeur } }`, produit uniquement par `lireReponse()`, et seulement quand TOUTES les
+ * cases sont renseignées (sinon `null` : « Valider » reste désactivé, comme sur `champs_multiples` — RAPPORT §30).
  *
- * Extensions (rétrocompatibles : un écran qui ne les déclare pas est rendu exactement comme avant) :
- *  - alphabet PAR LIGNE (`ligne.signesAutorises`, défaut : `ecran.signesAutorises`) ;
- *  - `ligne.rendu = "symboles_variation"` : `⌢ ⌣ ↗ ↘` dessinés en SVG et nommés en toutes lettres ;
- *  - en-têtes de colonne à deux niveaux (`colonne.sousLibelle`) ;
- *  - `ecran.bornes` : colonnes d'AFFICHAGE aux deux extrémités (jamais des cases, jamais dans la réponse).
+ * Ce composant ne DÉRIVE RIEN : les cellules (qui existe, quelles fusions, quel alphabet, quelle clé de réponse)
+ * viennent de `ecran.rangees`, résolues côté serveur par `lib/structureTableau.ts` (seule règle). Il ne fait que
+ * dessiner, et faire tourner le cycle : `?` → première valeur → … → dernière → PREMIÈRE (jamais de retour à `?`).
+ *
+ * Deux dispositions, choisies par la déclaration de l'écran :
+ *  - STRUCTURÉE (`colonnes[*].genre`) : 2N+1 colonnes `<, x₁, <, …, <` sans colonne −∞/+∞, bande de symboles puis ligne
+ *    des x, libellé de chaque ligne AU-DESSUS de ses cases, colonnes de valeur en `--violet-clair` sur toutes les lignes,
+ *    cases fusionnées sur la ligne des variations. Pas de défilement : le tableau tient dans la largeur (plein-bord).
+ *  - HÉRITÉE (aucun `genre`) : la disposition d'origine (en-têtes de colonne, libellé de ligne à gauche, défilement).
  * Tous les libellés sont des textes d'AUTEUR (balisage `$…$` admis) rendus par `rendreTexte`.
  */
 
@@ -50,111 +53,174 @@ function symboleSvg(glyphe) {
 // serait une fonction (membre d'Object.prototype). RAPPORT.md §20.
 const estSymbole = (valeur) => typeof valeur === "string" && Object.hasOwn(TRACES_SYMBOLES, valeur);
 
-function nomValeur(ligne, valeur) {
-  return ligne.rendu === "symboles_variation" && typeof valeur === "string" && Object.hasOwn(NOMS_SYMBOLES, valeur) ? NOMS_SYMBOLES[valeur] : valeur;
+function nomValeur(valeur) {
+  return typeof valeur === "string" && Object.hasOwn(NOMS_SYMBOLES, valeur) ? NOMS_SYMBOLES[valeur] : valeur;
 }
 
-function alphabetDe(ecran, ligne) {
-  return ligne.signesAutorises && ligne.signesAutorises.length > 0 ? ligne.signesAutorises : ecran.signesAutorises;
+const element = (tag, classe) => {
+  const el = document.createElement(tag);
+  if (classe) el.className = classe;
+  return el;
+};
+
+/** Une case-bouton à cycle. `rendu` = "symboles" : les valeurs de variation sont dessinées. */
+function creerCase({ nomCellule, rendu, alphabet, surChangement }) {
+  const bouton = element("button", "moteur-case-signe");
+  bouton.type = "button";
+  const etat = { bouton, valeur: null };
+  const rafraichir = () => {
+    if (etat.valeur === null) {
+      bouton.replaceChildren(document.createTextNode("?"));
+    } else if (rendu === "symboles" && estSymbole(etat.valeur)) {
+      bouton.replaceChildren(symboleSvg(etat.valeur));
+    } else {
+      bouton.replaceChildren(document.createTextNode(etat.valeur));
+    }
+    const dit = etat.valeur === null ? "vide" : rendu === "symboles" && Object.hasOwn(NOMS_SYMBOLES, etat.valeur) ? NOMS_SYMBOLES[etat.valeur] : etat.valeur;
+    bouton.setAttribute("aria-label", `${nomCellule} : ${dit}. Toucher pour changer.`);
+    bouton.classList.toggle("moteur-case-renseignee", etat.valeur !== null);
+  };
+  bouton.addEventListener("click", () => {
+    // Le cycle NE REVIENT JAMAIS à « ? » : après la dernière valeur, on repart de la première.
+    etat.valeur = etat.valeur === null ? alphabet[0] : alphabet[(alphabet.indexOf(etat.valeur) + 1) % alphabet.length];
+    rafraichir();
+    surChangement();
+  });
+  rafraichir();
+  return etat;
+}
+
+const texteAuteur = (parent, texte) => rendreTexte(parent, texte, { math: true });
+
+function nomCellule(ligne, colonnes) {
+  const noms = colonnes.map((c) => versTexteBrut(c.libelle));
+  return `${versTexteBrut(ligne.libelle)}, ${noms.length > 1 ? `${noms[0]} à ${noms[noms.length - 1]}` : noms[0]}`;
+}
+
+function construireStructure(ecran, cases, surChangement) {
+  const table = element("table", "moteur-table-signes moteur-table-structure");
+  if (ecran.titre) {
+    const legende = element("caption", "moteur-titre-tableau");
+    texteAuteur(legende, ecran.titre);
+    table.appendChild(legende);
+  }
+  const groupe = element("colgroup");
+  for (const colonne of ecran.colonnes) groupe.appendChild(element("col", colonne.genre === "valeur" ? "moteur-col-valeur" : "moteur-col-intervalle"));
+  table.appendChild(groupe);
+
+  const cellulesDe = (classe, remplir) => {
+    const tr = element("tr", classe);
+    for (const colonne of ecran.colonnes) {
+      const td = element("td", colonne.genre === "valeur" ? "moteur-cellule-valeur" : "moteur-cellule-intervalle");
+      remplir(td, colonne);
+      tr.appendChild(td);
+    }
+    return tr;
+  };
+
+  const entete = element("tbody", "moteur-entete-x");
+  if (ecran.colonnes.some((c) => c.symbole)) {
+    entete.appendChild(cellulesDe("moteur-rangee-symboles", (td, c) => { if (c.symbole) texteAuteur(td, c.symbole); }));
+  }
+  entete.appendChild(cellulesDe("moteur-rangee-x", (td, c) => {
+    if (c.genre === "valeur") texteAuteur(td, c.valeur);
+    else td.appendChild(document.createTextNode("<")); // texte d'INTERFACE brut, jamais un balisage
+  }));
+  table.appendChild(entete);
+
+  const ligneParId = new Map(ecran.lignes.map((l) => [l.id, l]));
+  const colonneParId = new Map(ecran.colonnes.map((c) => [c.id, c]));
+  for (const rangee of ecran.rangees) {
+    const ligne = ligneParId.get(rangee.ligne);
+    const corps = element("tbody", "moteur-ligne-tableau");
+    const titre = element("tr", "moteur-rangee-titre");
+    const th = element("th", "moteur-titre-ligne");
+    th.colSpan = ecran.colonnes.length; // ligne de TITRE (texte), pas une ligne de cases : aucune fusion de cases de signe
+    th.scope = "colgroup";
+    texteAuteur(th, ligne.libelle);
+    titre.appendChild(th);
+    corps.appendChild(titre);
+
+    const tr = element("tr", ligne.nature === "variation" ? "moteur-rangee-variation" : "moteur-rangee-signe");
+    for (const cellule of rangee.cellules) {
+      const couvertes = cellule.couvre.map((id) => colonneParId.get(id));
+      const valeur = couvertes.some((c) => c.genre === "valeur");
+      const td = element("td", valeur ? "moteur-cellule-valeur" : "moteur-cellule-intervalle");
+      td.colSpan = couvertes.length; // > 1 UNIQUEMENT sur une ligne de variations (groupes délimités par les sommets)
+      const etat = creerCase({ nomCellule: nomCellule(ligne, couvertes), rendu: ligne.nature === "variation" ? "symboles" : "texte", alphabet: cellule.alphabet, surChangement });
+      cases.set(rangee.ligne + "|" + cellule.ancre, etat);
+      td.appendChild(etat.bouton);
+      tr.appendChild(td);
+    }
+    corps.appendChild(tr);
+    table.appendChild(corps);
+  }
+  return table;
+}
+
+function construireHeritee(ecran, cases, surChangement) {
+  const defilement = element("div", "moteur-tableau-defilement");
+  const table = element("table", "moteur-table-signes");
+  const entete = element("thead");
+  const ligneEntete = element("tr");
+  ligneEntete.appendChild(element("th"));
+  for (const colonne of ecran.colonnes) {
+    const th = element("th");
+    th.scope = "col";
+    const principal = element("span");
+    texteAuteur(principal, colonne.libelle);
+    th.appendChild(principal);
+    ligneEntete.appendChild(th);
+  }
+  entete.appendChild(ligneEntete);
+  table.appendChild(entete);
+
+  const corps = element("tbody");
+  const ligneParId = new Map(ecran.lignes.map((l) => [l.id, l]));
+  const colonneParId = new Map(ecran.colonnes.map((c) => [c.id, c]));
+  for (const rangee of ecran.rangees) {
+    const ligne = ligneParId.get(rangee.ligne);
+    const tr = element("tr");
+    const th = element("th");
+    th.scope = "row";
+    texteAuteur(th, ligne.libelle);
+    tr.appendChild(th);
+    for (const cellule of rangee.cellules) {
+      const colonne = colonneParId.get(cellule.ancre);
+      const nomColonne = versTexteBrut(colonne.libelle);
+      const td = element("td");
+      const etat = creerCase({ nomCellule: `${versTexteBrut(ligne.libelle)}, ${nomColonne}`, rendu: ligne.rendu === "symboles_variation" ? "symboles" : "texte", alphabet: cellule.alphabet, surChangement });
+      cases.set(rangee.ligne + "|" + cellule.ancre, etat);
+      td.appendChild(etat.bouton);
+      tr.appendChild(td);
+    }
+    corps.appendChild(tr);
+  }
+  table.appendChild(corps);
+  defilement.appendChild(table);
+  return defilement;
 }
 
 export default {
   type: "tableau_signes",
 
   creer(ecran, { surChangement }) {
-    const element = document.createElement("div");
-    element.className = "moteur-tableau-signes";
-    const defilement = document.createElement("div");
-    defilement.className = "moteur-tableau-defilement";
-    const table = document.createElement("table");
-    table.className = "moteur-table-signes";
-
-    const cellulesBorne = (tag, texte) => {
-      const cellule = document.createElement(tag);
-      cellule.className = "moteur-borne";
-      if (texte !== undefined) rendreTexte(cellule, texte, { math: true });
-      return cellule;
-    };
-
-    const entete = document.createElement("thead");
-    const ligneEntete = document.createElement("tr");
-    ligneEntete.appendChild(document.createElement("th"));
-    if (ecran.bornes) ligneEntete.appendChild(cellulesBorne("th", ecran.bornes.gauche));
-    for (const colonne of ecran.colonnes) {
-      const th = document.createElement("th");
-      th.scope = "col";
-      const principal = document.createElement("span");
-      rendreTexte(principal, colonne.libelle, { math: true });
-      th.appendChild(principal);
-      if (colonne.sousLibelle) {
-        const sous = document.createElement("span");
-        sous.className = "moteur-sous-libelle";
-        rendreTexte(sous, colonne.sousLibelle, { math: true });
-        th.appendChild(sous);
-      }
-      ligneEntete.appendChild(th);
-    }
-    if (ecran.bornes) ligneEntete.appendChild(cellulesBorne("th", ecran.bornes.droite));
-    entete.appendChild(ligneEntete);
-    table.appendChild(entete);
-
-    const corps = document.createElement("tbody");
-    const cases = new Map(); // "ligne|colonne" -> { bouton, valeur }
-    for (const ligne of ecran.lignes) {
-      const alphabet = alphabetDe(ecran, ligne);
-      const tr = document.createElement("tr");
-      const th = document.createElement("th");
-      th.scope = "row";
-      rendreTexte(th, ligne.libelle, { math: true });
-      tr.appendChild(th);
-      if (ecran.bornes) tr.appendChild(cellulesBorne("td"));
-      for (const colonne of ecran.colonnes) {
-        const td = document.createElement("td");
-        const bouton = document.createElement("button");
-        bouton.type = "button";
-        bouton.className = "moteur-case-signe";
-        const etat = { bouton, valeur: null };
-        const rafraichir = () => {
-          if (etat.valeur === null) {
-            bouton.replaceChildren(document.createTextNode("?"));
-          } else if (ligne.rendu === "symboles_variation" && estSymbole(etat.valeur)) {
-            bouton.replaceChildren(symboleSvg(etat.valeur));
-          } else {
-            bouton.replaceChildren(document.createTextNode(etat.valeur));
-          }
-          const lignePlate = versTexteBrut(ligne.libelle);
-          const colonnePlate = versTexteBrut(colonne.libelle) + (colonne.sousLibelle ? ` (${versTexteBrut(colonne.sousLibelle)})` : "");
-          bouton.setAttribute("aria-label", `${lignePlate}, ${colonnePlate} : ${etat.valeur === null ? "vide" : nomValeur(ligne, etat.valeur)}. Toucher pour changer.`);
-          bouton.classList.toggle("moteur-case-renseignee", etat.valeur !== null);
-        };
-        bouton.addEventListener("click", () => {
-          const suivant = etat.valeur === null ? 0 : alphabet.indexOf(etat.valeur) + 1;
-          etat.valeur = suivant >= alphabet.length ? null : alphabet[suivant];
-          rafraichir();
-          surChangement();
-        });
-        rafraichir();
-        cases.set(ligne.id + "|" + colonne.id, etat);
-        td.appendChild(bouton);
-        tr.appendChild(td);
-      }
-      if (ecran.bornes) tr.appendChild(cellulesBorne("td"));
-      corps.appendChild(tr);
-    }
-    table.appendChild(corps);
-    defilement.appendChild(table);
-    element.appendChild(defilement);
+    const racine = element("div", "moteur-tableau-signes");
+    const cases = new Map(); // "ligne|ancre" -> { bouton, valeur }
+    const structure = ecran.colonnes.some((c) => c.genre !== undefined);
+    racine.classList.toggle("moteur-tableau-structure-hote", structure);
+    racine.appendChild(structure ? construireStructure(ecran, cases, surChangement) : construireHeritee(ecran, cases, surChangement));
 
     return {
-      element,
+      element: racine,
       lireReponse() {
         const resultat = {};
-        for (const ligne of ecran.lignes) {
-          resultat[ligne.id] = {};
-          for (const colonne of ecran.colonnes) {
-            const { valeur } = cases.get(ligne.id + "|" + colonne.id);
+        for (const rangee of ecran.rangees) {
+          resultat[rangee.ligne] = {};
+          for (const cellule of rangee.cellules) {
+            const { valeur } = cases.get(rangee.ligne + "|" + cellule.ancre);
             if (valeur === null) return null;
-            resultat[ligne.id][colonne.id] = valeur;
+            resultat[rangee.ligne][cellule.ancre] = valeur;
           }
         }
         return JSON.stringify(resultat);
@@ -171,7 +237,18 @@ export default {
   resumer(ecran, valeurSaisie) {
     try {
       const tableau = JSON.parse(valeurSaisie);
-      return ecran.lignes.map((l) => `${versTexteBrut(l.libelle)} : ${ecran.colonnes.map((c) => nomValeur(l, (tableau[l.id] && tableau[l.id][c.id]) || "?")).join(" ")}`).join(" ; ");
+      const symboles = (ligne) => ligne.nature === "variation" || ligne.rendu === "symboles_variation";
+      return ecran.rangees
+        .map((rangee) => {
+          const ligne = ecran.lignes.find((l) => l.id === rangee.ligne);
+          const saisies = tableau !== null && typeof tableau === "object" && Object.hasOwn(tableau, rangee.ligne) ? tableau[rangee.ligne] : {};
+          const valeurs = rangee.cellules.map((c) => {
+            const v = saisies !== null && typeof saisies === "object" && Object.hasOwn(saisies, c.ancre) ? saisies[c.ancre] : "?";
+            return symboles(ligne) ? nomValeur(v) : v;
+          });
+          return `${versTexteBrut(ligne.libelle)} : ${valeurs.join(" ")}`;
+        })
+        .join(" ; ");
     } catch {
       return valeurSaisie;
     }

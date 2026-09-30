@@ -33,7 +33,10 @@ import type { AideTypee } from "./aideTypee";
  *                         sans importance, sauf décision contraire du générateur).
  *                         Avec `permetAucune`, le tableau vide `[]` est la réponse explicite « aucune
  *                         valeur » (décodeur : `decoderListeValeursOuAucune`).
- *  - `tableau_signes`   : objet JSON `{ [ligneId]: { [colonneId]: signe } }`.
+ *  - `tableau_signes`   : objet JSON `{ [ligneId]: { [colonneId]: signe } }` ; en tableau structuré, une case
+ *                         FUSIONNÉE (ligne `variation`) a pour clé la PREMIÈRE colonne de son groupe
+ *                         (`lib/structureTableau.ts`). Toutes les cases doivent être renseignées : aucun `?` ne
+ *                         voyage, « Valider » reste désactivé tant qu'il en reste un (comme `champs_multiples`).
  *  - `champs_multiples` : objet JSON `{ [sousChampId]: string }` — texte tapé, ou `id` du choix retenu ;
  *                         TOUS les sous-champs déclarés présents, aucun en trop, aucun vide
  *                         (`decoderChampsMultiples`). Une seule tentative pour l'ensemble.
@@ -123,32 +126,58 @@ export interface EcranListeValeurs extends EcranCommun {
 /** `rendu: "symboles_variation"` : les valeurs `⌢ ⌣ ↗ ↘` sont dessinées (et nommées pour l'accessibilité). */
 export type RenduLigneTableau = "texte" | "symboles_variation";
 
+/**
+ * Nature d'une ligne d'un tableau STRUCTURÉ (RAPPORT §30) : elle décide, avec le genre de la colonne, de
+ * l'alphabet de chaque case (`lib/structureTableau.ts`, SEULE dérivation — le navigateur ne la recalcule pas).
+ *  - `signe`     : signe d'un facteur / de `f` ; `quotient` : ligne finale d'un quotient (un pôle y offre `∅`) ;
+ *  - `variation` : cases FUSIONNÉES par groupes délimités par les colonnes `sommet` (`↗ ↘` sur un groupe, `⌢ ⌣` au sommet).
+ */
+export type NatureLigne = "signe" | "quotient" | "variation";
+
 export interface LigneTableauSignes {
   id: string;
+  /** Texte d'auteur affiché AU-DESSUS de la ligne (tableau structuré) ou à gauche (tableau hérité). */
   libelle: string;
-  /** Alphabet de CETTE ligne ; défaut : `signesAutorises` de l'écran. */
+  /** Tableau HÉRITÉ seulement : alphabet de CETTE ligne ; défaut : `signesAutorises` de l'écran. */
   signesAutorises?: string[];
+  /** Tableau HÉRITÉ seulement (en structuré, une ligne `variation` dessine toujours ses symboles). */
   rendu?: RenduLigneTableau;
+  /** Tableau STRUCTURÉ seulement ; défaut `"signe"`. */
+  nature?: NatureLigne;
 }
+
+/** `intervalle` : le `<` entre deux valeurs (case de signe à 2 valeurs) ; `valeur` : un point remarquable de la ligne des x. */
+export type GenreColonne = "intervalle" | "valeur";
 
 export interface ColonneTableauSignes {
   id: string;
+  /** Nom lisible de la colonne (étiquette d'accessibilité) ; en-tête visible du tableau HÉRITÉ seulement. */
   libelle: string;
-  /** Second niveau de l'en-tête (ex. `$x_S$` sous la valeur du sommet). */
-  sousLibelle?: string;
+  /**
+   * Tableau STRUCTURÉ : déclarer `genre` sur TOUTES les colonnes ou sur aucune. Les colonnes alternent
+   * `intervalle, valeur, intervalle, …, intervalle` (2N+1, jamais de colonne −∞/+∞), 3 ≤ 2N+1 ≤ 9.
+   */
+  genre?: GenreColonne;
+  /** Colonne `valeur` : texte d'auteur de la valeur de x (ligne des x), obligatoire. */
+  valeur?: string;
+  /** Colonne `valeur` : symbole (`$x_1$`, `$x_S$`…) de la bande au-dessus de la ligne des x. */
+  symbole?: string;
+  /** Colonne `valeur` : `0` est une réponse possible sur les lignes de signe (vraie racine). Défaut : non. */
+  racine?: boolean;
+  /** Colonne `valeur` : racine du DÉNOMINATEUR — la ligne `quotient` y offre `∅` (indéfini, distinct de `0`). */
+  pole?: boolean;
+  /** Colonne `valeur` : point où la variation change (sommet) — délimite les groupes fusionnés des lignes `variation`. */
+  sommet?: boolean;
 }
 
 export interface EcranTableauSignes extends EcranCommun {
   type: "tableau_signes";
   colonnes: ColonneTableauSignes[];
   lignes: LigneTableauSignes[];
-  /** Signes proposés dans chaque case (ex. `["+", "-", "0"]`) : alphabet par défaut des lignes. */
-  signesAutorises: string[];
-  /**
-   * Colonnes de BORNES d'affichage (ex. `$-\infty$` / `$+\infty$`) aux deux extrémités : ce ne sont
-   * pas des cases de réponse, elles n'apparaissent jamais dans `reponseBrute`.
-   */
-  bornes?: { gauche: string; droite: string };
+  /** Tableau HÉRITÉ seulement : signes proposés dans chaque case (ex. `["+", "-", "0"]`), alphabet par défaut des lignes. */
+  signesAutorises?: string[];
+  /** Titre de section (texte d'auteur, écrit dans la BONNE casse : jamais de `text-transform`, RAPPORT §30). */
+  titre?: string;
 }
 
 export interface SousChampTexte {

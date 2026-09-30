@@ -133,3 +133,11 @@ leur conteneur (`font-size: inherit` ou `em` relatifs).
 | `--espace-3` | `16px` | Écart standard, gouttière mobile |
 | `--espace-4` | `24px` | Séparation de blocs |
 | `--espace-5` | `40px` | Grande séparation, base des zones tactiles |
+
+## Tableau de signes plein-bord (phase 3b, RAPPORT §30)
+
+- **Zone tactile** : `44px` (`--espace-5` + `--espace-1`) en hauteur ET largeur, partout, quel que soit le nombre de colonnes ou de lignes empilées. 9 colonnes × 44 px dépassent 390 px : cas hors périmètre tant qu'aucun générateur n'a plus de 7 colonnes.
+- **Plein-bord** : le tableau sort de la carte et de la gouttière de page jusqu'aux bords de la colonne de contenu. `--retrait-plein-bord` n'est **pas** un token de `:root` : c'est une propriété de mise en page définie sur `.contenu-page` (`style.css`), somme de quatre termes (padding de la carte `--espace-4`, bordure 1px, padding de `.moteur-exercice` `--espace-3`, gouttière de page). `ecrans.css` la lit avec repli `0px`.
+- **Colonnes de valeur** : fond `--violet-clair` continu sur toutes les lignes ; bande de symboles en `--surface-sunken`.
+- **Titres de section** : petites capitales par `font-size`, `letter-spacing` et `color`, **jamais `text-transform`**.
+
