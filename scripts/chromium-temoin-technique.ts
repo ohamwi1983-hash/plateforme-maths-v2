@@ -1735,6 +1735,58 @@ async function scenarioRetourArriere(navigateur: any, base: string, largeur: num
   void tacheId;
 }
 
+/**
+ * « Aperçu » d'une tâche AVEC retour en arrière (RAPPORT §39) : le professeur décoche la correction immédiate, coche « Autoriser le retour en
+ * arrière », clique « Aperçu » ; dans l'onglet élève, après une réponse, l'écran reste modifiable (« Modifier ma réponse ») et rien n'est corrigé.
+ * Sans la case cochée : comportement d'origine (« Question suivante »).
+ */
+async function scenarioApercuRetour(navigateur: any, base: string, largeur: number) {
+  for (const retour of [true, false]) {
+    const l = `${largeur} aperçu ${retour ? "avec" : "sans"} retour`;
+    const s: Scenario = creerScenario();
+    installerBase(s.base);
+    const { page, contexte, journal } = await preparerPage(navigateur, base, largeur, largeur < 600 ? 800 : 900, `prof:${s.profId}`, "p@x");
+    await contexte.route("**/unpkg.com/@supabase/supabase-js**", (r: any) => r.fulfill({ contentType: "text/javascript", body: stubSupabase(`prof:${s.profId}`, "p@x") }));
+    await contexte.route("**/fonts.googleapis.com/**", (r: any) => r.fulfill({ contentType: "text/css", body: "" }));
+    await contexte.route("**/fonts.gstatic.com/**", (r: any) => r.abort());
+    await page.goto(base + "/prof.html");
+    await page.waitForSelector('button[data-onglet="taches"]:visible');
+    await page.locator('button[data-onglet="taches"]').click();
+    await page.locator("#bouton-accordeon-creer").click();
+    await page.waitForSelector("#composition-dynamique input.stepper-valeur", { state: "attached" });
+    await page.evaluate(`(() => { const i = document.querySelector('#composition-dynamique input[data-variante-id="af_mise_en_evidence"]'); i.value = "1"; i.dispatchEvent(new Event("input", { bubbles: true })); i.dispatchEvent(new Event("change", { bubbles: true })); })()`);
+    // La case « retour en arrière » est visible mais GRISÉE tant que la correction immédiate est cochée.
+    verifier(await page.locator("#autoriser-retour-arriere").isDisabled(), `${l} : case grisée sous correction immédiate`);
+    await page.locator("#feedback-immediat").uncheck({ force: true });
+    verifier(await page.locator("#autoriser-retour-arriere").isEnabled(), `${l} : case active une fois la correction immédiate décochée`);
+    if (retour) await page.locator("#autoriser-retour-arriere").check({ force: true });
+    await page.locator("#autoriser-retour-arriere").scrollIntoViewIfNeeded();
+    await page.screenshot({ path: join(CAPTURES, `${largeur}-apercu-retour-${retour ? "avec" : "sans"}-formulaire.png`), fullPage: false });
+    const [popup] = await Promise.all([contexte.waitForEvent("page"), page.locator("#btn-apercu-tache").click()]);
+    popup.on("pageerror", (e: Error) => journal.pageerrors.push("aperçu : " + e.message));
+    popup.on("response", (r: any) => { if (r.status() >= 400) journal.reponsesEnErreur.push({ statut: r.status(), methode: r.request().method(), url: new URL(r.url()).pathname }); });
+    await popup.waitForSelector("#bandeau-mode-apercu:not([hidden])");
+    await popup.waitForSelector(".moteur-ecran-courant");
+    const tache = s.base.table("taches")[0]!;
+    verifier(tache.est_apercu === true && tache.feedback_immediat === false && tache.autoriser_retour_arriere === retour, `${l} : la tâche d'aperçu reprend le formulaire (retour = ${String(tache.autoriser_retour_arriere)})`);
+    const premier = s.base.table("exercices_assignes")[0]!;
+    const ex = genererGen7("mise_en_evidence", Number(premier.graine));
+    await repondreGen7(popup, ex, "coefficients");
+    await popup.locator(".moteur-ecran-courant").getByRole("button", { name: "Valider", exact: true }).click();
+    await popup.waitForSelector(".moteur-ecran-courant .moteur-retour .moteur-statut");
+    if (retour) {
+      await popup.getByRole("button", { name: "Écran suivant" }).click();
+      await popup.waitForFunction(`document.querySelectorAll(".moteur-ecran-termine").length === 1`);
+      verifier((await popup.getByRole("button", { name: "Modifier ma réponse" }).count()) === 1, `${l} : dans l'aperçu, l'écran répondu propose « Modifier ma réponse »`);
+      await popup.screenshot({ path: join(CAPTURES, `${largeur}-apercu-retour-modifier.png`), fullPage: true });
+    } else {
+      verifier((await popup.getByRole("button", { name: "Question suivante" }).count()) === 1 && (await popup.getByRole("button", { name: /Modifier ma réponse/ }).count()) === 0, `${l} : sans le réglage, comportement d'origine`);
+    }
+    verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+    await contexte.close();
+  }
+}
+
 /** Le professeur COMPOSE une tâche gen7 dans prof.html (champs actifs, création réelle), puis l'assigne ; l'élève la reçoit. */
 async function scenarioGen7Prof(navigateur: any, base: string, largeur: number) {
   const l = `${largeur}`;
@@ -1925,6 +1977,8 @@ async function main() {
       controlerReponsesHttp(`${largeur} gen7 cascade`);
       await scenarioApercu(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} aperçu`);
+      await scenarioApercuRetour(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} aperçu retour`);
       await scenarioRetourArriere(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} retour en arrière`);
     }
