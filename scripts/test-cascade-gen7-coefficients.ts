@@ -203,8 +203,15 @@ async function main(): Promise<void> {
     await deuxCache.poster("coefficients", COEF_FAUX);
     const b2 = await deuxCache.poster("coefficients", JSON.stringify({ a: "6", b: "4", c: "-4" }));
     verifier(b2.corps.verrouille === true && b2.corps.revele === false && b2.corps.solution_attendue === undefined, "2 essais, case décochée : l'épuisement verrouille sans montrer la solution");
+    // RAPPORT §45 : case cochée => la réponse fausse a été révélée, les écrans suivants repartent de la VRAIE fonction (plus de 6x² + 4x − 4).
     const gd = await deux.lire();
-    verifier(consigne(gd, "allure").includes("$f(x) = 6x^2 + 4x - 4$"), `la valeur confirmée est celle de la DERNIÈRE tentative (a = 6) : ${consigne(gd, "allure").slice(0, 100)}`);
+    verifier(!consigne(gd, "allure").includes("6x^2") && consigne(gd, "allure").includes("4x^2") && !consigne(gd, "allure").includes("d'après les coefficients"), `case cochée : allure sur la vraie fonction, pas sur la dernière réponse fausse : ${consigne(gd, "allure").slice(0, 100)}`);
+    // Sans la case (rien n'est montré) : la valeur confirmée est celle de la DERNIÈRE tentative.
+    const derniere = await nouveau({ feedback: true, tentatives: 1, reponseVisible: false });
+    await derniere.poster("coefficients", COEF_FAUX);
+    await derniere.poster("coefficients", JSON.stringify({ a: "6", b: "4", c: "-4" }));
+    const gl = await derniere.lire();
+    verifier(consigne(gl, "allure").includes("$f(x) = 6x^2 + 4x - 4$"), `sans la case : la valeur confirmée est celle de la DERNIÈRE tentative (a = 6) : ${consigne(gl, "allure").slice(0, 100)}`);
     const pe = await nouveau({ feedback: true, tentatives: 1, reponseVisible: true });
     await pe.poster("coefficients", COEF_FAUX);
     const p2 = await pe.poster("coefficients", JSON.stringify({ a: "x", b: "1", c: "1" }));

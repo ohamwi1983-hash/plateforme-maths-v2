@@ -53,14 +53,17 @@ async function blocContrat(): Promise<void> {
         const conf = [confirmee(CHAMP_ETAPE1, String(rPrime), rPrime === vrai ? "correct" : "not_equivalent")];
         const p = await projeter(seed, conf, ci);
         const ex = p.exercice as ExerciceCascade;
-        // énoncé, aide, solution : bâtis sur la valeur CONFIRMÉE, jamais sur la vraie
-        if (consigne(p.ecrans, CHAMP_ETAPE2) !== CONSIGNE2(rPrime)) compteurs.projection++;
-        if (!aideDe(p.ecrans, CHAMP_ETAPE2).includes(`$2 \\times ${rPrime}$`)) compteurs.aide++;
-        if (g.solutionAttendue(ex, CHAMP_ETAPE2) !== String(2 * rPrime)) compteurs.solution++;
-        // la méthode juste appliquée à la donnée confirmée RÉUSSIT
-        if (g.verifier(ex, CHAMP_ETAPE2, String(2 * rPrime)).statut !== "correct") compteurs.verifMethode++;
-        // la chaîne officiellement correcte n'est acceptée que si la donnée confirmée est la vraie
-        if ((g.verifier(ex, CHAMP_ETAPE2, String(2 * vrai)).statut === "correct") !== (rPrime === vrai)) compteurs.verifOfficielleRejetee++;
+        // RAPPORT §45 : `ci` = « la solution a été montrée » ; une réponse fausse a alors été RÉVÉLÉE, la donnée de départ est la VRAIE valeur.
+        // Sans solution montrée : la valeur CONFIRMÉE, même fausse (§18).
+        const donnee = ci && rPrime !== vrai ? vrai : rPrime;
+        // énoncé, aide, solution : bâtis sur la donnée de départ
+        if (consigne(p.ecrans, CHAMP_ETAPE2) !== CONSIGNE2(donnee)) compteurs.projection++;
+        if (!aideDe(p.ecrans, CHAMP_ETAPE2).includes(`$2 \\times ${donnee}$`)) compteurs.aide++;
+        if (g.solutionAttendue(ex, CHAMP_ETAPE2) !== String(2 * donnee)) compteurs.solution++;
+        // la méthode juste appliquée à la donnée de départ RÉUSSIT
+        if (g.verifier(ex, CHAMP_ETAPE2, String(2 * donnee)).statut !== "correct") compteurs.verifMethode++;
+        // la chaîne officiellement correcte n'est acceptée que si la donnée de départ est la vraie
+        if ((g.verifier(ex, CHAMP_ETAPE2, String(2 * vrai)).statut === "correct") !== (donnee === vrai)) compteurs.verifOfficielleRejetee++;
         // liste des champs constante quelles que soient les confirmations
         if (p.ecrans.map((e) => e.champ).join() !== CHAMPS_CASCADE.join()) compteurs.champsConstants++;
         // indépendance : confirmer aussi les écrans suivants ne change pas l'énoncé de l'écran 2
@@ -70,10 +73,15 @@ async function blocContrat(): Promise<void> {
     }
     // chaîne : etape1 = r', etape2 = w (confirmés) → l'écran 3 porte w, la méthode juste (w + 1) réussit
     for (const [rPrime, w] of [[vrai + 3, 5], [vrai, 2 * vrai + 1], [-4, -9], [0, 0]] as const) {
-      const p = await projeter(seed, [confirmee(CHAMP_ETAPE1, String(rPrime)), confirmee(CHAMP_ETAPE2, String(w))], true);
+      const p = await projeter(seed, [confirmee(CHAMP_ETAPE1, String(rPrime)), confirmee(CHAMP_ETAPE2, String(w))], false);
       const ex = p.exercice as ExerciceCascade;
       if (consigne(p.ecrans, CHAMP_ETAPE3) !== CONSIGNE3(w) || consigne(p.ecrans, CHAMP_ETAPE2) !== CONSIGNE2(rPrime) || g.verifier(ex, CHAMP_ETAPE3, String(w + 1)).statut !== "correct" || g.solutionAttendue(ex, CHAMP_ETAPE3) !== String(w + 1)) compteurs.chaine++;
     }
+    // solution montrée : des réponses CORRECTES font toujours la chaîne (la vraie valeur, w = 2 × vrai) ; une réponse fausse, elle, est ignorée
+    const pc = await projeter(seed, [confirmee(CHAMP_ETAPE1, String(vrai), "correct"), confirmee(CHAMP_ETAPE2, String(2 * vrai), "correct")], true);
+    if (consigne(pc.ecrans, CHAMP_ETAPE3) !== CONSIGNE3(2 * vrai)) compteurs.chaine++;
+    const pf = await projeter(seed, [confirmee(CHAMP_ETAPE1, String(vrai + 3), "not_equivalent"), confirmee(CHAMP_ETAPE2, String(2 * vrai), "correct")], true);
+    if (consigne(pf.ecrans, CHAMP_ETAPE2) !== CONSIGNE2(vrai) || consigne(pf.ecrans, CHAMP_ETAPE3) !== CONSIGNE3(2 * vrai)) compteurs.chaine++;
     // repli : prédécesseur inexploitable (non analysable, chrono sans réponse, hors domaine, absent)
     const inexploitables: (ReponseConfirmee[])[] = [[confirmee(CHAMP_ETAPE1, "abc", "parse_error")], [confirmee(CHAMP_ETAPE1, "", "not_equivalent")], [confirmee(CHAMP_ETAPE1, "99999")], [confirmee(CHAMP_ETAPE1, "3,5")], []];
     for (const conf of inexploitables) {
@@ -168,9 +176,9 @@ async function blocRoute(): Promise<void> {
     };
     const fausse = (v: number) => v + 5; // toujours ≠ vrai
 
-    // ── R1 : correction ACTIVE — donnée fausse confirmée, méthode juste ⇒ RÉUSSITE en cascade ──
+    // ── R1 : correction immédiate SANS « Afficher la réponse attendue » — donnée fausse confirmée, méthode juste ⇒ RÉUSSITE en cascade (§18, inchangé) ──
     {
-      const x = await nouveau(true, true); // reponse_visible : les solutions relues à la fin sont montrées
+      const x = await nouveau(true, false); // aucune solution montrée : la valeur fausse de l'élève reste la donnée de départ
       const g0 = await x.lire();
       verifier(g0.statut === 200 && x.champsServis(g0).join() === `${CHAMP_ETAPE1},${CHAMP_LIBRE}` && g0.corps.champs.length === 4, `R1 GET initial : seuls les écrans indépendants sont servis, état complet (${JSON.stringify(x.champsServis(g0))}, ${g0.corps.champs?.length} champs)`);
       verifier(!JSON.stringify(g0.corps).includes("Ton résultat précédent"), "R1 GET initial : aucun texte d'écran dépendant dans la charge utile");
@@ -192,20 +200,34 @@ async function blocRoute(): Promise<void> {
       verifier(r3.statut === 200 && r3.corps.statut === "correct", `R1 chaîne complète : ${JSON.stringify(r3.corps)}`);
       const r4 = await x.poster(CHAMP_LIBRE, "4");
       verifier(r4.corps.tache_terminee === true, "R1 tâche terminée");
-      const fin = await x.lire();
-      const sol = (champ: string) => fin.corps.champs.find((c: any) => c.champ === champ).solution_attendue;
-      verifier(sol(CHAMP_ETAPE2) === String(2 * fausse(x.vrai)) && sol(CHAMP_ETAPE3) === String(2 * fausse(x.vrai) + 1), `R1 solutions relues cohérentes avec l'énoncé vu (${sol(CHAMP_ETAPE2)}, ${sol(CHAMP_ETAPE3)})`);
-      const td = await appeler("eleves/tableau-de-bord", "GET", { jeton: jetonEleve });
-      const champsTd = ["en_cours", "effectuees", "anterieures"].flatMap((k) => (td.corps[k] ?? []) as any[]).flatMap((t) => t.exercices ?? []).find((e: any) => e.id === x.id)?.champs ?? [];
-      verifier(champsTd.find((c: any) => c.champ === CHAMP_ETAPE2)?.solution_attendue === String(2 * fausse(x.vrai)), "R1 tableau de bord : solution de l'étape 2 projetée");
     }
 
-    // ── R2 : correction ACTIVE — la chaîne « officielle » est REJETÉE quand la donnée confirmée est fausse ──
+    // ── R1b : correction immédiate + « Afficher la réponse attendue » (RAPPORT §45) — la réponse fausse a été RÉVÉLÉE : l'écran suivant repart de la VRAIE valeur ──
     {
-      const x = await nouveau(true, true); // case « Afficher la réponse attendue » cochée : le champ épuisé montre sa solution (RAPPORT §42)
+      const x = await nouveau(true, true);
+      const r1 = await x.poster(CHAMP_ETAPE1, String(fausse(x.vrai)));
+      verifier(r1.statut === 200 && r1.corps.statut === "not_equivalent" && r1.corps.solution_attendue === String(x.vrai), `R1b etape1 fausse : verdict + solution révélée (${JSON.stringify(r1.corps)})`);
+      const g1 = await x.lire();
+      verifier(x.consigneServie(g1, CHAMP_ETAPE2) === CONSIGNE2(x.vrai) && !JSON.stringify(g1.corps).includes(`$${fausse(x.vrai)}$`), `R1b etape2 bâtie sur la VRAIE valeur ${x.vrai}, jamais sur la fausse ${fausse(x.vrai)} : ${x.consigneServie(g1, CHAMP_ETAPE2)}`);
+      const a2 = await x.aide(CHAMP_ETAPE2);
+      verifier(a2.statut === 200 && a2.corps.aide === `Double de $${x.vrai}$ : $2 \\times ${x.vrai}$.`, `R1b aide bâtie sur la vraie valeur : ${JSON.stringify(a2.corps)}`);
+      const r2 = await x.poster(CHAMP_ETAPE2, String(2 * fausse(x.vrai)));
+      verifier(r2.corps.statut === "not_equivalent", `R1b la méthode juste sur la valeur FAUSSE n'est plus acceptée, reçu ${JSON.stringify(r2.corps)}`);
+      const y = await nouveau(true, true);
+      await y.poster(CHAMP_ETAPE1, String(fausse(y.vrai)));
+      const r2y = await y.poster(CHAMP_ETAPE2, String(2 * y.vrai));
+      verifier(r2y.corps.statut === "correct", `R1b la chaîne officielle (2 × vraie valeur) est acceptée, reçu ${JSON.stringify(r2y.corps)}`);
+      const z = await nouveau(true, true);
+      await z.poster(CHAMP_ETAPE1, String(z.vrai));
+      verifier(x.consigneServie(await z.lire(), CHAMP_ETAPE2) === CONSIGNE2(z.vrai), "R1b une réponse CORRECTE reste la donnée de départ");
+    }
+
+    // ── R2 : correction immédiate SANS la case — la chaîne « officielle » est REJETÉE quand la donnée confirmée est fausse, sans révéler la solution ──
+    {
+      const x = await nouveau(true, false);
       await x.poster(CHAMP_ETAPE1, String(fausse(x.vrai)));
       const r = await x.poster(CHAMP_ETAPE2, String(2 * x.vrai));
-      verifier(r.statut === 200 && r.corps.statut === "not_equivalent" && r.corps.solution_attendue === String(2 * fausse(x.vrai)), `R2 chaîne officielle rejetée, solution projetée révélée : ${JSON.stringify(r.corps)}`);
+      verifier(r.statut === 200 && r.corps.statut === "not_equivalent" && r.corps.solution_attendue === undefined, `R2 chaîne officielle rejetée, aucune solution montrée : ${JSON.stringify(r.corps)}`);
     }
 
     // ── R3 : correction ACTIVE + réponse visible — prédécesseur non analysable : repli sur la vraie valeur (déjà révélée) ──

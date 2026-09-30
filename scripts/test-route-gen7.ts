@@ -33,9 +33,9 @@ async function main(): Promise<void> {
   let compteur = 0;
 
   /** Assigne UN exercice de la variante avec la graine voulue (la route tire la graine de `Math.random`). */
-  const nouveau = async (categorie: CategorieAnalyseFonction, graine: number, options: { feedback?: boolean; tentatives?: number } = {}) => {
+  const nouveau = async (categorie: CategorieAnalyseFonction, graine: number, options: { feedback?: boolean; tentatives?: number; visible?: boolean } = {}) => {
     compteur++;
-    const tache = creerTache(s, { nom: `gen7 ${compteur}`, variantes: [{ variante_id: `af_${categorie}`, nombre_exercices: 1 }], feedback_immediat: options.feedback ?? true, tentatives_supplementaires: options.tentatives ?? 0, reponse_visible: true });
+    const tache = creerTache(s, { nom: `gen7 ${compteur}`, variantes: [{ variante_id: `af_${categorie}`, nombre_exercices: 1 }], feedback_immediat: options.feedback ?? true, tentatives_supplementaires: options.tentatives ?? 0, reponse_visible: options.visible ?? true });
     const origine = Math.random;
     Math.random = () => graine / 2 ** 32;
     try {
@@ -159,14 +159,16 @@ async function main(): Promise<void> {
     const c2 = consigneDe((await coupe.lire()).ecrans, "racinesChamp2");
     verifier(c2.includes("L'équation à résoudre est $4x^2 + 8x = 0$") && !c2.includes("(x + 2)"), `coupé + illisible : équation DÉVELOPPÉE publique (« ${c2.slice(0, 80)} »)`);
 
-    const immediat = await nouveau("mise_en_evidence", 12345, { feedback: true, tentatives: 0 });
+    // Immédiate SANS « Afficher la réponse attendue » : rien n'est montré, la cascade reste celle de la donnée de l'élève. (Avec la case, RAPPORT §45 :
+    // la réponse fausse est révélée, la vraie valeur sert de départ — `scripts/test-cascade-revelee.ts`.)
+    const immediat = await nouveau("mise_en_evidence", 12345, { feedback: true, tentatives: 0, visible: false });
     for (const champ of ["coefficients", "allure", "axeSommet", "domaineImage", "racinesReconnaissance"]) await immediat.poster(champ, reponseBruteCorrecteAnalyseFonction(immediat.ex, champ));
     const rate = await immediat.poster("racinesChamp1", "3x(x-2)");
     verifier(rate.corps.statut === "not_equivalent", "immédiat : factorisation fausse → not_equivalent");
     const c2i = consigneDe((await immediat.lire()).ecrans, "racinesChamp2");
     // RAPPORT §38 (D-A du propriétaire, déroge à §33-D) : la cascade est UNIFORME. Une factorisation fausse mais exploitable, même révélée par la
     // correction immédiate, reste la donnée de départ de racinesChamp2 (avant : « La factorisation est $4x(x + 2) = 0$ »).
-    verifier(c2i.includes("D'après ta factorisation") && c2i.includes("$3x(x - 2) = 0$") && !c2i.includes("4x(x + 2)"), `immédiat + réponse révélée : la cascade suit SA factorisation (« ${c2i.slice(0, 80)} »)`);
+    verifier(c2i.includes("D'après ta factorisation") && c2i.includes("$3x(x - 2) = 0$") && !c2i.includes("4x(x + 2)"), `immédiat sans la case : la cascade suit SA factorisation (« ${c2i.slice(0, 80)} »)`);
   }
 
   // ── 6. af_irreductible : deux écrans racines inexistants, requêtes forgées rejetées ──
