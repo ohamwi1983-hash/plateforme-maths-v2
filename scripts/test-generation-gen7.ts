@@ -264,55 +264,34 @@ verifier(factorisationVersLatex("__proto__") === null && racinesDeFactorisation(
 verifier(projeterAnalyseFonction(genererExercice("irreductible", 5), [conf(CHAMP_RACINES_FACTORISATION, "x(x-1)", "correct")], { correctionImmediate: true, solutionMontree: true }).zeros === null, "af_irreductible : aucune donnée de racines même si une réponse forgée existe");
 verifier(ecransAnalyseFonction(me).map((e) => e.champ).join() === ecransAnalyseFonction(projeterAnalyseFonction(me, [conf(CHAMP_RACINES_FACTORISATION, "3x(x-2)", "not_equivalent")], { correctionImmediate: false, solutionMontree: false })).map((e) => e.champ).join(), "la projection ne change JAMAIS la liste des champs (champs_attendus figé à l'assignation)");
 
-// ── 6. Panneau « Ce que tu sais déjà » : texte de consigne, seulement les écrans RÉUSSIS qui PRÉCÈDENT, jamais sous correction coupée ──
+// ── 6. « Ce qu'on sait déjà » n'est PLUS une ligne de consigne (RAPPORT §43 : c'est le rappel du moteur, dérivé côté client des écrans déjà traversés) ;
+//       chaque écran porte en revanche un NOM court, unique dans l'exercice, sain, identique pour tous les élèves ──
 {
-  const PANNEAU = "Ce que tu sais déjà :";
-  const consigneDe2 = (ex: ExerciceAnalyseFonction, champ: string): string => ecransAnalyseFonction(ex).find((e) => e.champ === champ)?.consigne ?? "";
+  const PANNEAU = "Ce que tu sais déjà";
   for (const categorie of CATEGORIES) {
     for (const graine of [1, 42, 12345, 987654]) {
       const brut = genererExercice(categorie, graine);
       const ordre = champsAnalyseFonction(categorie);
-      const f = brut.fonction;
       const bonnes = ordre.map((champ) => conf(champ, reponseBruteCorrecteAnalyseFonction(brut, champ), "correct"));
-      // aucune réponse, ou correction coupée avec TOUT confirmé : jamais de panneau
-      for (const [nom, ex] of [["brut", brut], ["aucune réponse", projeterAnalyseFonction(brut, [], { correctionImmediate: true, solutionMontree: true })], ["coupé, tout réussi", projeterAnalyseFonction(brut, bonnes, { correctionImmediate: false, solutionMontree: false })]] as const) {
-        verifier(ecransAnalyseFonction(ex).every((e) => !e.consigne.includes(PANNEAU)), `${categorie}/${graine} ${nom} : aucun panneau`);
+      for (const k of [0, 2, ordre.length]) {
+        for (const solutionMontree of [true, false]) {
+          const ex = projeterAnalyseFonction(brut, bonnes.slice(0, k), { correctionImmediate: solutionMontree, solutionMontree });
+          const ecrans = ecransAnalyseFonction(ex);
+          verifier(ecrans.every((e) => !e.consigne.includes(PANNEAU)), `${categorie}/${graine} k=${k} : aucune ligne « ${PANNEAU} » dans une consigne`);
+          verifier(ecrans.every((e) => typeof e.nom === "string" && e.nom.length > 0 && verifierBalisageMath(e.nom).length === 0), `${categorie}/${graine} k=${k} : chaque écran a un nom court sain`);
+          verifier(new Set(ecrans.map((e) => e.nom)).size === ecrans.length, `${categorie}/${graine} k=${k} : les noms sont uniques dans l'exercice`);
+          verifier(JSON.stringify(ecrans.map((e) => e.nom)) === JSON.stringify(ecransAnalyseFonction(brut).map((e) => e.nom)), `${categorie}/${graine} k=${k} : les noms ne dépendent d'aucune réponse`);
+          verifier(ecrans.find((e) => e.champ === "allure" || e.champ === "axeSommet") === undefined || ecrans.filter((e) => e.champ === "allure" || e.champ === "axeSommet").every((e) => !e.consigne.includes("\n")), `${categorie}/${graine} k=${k} : la consigne d'un écran « fonction » est un seul paragraphe`);
+        }
       }
-      for (let k = 0; k <= ordre.length; k++) {
-        const ex = projeterAnalyseFonction(brut, bonnes.slice(0, k), { correctionImmediate: true, solutionMontree: true });
-        ordre.forEach((champ, i) => {
-          const c = consigneDe2(ex, champ);
-          const reussis = ordre.slice(0, Math.min(i, k));
-          const attendu = (c2: string) => reussis.includes(c2);
-          const aPanneau = c.includes(PANNEAU);
-          const doitAvoir = reussis.some((r) => ["coefficients", "allure", "axeSommet", "domaineImage"].includes(r)) || (attendu("racinesChamp1") && attendu("racinesChamp2"));
-          verifier(aPanneau === doitAvoir, `${categorie}/${graine} k=${k} ${champ} : panneau ${aPanneau ? "présent" : "absent"}, attendu ${doitAvoir ? "présent" : "absent"}`);
-          const ligne = c.split("\n").find((l) => l.startsWith(PANNEAU)) ?? "";
-          verifier(ligne.includes("$a = ") === attendu("coefficients"), `${categorie}/${graine} k=${k} ${champ} : coefficients rappelés ssi réussis avant`);
-          verifier(ligne.includes("parabole tournée vers le ") === attendu("allure"), `${categorie}/${graine} k=${k} ${champ} : allure rappelée ssi réussie avant`);
-          verifier(ligne.includes("sommet $S(") === attendu("axeSommet"), `${categorie}/${graine} k=${k} ${champ} : sommet rappelé ssi réussi avant`);
-          verifier(ligne.includes("\\mathrm{im}") === attendu("domaineImage"), `${categorie}/${graine} k=${k} ${champ} : ensemble-image rappelé ssi réussi avant`);
-          verifier((/\$x_[12]\s*=/.test(ligne)) === (attendu("racinesChamp1") && attendu("racinesChamp2") && categorie !== "irreductible"), `${categorie}/${graine} k=${k} ${champ} : racines rappelées ssi les deux écrans racines sont réussis avant (${ligne})`);
-          verifier(verifierBalisageMath(c).length === 0, `${categorie}/${graine} k=${k} ${champ} : consigne avec panneau saine`);
-          if (champ !== "racinesChamp1" && champ !== "racinesChamp2" && champ !== "racinesReconnaissance") // RAPPORT §38 : après « coefficients » confirmés (justes ou faux, même libellé), allure/axeSommet/domaineImage disent « d'après les coefficients que tu as donnés ».
-            verifier(c.startsWith("Étudie la fonction suivante") && c.split("\n")[0]!.includes(" : $f(x) = ") && (!aPanneau || c.split("\n")[0]!.endsWith("$.")), `${categorie}/${graine} ${champ} : la première ligne reste l'énoncé de la fonction`);
-        });
-      }
-      // un écran RATÉ (même révélé par la correction immédiate) n'est jamais rappelé
-      const rate = projeterAnalyseFonction(brut, [conf("coefficients", "{}", "not_equivalent"), conf("allure", reponseBruteCorrecteAnalyseFonction(brut, "allure"), "correct")], { correctionImmediate: true, solutionMontree: true });
-      const cAxe = consigneDe2(rate, "axeSommet");
-      verifier(cAxe.includes("parabole tournée vers le ") && !cAxe.includes("$a = ") && !cAxe.includes(`$b = ${f.b}$`), `${categorie}/${graine} : un écran raté n'est jamais rappelé (${cAxe.split("\n")[1] ?? ""})`);
-      // un écran ne rappelle jamais SA propre réponse
-      const seul = projeterAnalyseFonction(brut, bonnes.slice(0, 1), { correctionImmediate: true, solutionMontree: true });
-      verifier(!consigneDe2(seul, "coefficients").includes(PANNEAU), `${categorie}/${graine} : l'écran coefficients ne rappelle pas ses propres coefficients`);
     }
   }
-  // Le panneau ne change ni la liste des champs ni le nombre d'écrans (champs_attendus figé à l'assignation).
+}
+{
+  // Les noms n'ajoutent ni ne retirent aucun champ : la liste des champs (`champs_attendus`, figée à l'assignation) est inchangée par la projection.
   const brut = genererExercice("mise_en_evidence", 12345);
   const tous = ["coefficients", "allure", "axeSommet", "domaineImage", "racinesReconnaissance", "racinesChamp1", "racinesChamp2", "tableauSignes"].map((c) => conf(c, reponseBruteCorrecteAnalyseFonction(brut, c), "correct"));
-  verifier(ecransAnalyseFonction(projeterAnalyseFonction(brut, tous, { correctionImmediate: true, solutionMontree: true })).map((e) => e.champ).join() === champsAnalyseFonction("mise_en_evidence").join(), "le panneau ne change pas la liste des champs");
-  const tab = consigneDe2(projeterAnalyseFonction(brut, tous, { correctionImmediate: true, solutionMontree: true }), "tableauSignes");
-  verifier(tab.includes("racines $x_1 = -2$ et $x_2 = 0$") && tab.includes("sommet $S(-1\\,;\\,-4)$") && tab.includes("$\\mathrm{im}\\,f = [-4\\,;\\,+\\infty[$"), `panneau complet de 4x²+8x avant le tableau : « ${tab.split("\n")[1]} »`);
+  verifier(ecransAnalyseFonction(projeterAnalyseFonction(brut, tous, { correctionImmediate: true, solutionMontree: true })).map((e) => e.champ).join() === champsAnalyseFonction("mise_en_evidence").join(), "la projection ne change pas la liste des champs");
 }
 
 if (echecs.length > 0) {
@@ -320,4 +299,4 @@ if (echecs.length > 0) {
   for (const e of echecs.slice(0, 40)) console.error(` - ${e}`);
   process.exit(1);
 }
-console.log(`OK : ${nb} vérifications (génération seedée + ordre des tirages figé, 8/6 écrans, dépendances, textes sains, solutions, cascade A/B, entrées hostiles)`);
+console.log(`OK : ${nb} vérifications (génération seedée + ordre des tirages figé, 8/6 écrans, dépendances, textes sains, solutions, cascade A/B, entrées hostiles, noms d'écran)`);

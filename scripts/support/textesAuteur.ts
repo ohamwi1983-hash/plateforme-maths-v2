@@ -7,6 +7,7 @@ import type { EcranDeclare } from "../../lib/contratGenerateur";
 
 export function textesAuteurDe(e: EcranDeclare): string[] {
   const t = [e.consigne];
+  if (e.nom) t.push(e.nom);
   if (typeof e.aide === "string") t.push(e.aide);
   if (e.type === "qcm") t.push(...e.choix.map((c) => c.libelle));
   if (e.type === "champs_multiples") {

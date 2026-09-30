@@ -598,8 +598,25 @@ function reponseBruteCorrecteEtendue(ex: ExerciceEtendu, champ: string): string 
 // Le générateur (un seul objet, un seul `variante_id`)
 // ════════════════════════════════════════════════════════════════════════════════════════════
 
+/** Nom court de chaque écran (RAPPORT §43) : libellé de sa ligne dans le « Ce qu'on sait déjà » du moteur. */
+const NOMS_ECRANS: Readonly<Record<string, string>> = {
+  [CHAMP_SOMME]: "Somme",
+  [CHAMP_PARITE]: "Parité",
+  [CHAMP_DIVISEURS]: "Diviseurs",
+  [CHAMP_SIGNES]: "Signes",
+  [CHAMP_COEFFICIENTS]: "Coefficients",
+  [CHAMP_ALLURE]: "Allure",
+  [CHAMP_EXTREMUM]: "Extremum",
+  [CHAMP_AXE]: "Axe",
+  [CHAMP_IMAGE]: "Image",
+  [CHAMP_RACINES]: "Racines",
+  [CHAMP_SIGNES_VARIATION]: "Signes et variation",
+  [CHAMP_QUOTIENT]: "Quotient",
+};
+
 function ecransDe(ex: ExerciceTemoin): EcranDeclare[] {
-  return ex.profil === "etendu" && ex.etendu ? ecransEtendus(ex.etendu) : ecransBase(ex);
+  const ecrans = ex.profil === "etendu" && ex.etendu ? ecransEtendus(ex.etendu) : ecransBase(ex);
+  return ecrans.map((e) => ({ ...e, nom: NOMS_ECRANS[e.champ] }));
 }
 
 function etenduDe(ex: ExerciceTemoin, champ: string): ExerciceEtendu {

@@ -396,6 +396,7 @@ const CHAMPS = CHAMPS_ETENDUS;
 /** Tous les textes D'AUTEUR d'un écran, étiquetés par nature (pour vérifier que chaque nature porte du balisage). */
 function textesAuteur(ecran: EcranDeclare): { nature: string; texte: string }[] {
   const t: { nature: string; texte: string }[] = [{ nature: "consigne", texte: ecran.consigne }];
+  if (ecran.nom) t.push({ nature: "nom d'écran", texte: ecran.nom });
   if (typeof ecran.aide === "string") t.push({ nature: "aide (chaîne)", texte: ecran.aide });
   if (ecran.type === "qcm") for (const c of ecran.choix) t.push({ nature: "libellé de choix (qcm)", texte: c.libelle });
   if (ecran.type === "liste_valeurs") {

@@ -232,7 +232,7 @@ export function effectifDepuisReponses(f: FonctionSecondDegre, reponsesConfirmee
 
 /**
  * `Generateur.projeter` de gen7 : l'exercice EFFECTIF vu par l'élève. Ne dépend que des réponses CONFIRMÉES et du réglage statique
- * `correctionImmediate` (panneau de faits : le VERDICT est visible) et `solutionMontree` (valeurs vraies du tableau, repli de `racinesChamp2` :
+ * `solutionMontree` (valeurs vraies du tableau, repli de `racinesChamp2` :
  * la SOLUTION a pu être montrée), qui ne choisissent plus que l'AFFICHAGE, jamais quelle donnée sert de départ.
  *  - Coefficients, sommet, ordonnée : `effectifDepuisReponses` (RAPPORT §38).
  *  - `racinesChamp2` : réponse confirmée à `racinesChamp1` « utilisable » = elle se lit (`analyserExpression`) et donne 1 ou 2 racines
@@ -247,11 +247,8 @@ export function projeterAnalyseFonction(ex: ExerciceAnalyseFonction, reponsesCon
   // Valeurs vraies du tableau : seulement si la solution a pu être MONTRÉE (correction immédiate ET « Afficher la réponse attendue »,
   // RAPPORT §42) ; sinon elles rappelleraient, sans qu'on la leur ait donnée, la solution de `axeSommet` / `racinesChamp2`.
   const affichageTableau = contexte.solutionMontree ? "vraies" : "symboliques";
-  // Panneau « Ce que tu sais déjà » (RAPPORT §33) : seuls les écrans RÉUSSIS y figurent, et jamais sous correction coupée (un fait est
-  // la bonne valeur : le montrer avant la fin de la tâche révélerait la réponse). Un écran raté n'y figure jamais, même révélé.
-  const corrects = contexte.correctionImmediate ? reponsesConfirmees.filter((r) => r.statut === "correct").map((r) => r.champ) : [];
   const effectif = effectifDepuisReponses(ex.fonction, reponsesConfirmees);
-  if (ex.fonction.racines === null || ex.formeFactorisee === null) return { ...ex, effectif, affichageTableau, corrects };
+  if (ex.fonction.racines === null || ex.formeFactorisee === null) return { ...ex, effectif, affichageTableau };
   const vraiesRacines = ex.fonction.racines;
   const vraieLatex = factorisationVersLatex(ex.formeFactorisee) as string;
   const confirmee = reponsesConfirmees.find((r) => r.champ === CHAMP_RACINES_FACTORISATION);
@@ -260,14 +257,13 @@ export function projeterAnalyseFonction(ex: ExerciceAnalyseFonction, reponsesCon
     const latex = factorisationVersLatex(confirmee.reponseBrute);
     const racines = racinesDeFactorisation(confirmee.reponseBrute);
     if (latex !== null && racines !== null) {
-      return { ...ex, effectif, affichageTableau, corrects, zeros: { racines: confirmee.statut === "correct" ? vraiesRacines : racines, factorisationLatex: latex, origine: "eleve" } };
+      return { ...ex, effectif, affichageTableau, zeros: { racines: confirmee.statut === "correct" ? vraiesRacines : racines, factorisationLatex: latex, origine: "eleve" } };
     }
   }
   return {
     ...ex,
     effectif,
     affichageTableau,
-    corrects,
     zeros: contexte.solutionMontree
       ? { racines: vraiesRacines, factorisationLatex: vraieLatex, origine: "solution" }
       : { racines: vraiesRacines, factorisationLatex: equationCanonique(ex.fonction), origine: "enonce" },
