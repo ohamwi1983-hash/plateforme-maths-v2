@@ -21,15 +21,16 @@ function donneesRacines(ex: ExerciceAnalyseFonction, champ: string): DonneesRaci
 
 export function verifierAnalyseFonction(ex: ExerciceAnalyseFonction, champ: string, reponseBrute: string): ResultatVerification {
   const f = ex.fonction;
+  const e = ex.effectif; // données effectives de la cascade des coefficients (RAPPORT §38) ; les vraies dans l'exercice brut
   switch (champ) {
     case CHAMP_COEFFICIENTS:
       return verifierCoefficients(f, reponseBrute);
     case CHAMP_ALLURE:
-      return verifierAllure(f, reponseBrute);
+      return verifierAllure({ a: e.a, b: e.b }, reponseBrute);
     case CHAMP_AXE_SOMMET:
-      return verifierAxeSommet(f, reponseBrute);
+      return verifierAxeSommet({ xS: e.xS, yS: e.yS }, reponseBrute);
     case CHAMP_DOMAINE_IMAGE:
-      return verifierDomaineImage(f, reponseBrute);
+      return verifierDomaineImage({ a: e.a, yS: e.yImage }, reponseBrute);
     case CHAMP_RECONNAISSANCE:
       return verifierReconnaissance(f, reponseBrute);
     case CHAMP_RACINES_FACTORISATION:

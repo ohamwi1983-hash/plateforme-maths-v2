@@ -54,3 +54,38 @@ export function fonctionDe(categorie: CategorieAnalyseFonction, a: number, b: nu
   // `-0` (b = 0) est un vrai zéro pour les comparaisons mais s'écrit « 0 » : jamais « -0 » dans un texte.
   return { categorie, a, b, c, xS: xS === 0 ? 0 : xS, yS: yS === 0 ? 0 : yS, racines };
 }
+
+/**
+ * Données EFFECTIVES des écrans `allure`, `axeSommet` et `domaineImage` (RAPPORT §38, cascade des coefficients) : ce que la méthode juste
+ * donne à partir de ce que l'élève a CONFIRMÉ (« une méthode juste appliquée à une donnée de départ fausse doit réussir »), dans les deux
+ * régimes de correction. Dans l'exercice brut : les vraies valeurs.
+ *  - `a`, `b`, `c` : coefficients confirmés à `coefficients` s'ils sont exploitables (lisibles, `a ≠ 0`, bornés), sinon les vrais — la
+ *    fonction est PUBLIQUE dans l'énoncé, ce repli ne révèle rien ;
+ *  - `xS`, `yS` : sommet de la parabole de ces coefficients ;
+ *  - `yImage` : borne de `im f`, l'ordonnée du sommet CONFIRMÉE à `axeSommet` si elle est lisible et s'écarte de `yS` de plus que la
+ *    tolérance de saisie, sinon `yS`.
+ */
+export interface DonneesEffectives {
+  a: number;
+  b: number;
+  c: number;
+  xS: number;
+  yS: number;
+  yImage: number;
+  /** `a, b, c` viennent de l'élève ET diffèrent des vrais (sert au panneau de faits : une donnée fausse n'établit aucun fait). */
+  coefficientsEleve: boolean;
+  /** `yImage` diffère de la vraie ordonnée du sommet (idem). */
+  ordonneeEleve: boolean;
+  /**
+   * Les coefficients CONFIRMÉS sont exploitables (justes OU faux) : l'énoncé des écrans suivants affiche SA fonction, avec le même libellé dans
+   * les deux cas. Un libellé qui n'apparaîtrait qu'en cas d'erreur serait un verdict visible sous correction coupée (règle de révélation).
+   */
+  coefficientsAffiches: boolean;
+  /** L'ordonnée du sommet confirmée à `axeSommet` est exploitable (juste ou fausse) : la consigne de `domaineImage` la rappelle dans les deux cas. */
+  ordonneeAffichee: boolean;
+}
+
+/** Données effectives d'un exercice non projeté : les vraies. */
+export function effectifVrai(f: FonctionSecondDegre): DonneesEffectives {
+  return { a: f.a, b: f.b, c: f.c, xS: f.xS, yS: f.yS, yImage: f.yS, coefficientsEleve: false, ordonneeEleve: false, coefficientsAffiches: false, ordonneeAffichee: false };
+}

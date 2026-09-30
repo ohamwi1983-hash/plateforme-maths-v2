@@ -181,10 +181,12 @@ const jugerZeros = (e: ExerciceAnalyseFonction, valeurs: string[]) => verifierAn
   verifier(jugerZeros(p, ["0", "2"]) === "correct" && jugerZeros(p, ["-2", "0"]) === "not_equivalent", "A2 : une méthode juste sur une donnée fausse RÉUSSIT ; les vraies racines ne réussissent plus (§18)");
   verifier(zerosDe(genererExercice("mise_en_evidence", 12345)).racines.join() === vraies, "A2 : l'exercice brut n'est jamais modifié (projection pure)");
 }
-// A3. Correction immédiate, réponse fausse RÉVÉLÉE : vraie factorisation.
+// A3. Correction immédiate, réponse fausse RÉVÉLÉE. §33-D : vraie factorisation. RAPPORT §38 (D-A du propriétaire, cascade uniforme dans les deux
+// régimes) : la factorisation de l'élève, fausse mais exploitable, reste la donnée de départ — comme en correction coupée (A2).
 {
   const p = projeterAnalyseFonction(me, [conf(CHAMP_RACINES_FACTORISATION, "3x(x-2)", "not_equivalent")], { correctionImmediate: true });
-  verifier(zerosDe(p).origine === "solution" && zerosDe(p).racines.join() === vraies && zerosDe(p).factorisationLatex === "4x(x + 2)", `A3 : correction immédiate, réponse révélée → vraie factorisation (${JSON.stringify(zerosDe(p))})`);
+  verifier(zerosDe(p).origine === "eleve" && zerosDe(p).racines.join() === "0,2" && zerosDe(p).factorisationLatex === "3x(x - 2)", `A3 : correction immédiate, réponse révélée mais exploitable → SA factorisation (${JSON.stringify(zerosDe(p))})`);
+  verifier(jugerZeros(p, ["0", "2"]) === "correct" && jugerZeros(p, ["-2", "0"]) === "not_equivalent", "A3 : une méthode juste sur SA donnée réussit aussi sous correction immédiate");
 }
 // A4. Inexploitable : repli à deux régimes.
 const INEXPLOITABLES: [string, string, ReponseConfirmee["statut"]][] = [
@@ -291,7 +293,8 @@ verifier(ecransAnalyseFonction(me).map((e) => e.champ).join() === ecransAnalyseF
           verifier(ligne.includes("\\mathrm{im}") === attendu("domaineImage"), `${categorie}/${graine} k=${k} ${champ} : ensemble-image rappelé ssi réussi avant`);
           verifier((/\$x_[12]\s*=/.test(ligne)) === (attendu("racinesChamp1") && attendu("racinesChamp2") && categorie !== "irreductible"), `${categorie}/${graine} k=${k} ${champ} : racines rappelées ssi les deux écrans racines sont réussis avant (${ligne})`);
           verifier(verifierBalisageMath(c).length === 0, `${categorie}/${graine} k=${k} ${champ} : consigne avec panneau saine`);
-          if (champ !== "racinesChamp1" && champ !== "racinesChamp2" && champ !== "racinesReconnaissance") verifier(c.startsWith("Étudie la fonction suivante : $f(x) = ") && (!aPanneau || c.split("\n")[0]!.endsWith("$.")), `${categorie}/${graine} ${champ} : la première ligne reste l'énoncé de la fonction`);
+          if (champ !== "racinesChamp1" && champ !== "racinesChamp2" && champ !== "racinesReconnaissance") // RAPPORT §38 : après « coefficients » confirmés (justes ou faux, même libellé), allure/axeSommet/domaineImage disent « d'après les coefficients que tu as donnés ».
+            verifier(c.startsWith("Étudie la fonction suivante") && c.split("\n")[0]!.includes(" : $f(x) = ") && (!aPanneau || c.split("\n")[0]!.endsWith("$.")), `${categorie}/${graine} ${champ} : la première ligne reste l'énoncé de la fonction`);
         });
       }
       // un écran RATÉ (même révélé par la correction immédiate) n'est jamais rappelé

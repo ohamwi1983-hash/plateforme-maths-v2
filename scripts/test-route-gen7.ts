@@ -66,7 +66,8 @@ async function main(): Promise<void> {
     verifier(JSON.stringify(x.ligne.champs_attendus) === JSON.stringify(champsAnalyseFonction(categorie)), `${categorie} : champs_attendus = champs des écrans, dans l'ordre (${JSON.stringify(x.ligne.champs_attendus)})`);
     verifier((x.ligne.champs_attendus as string[]).length === (categorie === "irreductible" ? 6 : 8), `${categorie} : ${categorie === "irreductible" ? 6 : 8} champs`);
     const g = await x.lire();
-    const attendusServis = categorie === "irreductible" ? ["coefficients", "allure", "axeSommet", "domaineImage", "racinesReconnaissance"] : ["coefficients", "allure", "axeSommet", "domaineImage", "racinesReconnaissance", "racinesChamp1"];
+    // RAPPORT §38 : allure, axeSommet et domaineImage dépendent des coefficients confirmés (et domaineImage de l'ordonnée du sommet) : ils ne sont plus servis au départ.
+    const attendusServis = categorie === "irreductible" ? ["coefficients", "racinesReconnaissance"] : ["coefficients", "racinesReconnaissance", "racinesChamp1"];
     verifier(champs(g.ecrans).join() === attendusServis.join() && g.champ_courant === "coefficients", `${categorie} : écrans dépendants NON servis au départ (${champs(g.ecrans).join()})`);
     // Le NOM d'un champ figure dans `champs` (état par champ, sans contenu) ; c'est le CONTENU de l'écran qui ne doit pas être servi.
     verifier(!JSON.stringify(g.ecrans).includes("racinesChamp2") && !JSON.stringify(g.ecrans).includes("tableauSignes") && !JSON.stringify(g.ecrans).includes("D'après"), `${categorie} : écrans dépendants absents de la charge utile des écrans`);
@@ -166,7 +167,9 @@ async function main(): Promise<void> {
     const rate = await immediat.poster("racinesChamp1", "3x(x-2)");
     verifier(rate.corps.statut === "not_equivalent", "immédiat : factorisation fausse → not_equivalent");
     const c2i = consigneDe((await immediat.lire()).ecrans, "racinesChamp2");
-    verifier(c2i.includes("La factorisation est $4x(x + 2) = 0$"), `immédiat + réponse révélée : vraie factorisation (« ${c2i.slice(0, 80)} »)`);
+    // RAPPORT §38 (D-A du propriétaire, déroge à §33-D) : la cascade est UNIFORME. Une factorisation fausse mais exploitable, même révélée par la
+    // correction immédiate, reste la donnée de départ de racinesChamp2 (avant : « La factorisation est $4x(x + 2) = 0$ »).
+    verifier(c2i.includes("D'après ta factorisation") && c2i.includes("$3x(x - 2) = 0$") && !c2i.includes("4x(x + 2)"), `immédiat + réponse révélée : la cascade suit SA factorisation (« ${c2i.slice(0, 80)} »)`);
   }
 
   // ── 6. af_irreductible : deux écrans racines inexistants, requêtes forgées rejetées ──

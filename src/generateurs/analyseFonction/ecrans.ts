@@ -4,7 +4,8 @@ import { SOUS_CHAMPS_ALLURE } from "./allure";
 import { SOUS_CHAMPS_AXE_SOMMET } from "./axeSommet";
 import { SOUS_CHAMPS_COEFFICIENTS } from "./coefficients";
 import type { ExerciceAnalyseFonction } from "./exercice";
-import { equationCanonique, latexNombre, latexPolynome, latexRacine } from "./formatage";
+import { COEFFICIENT_MAX } from "../../../lib/aideTypee";
+import { equationCanonique, latexNombre, latexPolynome, latexRacine, termesNonNuls } from "./formatage";
 import { CHOIX_RECONNAISSANCE } from "./reconnaissance";
 import { ecransRacines } from "./racines";
 import { CHAMP_RACINES_FACTORISATION, CHAMP_RACINES_ZEROS } from "./racines/types";
@@ -46,13 +47,44 @@ function ligneFactorisation(z: NonNullable<ExerciceAnalyseFonction["zeros"]>): s
   return `L'équation à résoudre est ${corps}.`;
 }
 
+/**
+ * Dépendances DÉCLARÉES entre écrans de gen7 (RAPPORT §38) : `allure` et `axeSommet` sont jugés sur les coefficients CONFIRMÉS,
+ * `domaineImage` sur eux et sur l'ordonnée du sommet confirmée à `axeSommet`. Un écran dépendant n'est servi qu'une fois ses
+ * prédécesseurs terminés (filtrage serveur) ; seul point où ces listes existent (`ligneFaits` les relit).
+ */
+const DEPENDANCES_FONCTION: Readonly<Record<string, readonly string[]>> = {
+  [CHAMP_ALLURE]: [CHAMP_COEFFICIENTS],
+  [CHAMP_AXE_SOMMET]: [CHAMP_COEFFICIENTS],
+  [CHAMP_DOMAINE_IMAGE]: [CHAMP_COEFFICIENTS, CHAMP_AXE_SOMMET],
+};
+
+const arrondi6 = (v: number): number => Math.round(v * 1e6) / 1e6;
+
+/** Les trois coefficients sont-ils des entiers acceptables par l'aide `croquis_parabole` ? (Sinon : pas d'aide sur cet écran, jamais une aide invalide.) */
+const aideParaboleAdmissible = (e: { a: number; b: number; c: number }): boolean => [e.a, e.b, e.c].every((v) => Number.isInteger(v) && Math.abs(v) <= COEFFICIENT_MAX) && e.a !== 0;
+
 export function ecransAnalyseFonction(ex: ExerciceAnalyseFonction): EcranDeclare[] {
   const f = ex.fonction;
+  const e = ex.effectif;
   const enonce = enonceFonction(ex);
+  // Cascade des coefficients (RAPPORT §38) : dès que les coefficients CONFIRMÉS sont exploitables, les écrans qui en dépendent affichent SA
+  // fonction (jamais celle de l'énoncé, que l'élève ne jugerait pas) et le disent — avec le MÊME libellé qu'ils soient justes ou faux : un libellé
+  // propre à l'erreur serait un verdict visible sous correction coupée.
+  const effAffiche = { a: arrondi6(e.a), b: arrondi6(e.b), c: arrondi6(e.c) };
+  const enonceEffectif = e.coefficientsAffiches ? `Étudie la fonction suivante, d'après les coefficients que tu as donnés : $f(x) = ${latexPolynome(effAffiche, termesNonNuls(effAffiche))}$.` : enonce;
   /** Énoncé + panneau de faits (une ligne, si des écrans précédents sont réussis) + question, chacun sur sa ligne. */
-  const composer = (champ: string, question: string): string => {
+  const composer = (champ: string, question: string, enonceUtilise: string = enonce): string => {
     const faits = ligneFaits(ex, champ);
-    return faits === null ? `${enonce} ${question}` : `${enonce}\n${faits}\n${question}`;
+    return faits === null ? `${enonceUtilise} ${question}` : `${enonceUtilise}\n${faits}\n${question}`;
+  };
+  /**
+   * Aide `croquis_parabole` sur la parabole EFFECTIVE (celle dont l'écran est jugé). Si ses coefficients ne s'y prêtent pas (non entiers, démesurés :
+   * l'aide exige des entiers), repli sur la vraie parabole — publique dans l'énoncé — plutôt que de retirer l'aide : `aide_disponible` ne doit jamais
+   * dépendre de la justesse d'une réponse (une saisie non entière est forcément fausse : le bouton d'aide qui disparaît serait un verdict visible).
+   */
+  const aideParabole = (options: { surlignageImf?: boolean }): Pick<EcranDeclare, "aide"> => {
+    const p = aideParaboleAdmissible(e) ? e : f;
+    return { aide: { type: "croquis_parabole", a: p.a, b: p.b, c: p.c, marqueS: true, ...options } };
   };
   /** Écrans « équation » (sans énoncé de fonction) : le panneau, s'il existe, précède le texte. */
   const avecFaits = (champ: string, texte: string): string => {
@@ -76,22 +108,31 @@ export function ecransAnalyseFonction(ex: ExerciceAnalyseFonction): EcranDeclare
     {
       champ: CHAMP_ALLURE,
       type: "champs_multiples",
-      consigne: composer(CHAMP_ALLURE, "Quelle est l'allure de sa parabole ?"),
+      dependDe: [...DEPENDANCES_FONCTION[CHAMP_ALLURE]!],
+      consigne: composer(CHAMP_ALLURE, "Quelle est l'allure de sa parabole ?", enonceEffectif),
       champs: SOUS_CHAMPS_ALLURE,
-      illustration: { type: "croquis_allure", c: f.c, champSigneA: "signeA", champSigneAB: "signeAB" },
+      illustration: { type: "croquis_allure", c: effAffiche.c, champSigneA: "signeA", champSigneAB: "signeAB" },
     },
     {
       champ: CHAMP_AXE_SOMMET,
       type: "champs_multiples",
-      consigne: composer(CHAMP_AXE_SOMMET, "Donne l'axe de symétrie et les coordonnées du sommet (arrondi au centième accepté si besoin)."),
-      aide: { type: "croquis_parabole", a: f.a, b: f.b, c: f.c, marqueS: true },
+      dependDe: [...DEPENDANCES_FONCTION[CHAMP_AXE_SOMMET]!],
+      consigne: composer(CHAMP_AXE_SOMMET, "Donne l'axe de symétrie et les coordonnées du sommet (arrondi au centième accepté si besoin).", enonceEffectif),
+      ...aideParabole({}),
       champs: SOUS_CHAMPS_AXE_SOMMET,
     },
     {
       champ: CHAMP_DOMAINE_IMAGE,
       type: "intervalle",
-      consigne: composer(CHAMP_DOMAINE_IMAGE, "On rappelle que $\\mathrm{dom}\\,f = \\mathbb{R}$. Quel est l'ensemble-image $\\mathrm{im}\\,f$ de cette fonction ?"),
-      aide: { type: "croquis_parabole", a: f.a, b: f.b, c: f.c, marqueS: true, surlignageImf: true },
+      dependDe: [...DEPENDANCES_FONCTION[CHAMP_DOMAINE_IMAGE]!],
+      consigne: composer(
+        CHAMP_DOMAINE_IMAGE,
+        e.ordonneeAffichee
+          ? `On rappelle que $\\mathrm{dom}\\,f = \\mathbb{R}$. Avec $y_S = ${latexRacine(e.yImage)}$ pour ordonnée du sommet, quel est l'ensemble-image $\\mathrm{im}\\,f$ de cette fonction ?`
+          : "On rappelle que $\\mathrm{dom}\\,f = \\mathbb{R}$. Quel est l'ensemble-image $\\mathrm{im}\\,f$ de cette fonction ?",
+        enonceEffectif,
+      ),
+      ...aideParabole({ surlignageImf: true }),
     },
     {
       champ: CHAMP_RECONNAISSANCE,
@@ -130,7 +171,13 @@ export function champsAnalyseFonction(categorie: FonctionSecondDegre["categorie"
 export function ligneFaits(ex: ExerciceAnalyseFonction, avantChamp: string): string | null {
   const f = ex.fonction;
   const ordre = champsAnalyseFonction(f.categorie);
-  const precedents = new Set(ordre.slice(0, ordre.indexOf(avantChamp)).filter((c) => ex.corrects.includes(c)));
+  // Un écran jugé sur une donnée de l'élève n'établit un FAIT que si cette donnée est la vraie : « axe juste pour SES coefficients » n'établit
+  // pas l'axe de la vraie fonction (RAPPORT §38). Sans donnée fausse, l'écran a été jugé sur la vraie fonction : c'est un fait.
+  const e = ex.effectif;
+  const donneesVraies = (champ: string): boolean =>
+    champ === CHAMP_ALLURE || champ === CHAMP_AXE_SOMMET ? !e.coefficientsEleve : champ === CHAMP_DOMAINE_IMAGE ? !e.coefficientsEleve && !e.ordonneeEleve : true;
+  const etabli = (champ: string): boolean => ex.corrects.includes(champ) && donneesVraies(champ);
+  const precedents = new Set(ordre.slice(0, ordre.indexOf(avantChamp)).filter(etabli));
   const faits: string[] = [];
   if (precedents.has(CHAMP_COEFFICIENTS)) faits.push(`$a = ${f.a}$, $b = ${f.b}$, $c = ${f.c}$`);
   if (precedents.has(CHAMP_ALLURE)) faits.push(`parabole tournée vers le ${f.a > 0 ? "haut" : "bas"}`);
