@@ -14,6 +14,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/vendor/katex-0.18.9/katex.min.css" />
   <link rel="stylesheet" href="/moteur/ecrans.css" />
   <script>
     // Filet de sécurité diagnostic — copie verbatim de l'ancien pilote (même mécanisme que
@@ -488,7 +489,26 @@
     let detruireExerciceEnCours = () => {};
     let apiMoteur = null;
 
+    // KaTeX 0.18.9 (public/vendor/katex-0.18.9/, RAPPORT §33) : script classique chargé avec le moteur, AVANT tout rendu. S'il ne se
+    // charge pas, `rendreMath` affiche la source LaTeX (repli lisible) : l'exercice reste utilisable.
+    let katexCharge = null;
+    function chargerKatex() {
+      if (globalThis.katex) return Promise.resolve();
+      katexCharge = katexCharge || new Promise((resolve) => {
+        const script = document.createElement("script");
+        script.src = "/vendor/katex-0.18.9/katex.min.js";
+        script.onload = () => resolve();
+        script.onerror = () => {
+          console.warn("KaTeX n'a pas pu être chargé : les formules s'affichent en texte brut.");
+          resolve();
+        };
+        document.head.appendChild(script);
+      });
+      return katexCharge;
+    }
+
     async function importerMoteur() {
+      await chargerKatex();
       const [{ ouvrirExercice: ouvrir, demarrerTache }, { creerClientApi }] = await Promise.all([import("/moteur/moteur.js"), import("/moteur/api.js")]);
       apiMoteur = apiMoteur || creerClientApi(() => session.access_token);
       return { ouvrir, demarrerTache, api: apiMoteur };

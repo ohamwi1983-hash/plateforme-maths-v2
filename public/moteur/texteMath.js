@@ -84,3 +84,18 @@ export function decouperTexteMath(texte) {
 export function versTexteBrut(texte) {
   return decouperTexteMath(texte).segments.map((s) => s.valeur).join("");
 }
+
+/**
+ * Assemble les segments de l'aide typée `formule_coloree` en UNE SEULE chaîne LaTeX (des fragments rendus à part perdraient
+ * l'espacement des opérateurs). Un segment doté d'un rôle a, b ou c est enveloppé dans `\htmlClass{moteur-coef-<rôle>}{…}` :
+ * la couleur n'est jamais dans le texte, seulement une classe CSS (token de design) choisie dans une énumération fermée.
+ * Tout autre `role` est ignoré (segment non coloré).
+ *
+ * @param {{ latex: string, role?: string }[]} segments
+ * @returns {string}
+ */
+export function assemblerFormuleColoree(segments) {
+  return segments
+    .map((segment) => (segment.role === "a" || segment.role === "b" || segment.role === "c" ? `\\htmlClass{moteur-coef-${segment.role}}{${segment.latex}}` : segment.latex))
+    .join("");
+}

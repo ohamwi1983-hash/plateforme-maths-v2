@@ -2,6 +2,7 @@ import type { Generateur, ResultatVerification } from "./contratGenerateur";
 import { CATALOGUE_GENERATEURS } from "./catalogueGenerateurs";
 import { DICTIONNAIRE_COMPETENCES } from "./dictionnaireCompetences";
 import { generateurTemoinTechnique } from "../src/generateurs/_temoinTechnique";
+import { GENERATEURS_ANALYSE_FONCTION } from "../src/generateurs/analyseFonction/generateurs";
 
 /**
  * REGISTRE UNIQUE — seule autorité sur « quel `variante_id` correspond à quel générateur exécutable ».
@@ -14,7 +15,7 @@ import { generateurTemoinTechnique } from "../src/generateurs/_temoinTechnique";
  * (ce qu'on peut composer) : le registre sait EXÉCUTER. Les deux ne sont pas fusionnés, leur
  * cohérence est contrôlée par `verifierCoherenceRegistre` au chargement de ce module.
  */
-export const REGISTRE_GENERATEURS: readonly Generateur<any>[] = [generateurTemoinTechnique];
+export const REGISTRE_GENERATEURS: readonly Generateur<any>[] = [generateurTemoinTechnique, ...GENERATEURS_ANALYSE_FONCTION];
 
 interface EntreeCatalogue {
   generateur_id: string;
@@ -29,8 +30,9 @@ interface EntreeCatalogue {
  *    codes déclarés présents dans le dictionnaire de compétences ;
  *  - générateur non curriculaire (témoin) : ne doit PAS figurer dans le catalogue affiché ;
  *  - codes de compétence déclarés sans doublon.
- * Les entrées de catalogue SANS générateur au registre ne sont pas une erreur en phase 2 (gen7 est
- * catalogué mais pas encore reconstruit, phase 3) : elles sont exposées par `variantesCatalogueSansGenerateur`.
+ * Les entrées de catalogue SANS générateur au registre ne sont pas une erreur (une variante cataloguée avant
+ * d'être livrée) : elles sont exposées par `variantesCatalogueSansGenerateur`. Depuis la phase 3b-3 les quatre
+ * variantes de gen7 (`af_*`) sont au registre : la liste est vide.
  */
 export function verifierCoherenceRegistre(
   registre: readonly Generateur<any>[],

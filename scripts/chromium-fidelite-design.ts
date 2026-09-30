@@ -236,7 +236,9 @@ async function main(): Promise<void> {
     const largeurs = (await page.evaluate(`[...document.querySelectorAll("${C} .moteur-sous-champ-libelle")].map((l) => Math.round(l.getBoundingClientRect().width * 10) / 10)`)) as number[];
     const gauches = (await page.evaluate(`[...document.querySelectorAll("${C} .moteur-sous-champ-texte .moteur-champ")].map((i) => Math.round(i.getBoundingClientRect().left * 10) / 10)`)) as number[];
     verifier(new Set(gauches).size === 1, `multiples : les champs a, b, c sont alignés à gauche malgré des libellés de largeur différente (${JSON.stringify(gauches)})`);
-    verifier(largeurs.every((l) => Math.abs(l - 24) <= 0.6), `multiples : libellés à largeur fixe de 24 px comme la référence (${JSON.stringify(largeurs)})`);
+    // Écart DÉLIBÉRÉ (RAPPORT §33) : la référence a des libellés de 24 px en texte brut ; rendus par KaTeX, « a = » mesure 28 à 31 px
+    // (largeurs différentes selon la lettre), donc les champs se désaligneraient à 24 px. Largeur fixe de 36 px, identique pour a, b, c.
+    verifier(largeurs.every((l) => Math.abs(l - 36) <= 0.6), `multiples : libellés à largeur fixe de 36 px (24 px de la référence + marge pour le rendu KaTeX) (${JSON.stringify(largeurs)})`);
     await ctx.close();
   }
   // intervalle (image)

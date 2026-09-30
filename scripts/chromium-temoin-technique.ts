@@ -25,6 +25,10 @@ import {
   generateurTemoinTechnique as temoin, graineDeProfil, reponseBruteCorrecte, VARIANTE_TEMOIN, type ExerciceEtendu, type ExerciceTemoin,
 } from "../src/generateurs/_temoinTechnique";
 
+import {
+  champsAnalyseFonction, genererExercice as genererGen7, rangeesTableau, reponseBruteCorrecteAnalyseFonction as reponseGen7, type CategorieAnalyseFonction, type ExerciceAnalyseFonction,
+} from "../src/generateurs/analyseFonction";
+
 const RACINE = join(__dirname, "..");
 const CAPTURES = process.env.CAPTURES_DIR ?? join(RACINE, "captures-chromium");
 mkdirSync(CAPTURES, { recursive: true });
@@ -803,6 +807,45 @@ async function scenarioEtendu(navigateur: any, base: string, largeur: number) {
     verifier(couleurs.roles[role].contraste >= 4.5, `${l} étendu : contraste réel du coefficient ${role} (${couleurs.roles[role].contraste.toFixed(2)}:1) sous 4,5:1`);
   }
   verifier(Object.keys(couleurs.roles).length >= 2 && couleurs.aria.startsWith("Formule : f(x) = "), `${l} étendu : formule colorée : rôles présents et alternative textuelle (${JSON.stringify(Object.keys(couleurs.roles))})`);
+  // KaTeX 0.18.9 (RAPPORT §33) : rendu RÉEL, une seule formule assemblée, aucune couleur venue d'un texte, repli en source jamais rouge.
+  await page.evaluate("document.fonts.ready");
+  verifier((await courant.locator(".moteur-formule .katex").count()) === 1 && (await courant.locator(".moteur-formule .moteur-math-source").count()) === 0, `${l} étendu : formule_coloree = UNE formule KaTeX assemblée (jamais un fragment par segment)`);
+  verifier((await courant.locator(".moteur-consigne .katex").count()) >= 4 && (await page.locator(".moteur-math-source").count()) === 0, `${l} étendu : la consigne est rendue par KaTeX, aucun repli en source sur la page`);
+  verifier((await page.locator(".moteur-consigne .katex [style*='color']").count()) === 0 && (await page.locator(".moteur-formule .katex [style*='color']").count()) === 0, `${l} étendu : aucune couleur en ligne dans le rendu (la couleur d'un coefficient vient de la classe, donc du token)`);
+  verifier(await page.evaluate(`document.fonts.check("1em KaTeX_Main") && document.fonts.check("1em KaTeX_Math")`) as boolean, `${l} étendu : les polices KaTeX vendorées (woff2) sont chargées`);
+  // La ponctuation qui suit une formule lui est collée (jamais renvoyée seule à la ligne) et le texte reste inchangé.
+  {
+    const groupes = (await page.evaluate(`[...document.querySelectorAll(".moteur-consigne .moteur-insecable")].map((g) => ({ signe: g.lastChild.textContent, math: g.firstChild.classList.contains("moteur-math"), nowrap: getComputedStyle(g).whiteSpace }))`)) as { signe: string; math: boolean; nowrap: string }[];
+    verifier(groupes.length >= 1 && groupes.every((g) => g.math && g.nowrap === "nowrap" && /^[,.;:!?)]$/.test(g.signe)), `${l} étendu : la ponctuation suivant une formule est collée à elle (${JSON.stringify(groupes)})`);
+    const consigne = (await courant.locator(".moteur-consigne").first().innerText()).replace(/\s+/g, " ");
+    verifier(!/\s[,;.:!?]/.test(consigne), `${l} étendu : aucune ponctuation isolée par une espace dans la consigne rendue (« ${consigne.slice(0, 120)} »)`);
+  }
+  const CAS_MATH = { ordinaire: "x^2 + 1", href: "\\href{http://exemple.test}{x}", classeEtrangere: "\\htmlClass{moteur-coef-a}{3}", rolesOk: "\\htmlClass{moteur-coef-a}{3}", rolesEtranger: "\\htmlClass{evil}{3}", invalide: "\\frac{1" };
+  const repli = (await page.evaluate(`((cas) => (async () => {
+    const { rendreMath, rendreTexte } = await import("/moteur/rendreTexte.js");
+    const rendu = (latex, options) => { const el = document.createElement("span"); document.body.appendChild(el); rendreMath(el, latex, options); const r = { source: el.classList.contains("moteur-math-source"), texte: el.textContent, katex: el.querySelector(".katex") !== null, rouge: el.innerHTML.includes("cc0000") || el.innerHTML.includes("rgb(204, 0, 0)") }; el.remove(); return r; };
+    const sortie = {
+      ordinaire: rendu(cas.ordinaire),
+      href: rendu(cas.href),
+      classeEtrangere: rendu(cas.classeEtrangere),
+      rolesOk: rendu(cas.rolesOk, { roles: true }),
+      rolesEtranger: rendu(cas.rolesEtranger, { roles: true }),
+      invalide: rendu(cas.invalide),
+    };
+    const sauve = globalThis.katex;
+    delete globalThis.katex;
+    sortie.sansKatex = rendu(cas.ordinaire);
+    globalThis.katex = sauve;
+    const eleve = document.createElement("p");
+    rendreTexte(eleve, "$x^2$ tapé par un élève");
+    sortie.eleve = { texte: eleve.textContent, katex: eleve.querySelector(".katex") !== null };
+    return sortie;
+  })())(${JSON.stringify(CAS_MATH)})`)) as Record<string, { source?: boolean; texte: string; katex: boolean; rouge?: boolean }>;
+  verifier(repli.ordinaire.katex && !repli.ordinaire.source, `${l} étendu : rendreMath ordinaire = KaTeX`);
+  verifier(["href", "classeEtrangere", "rolesEtranger", "invalide", "sansKatex"].every((k) => repli[k].source !== false && !repli[k].katex && repli[k].rouge !== true), `${l} étendu : commande refusée, classe étrangère, LaTeX invalide ou KaTeX absent -> source en texte brut, jamais de rendu rouge (${JSON.stringify(repli)})`);
+  verifier(repli.sansKatex.texte === CAS_MATH.ordinaire && repli.href.texte === CAS_MATH.href, `${l} étendu : le repli montre la source LaTeX telle quelle`);
+  verifier(repli.rolesOk.katex && !repli.rolesOk.source && !repli.rolesOk.rouge, `${l} étendu : roles -> \\htmlClass{moteur-coef-a} accepté`);
+  verifier(repli.eleve.texte === "$x^2$ tapé par un élève" && !repli.eleve.katex, `${l} étendu : un texte d'élève (sans option math) n'est jamais interprété`);
   await page.screenshot({ path: cap("02-aide-formule-coloree"), fullPage: true });
   // Trois déficiences visuelles émulées (les teintes doivent rester distinguables ; ordre a, b, c = indice non chromatique).
   const cdp = await contexte.newCDPSession(page);
@@ -1269,6 +1312,267 @@ async function scenarioPoids(navigateur: any, base: string, largeur: number) {
   }
 }
 
+
+// ══ gen7 « Analyse d'une fonction du second degré » (RAPPORT §33) : le VRAI registre, les 4 variantes af_*, joués dans le navigateur ══
+
+const CATEGORIES_GEN7: CategorieAnalyseFonction[] = ["mise_en_evidence", "binome_conjugue", "produit_remarquable", "irreductible"];
+const NOMS_SYMBOLES_GEN7: Record<string, string> = { "⌣": "minimum (en creux)", "⌢": "maximum (en bosse)", "↗": "croissante", "↘": "décroissante" };
+
+/** Répond à l'écran COURANT de gen7 avec la bonne réponse, en n'utilisant que des gestes d'élève (clics, saisie). */
+async function repondreGen7(page: any, ex: ExerciceAnalyseFonction, champ: string): Promise<void> {
+  const courant = page.locator(".moteur-ecran-courant");
+  const brute = reponseGen7(ex, champ);
+  if (champ === "coefficients") {
+    const v = JSON.parse(brute);
+    for (const k of ["a", "b", "c"]) await courant.locator(`#mc-coefficients-${k}`).fill(v[k]);
+  } else if (champ === "allure") {
+    for (const [id, valeur] of Object.entries(JSON.parse(brute))) await courant.locator(`.moteur-choix:has(input[name="mc-allure-${id}"][value="${valeur}"])`).click();
+  } else if (champ === "axeSommet") {
+    const v = JSON.parse(brute);
+    await courant.locator("#mc-axeSommet-axeTexte").fill(v.axeTexte);
+    await courant.locator("#mc-axeSommet-xS").fill(v.xS);
+    await courant.locator("#mc-axeSommet-yS").fill(v.yS);
+  } else if (champ === "domaineImage") {
+    const v = JSON.parse(brute);
+    const ligne = courant.locator(".moteur-intervalle-ligne");
+    for (const [cote, crochet] of [["gauche", v.crochetGauche], ["droite", v.crochetDroit]]) {
+      const bouton = ligne.getByRole("button", { name: new RegExp(`Crochet de ${cote}`) });
+      for (let k = 0; k < 2 && (await bouton.textContent()) !== crochet; k++) await bouton.click();
+    }
+    if (v.borneGauche === "-inf") await ligne.getByRole("button", { name: "Borne de gauche : moins l'infini" }).click();
+    else await ligne.getByLabel("Borne de gauche", { exact: true }).fill(v.borneGauche);
+    if (v.borneDroite === "+inf") await ligne.getByRole("button", { name: "Borne de droite : plus l'infini" }).click();
+    else await ligne.getByLabel("Borne de droite", { exact: true }).fill(v.borneDroite);
+  } else if (champ === "racinesReconnaissance") {
+    await courant.locator(`.moteur-choix:has(input[value="${brute}"])`).click();
+  } else if (champ === "racinesChamp1") {
+    await courant.locator(".moteur-champ").first().fill(brute);
+  } else if (champ === "racinesChamp2") {
+    const valeurs = JSON.parse(brute) as string[];
+    await courant.getByRole("radio", { name: "Au moins une racine" }).click();
+    for (const [i, valeur] of valeurs.entries()) {
+      if ((await courant.locator(".moteur-liste-ligne").count()) <= i) await courant.locator(".moteur-liste-zone > .moteur-bouton-secondaire").click();
+      await courant.locator(".moteur-liste-ligne .moteur-champ").nth(i).fill(valeur);
+    }
+  } else if (champ === "tableauSignes") {
+    await remplirTableauGen7(page, ex, JSON.parse(brute));
+  } else {
+    throw new Error(`champ gen7 inconnu « ${champ} »`);
+  }
+}
+
+async function remplirTableauGen7(page: any, ex: ExerciceAnalyseFonction, sol: Record<string, Record<string, string>>): Promise<void> {
+  const lignes = page.locator(".moteur-ecran-courant .moteur-ligne-tableau");
+  const rangees = rangeesTableau(ex.fonction);
+  for (const [i, rangee] of rangees.entries()) {
+    const boutons = lignes.nth(i).locator("td button");
+    for (const [c, cellule] of rangee.cellules.entries()) {
+      const attendu = (sol[rangee.ligne] as Record<string, string>)[cellule.ancre] as string;
+      const nom = Object.hasOwn(NOMS_SYMBOLES_GEN7, attendu) ? NOMS_SYMBOLES_GEN7[attendu] : attendu;
+      for (let k = 0; k < 6 && (await valeurDeCase(boutons.nth(c))) !== nom; k++) await boutons.nth(c).click();
+    }
+  }
+}
+
+/** Consigne de l'écran courant, KaTeX remplacé par sa source LaTeX (`$…$`) : comparable au texte d'auteur (l'innerText de KaTeX répète chaque formule en MathML). */
+async function lireConsigneGen7(page: any): Promise<string> {
+  return (await page.evaluate(`(() => {
+    const el = document.querySelector(".moteur-ecran-courant .moteur-consigne");
+    const copie = el.cloneNode(true);
+    for (const k of copie.querySelectorAll(".katex")) k.replaceWith("$" + (k.querySelector("annotation")?.textContent ?? "") + "$");
+    return copie.textContent;
+  })()`)) as string;
+}
+
+/** Clique « Valider », attend l'apparition du bouton de suite, le clique et attend l'écran suivant (sauf à la fin de l'exercice). */
+async function validerEtSuivreGen7(page: any, options: { verdict?: boolean; entre?: () => Promise<void> } = {}): Promise<void> {
+  const avant = (await page.evaluate(`document.querySelector(".moteur-ecran-courant .moteur-consigne").textContent`)) as string;
+  await page.locator(".moteur-ecran-courant").getByRole("button", { name: "Valider", exact: true }).click();
+  if (options.verdict !== false) await page.waitForSelector(".moteur-statut-correct");
+  else await page.waitForSelector(".moteur-statut");
+  if (options.entre) await options.entre();
+  await page.getByRole("button", { name: /Question suivante|Voir la fin/ }).click();
+  await page.waitForFunction(`(() => { const c = document.querySelector(".moteur-ecran-courant .moteur-consigne"); return document.querySelector(".moteur-fin") !== null || (c !== null && c.textContent !== ${JSON.stringify(avant)}); })()`);
+}
+
+/** Ouvre la première tâche de l'élève et rend le moteur prêt. */
+async function ouvrirTacheGen7(navigateur: any, base: string, largeur: number, s: Scenario) {
+  const ctx = await preparerPage(navigateur, base, largeur, largeur < 600 ? 800 : 900, "eleve:eleve-1", "e1@x", `localStorage.setItem("eleve-profil-cache", JSON.stringify({ affichage: "Test eleve-1", prenom: "Test", nom: "eleve-1" }));`);
+  await ctx.page.goto(base + "/eleve.html");
+  await ctx.page.waitForSelector(".carte-tache");
+  await ctx.page.locator(".carte-tache").first().click();
+  await ctx.page.waitForSelector(".moteur-ecran-courant");
+  void s;
+  return ctx;
+}
+
+/** Assigne (API réelle) une tâche d'UNE variante gen7 avec la graine voulue ; renvoie l'exercice régénéré. */
+async function assignerGen7(s: Scenario, categorie: CategorieAnalyseFonction, graine: number, options: { feedback?: boolean; tentatives?: number } = {}): Promise<{ ex: ExerciceAnalyseFonction; tacheId: string }> {
+  const tacheId = creerTache(s, { nom: `gen7 ${categorie}`, feedback_immediat: options.feedback ?? true, tentatives_supplementaires: options.tentatives ?? 0, reponse_visible: true, variantes: [{ variante_id: `af_${categorie}`, nombre_exercices: 1 }] });
+  const origine = Math.random;
+  Math.random = () => graine / 2 ** 32;
+  try {
+    const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tacheId, eleve_ids: ["eleve-1"] } });
+    verifier(a.statut === 201, `gen7 ${categorie} : assignation : ${a.statut} ${JSON.stringify(a.corps)}`);
+  } finally {
+    Math.random = origine;
+  }
+  const ligne = s.base.table("exercices_assignes").find((x) => x.tache_id === tacheId)!;
+  return { ex: genererGen7(categorie, Number(ligne.graine)), tacheId };
+}
+
+/**
+ * Une partie COMPLÈTE par catégorie, au clic : 8 écrans (6 pour af_irreductible), mathématiques rendues par KaTeX, panneau
+ * « Ce que tu sais déjà » en correction immédiate, tableau à 7 ou 3 colonnes avec valeurs numériques, fin de tâche.
+ */
+async function scenarioGen7Parties(navigateur: any, base: string, largeur: number) {
+  const l = `${largeur}`;
+  for (const categorie of CATEGORIES_GEN7) {
+    const s: Scenario = creerScenario();
+    installerBase(s.base);
+    const { ex } = await assignerGen7(s, categorie, 12345 + CATEGORIES_GEN7.indexOf(categorie));
+    const champs = champsAnalyseFonction(categorie);
+    const e = `${l} gen7 ${categorie}`;
+    const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+    const courant = page.locator(".moteur-ecran-courant");
+    const cap = (nom: string) => join(CAPTURES, `${l}-gen7-${categorie}-${nom}.png`);
+    let vusPanneau = 0;
+    for (const [i, champ] of champs.entries()) {
+      await page.waitForFunction(`document.querySelectorAll(".moteur-ecran-courant").length === 1`);
+      const consigne: string = await lireConsigneGen7(page);
+      verifier(await courant.locator(".moteur-consigne .katex").count() >= 1 && (await page.locator(".moteur-math-source").count()) === 0, `${e} / ${champ} : la consigne est rendue par KaTeX (aucun repli en source)`);
+      if (!["racinesChamp1", "racinesChamp2", "racinesReconnaissance"].includes(champ)) verifier(consigne.startsWith("Étudie la fonction suivante :"), `${e} / ${champ} : l'énoncé de la fonction est répété (« ${consigne.slice(0, 50)} »)`);
+      if (i === 0) {
+        verifier(!consigne.includes("Ce que tu sais déjà"), `${e} : aucun panneau avant la première réponse`);
+        await page.screenshot({ path: cap("01-coefficients"), fullPage: true });
+      } else if (champ === "allure" || champ === "axeSommet" || champ === "domaineImage") {
+        verifier(consigne.includes("Ce que tu sais déjà") && consigne.split("\n").length >= 3, `${e} / ${champ} : panneau « Ce que tu sais déjà » sur sa ligne (${consigne.split("\n").length} lignes)`);
+        vusPanneau++;
+      }
+      if (champ === "tableauSignes") {
+        const n = categorie === "irreductible" || categorie === "produit_remarquable" ? 3 : 7;
+        verifier((await courant.locator(".moteur-rangee-signe td button, .moteur-ligne-tableau tr:first-child td button").count()) === n, `${e} : la ligne de signe compte ${n} cases`);
+        const valeurs = await courant.locator(".moteur-table-structure .katex").count();
+        verifier(valeurs >= n, `${e} : les valeurs de x et symboles du tableau sont rendus par KaTeX (${valeurs})`);
+        verifier(consigne.includes("Ce que tu sais déjà"), `${e} : panneau avant le tableau`);
+        if (categorie !== "irreductible") verifier(/racine/.test(consigne), `${e} : les racines figurent dans le panneau avant le tableau`);
+        else verifier(!/racine/.test(consigne.split("\n").find((x) => x.startsWith("Ce que")) ?? ""), `${e} : aucune racine dans le panneau d'af_irreductible`);
+        await verifierPleinBord(page, `${e} : tableau`, largeur);
+      }
+      if (champ === "racinesChamp2") verifier(/D'après ta factorisation/.test(consigne), `${e} : l'équation de racinesChamp2 est celle de la factorisation confirmée`);
+      await repondreGen7(page, ex, champ);
+      if (["coefficients", "tableauSignes", "racinesChamp2"].includes(champ)) await page.screenshot({ path: cap(`${String(i + 2).padStart(2, "0")}-${champ}`), fullPage: true });
+      await validerEtSuivreGen7(page);
+    }
+    await page.waitForSelector(".moteur-fin");
+    verifier(vusPanneau === 3, `${e} : panneau vu sur les 3 écrans qui le suivent en premier (${vusPanneau})`);
+    if (categorie === "irreductible") verifier((await page.locator(".moteur-liste-valeurs").count()) === 0, `${e} : aucun écran de liste (pas de racines)`);
+    await page.getByRole("button", { name: "Terminer" }).click();
+    await page.waitForSelector("#tableau-de-bord:not([hidden])");
+    const lignes = s.base.table("reponses");
+    verifier(lignes.length === champs.length && lignes.every((r) => r.statut === "correct"), `${e} : ${champs.length} réponses enregistrées, toutes correctes (${lignes.map((r) => r.statut).join()})`);
+    verifier(journal.pageerrors.length === 0, `${e} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+    verifier(journal.erreursConsole.filter((m) => !/fonts\.g|net::ERR_FAILED/.test(m)).length === 0, `${e} : erreurs console : ${journal.erreursConsole.join(" | ")}`);
+    await contexte.close();
+  }
+}
+
+/**
+ * Correction COUPÉE et cascade : une factorisation FAUSSE mais exploitable devient l'équation de racinesChamp2 (méthode juste sur donnée
+ * fausse = réussite), le tableau montre x₁, x_S, x₂ sans valeur numérique, et RIEN n'est révélé (ni verdict, ni panneau) avant la fin.
+ */
+async function scenarioGen7Coupe(navigateur: any, base: string, largeur: number) {
+  const l = `${largeur}`;
+  const s: Scenario = creerScenario();
+  installerBase(s.base);
+  const { ex } = await assignerGen7(s, "mise_en_evidence", 12345, { feedback: false }); // f = 4x² + 8x
+  const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+  const courant = page.locator(".moteur-ecran-courant");
+  const sansVerdict = async () => (await page.locator(".moteur-statut-correct, .moteur-statut-not_equivalent, .moteur-statut-parse_error, .moteur-solution").count()) === 0;
+  // Entre « Valider » et « Question suivante » : la réponse est enregistrée, mais ni verdict ni solution ne sont visibles — sauf pour la
+  // réponse qui TERMINE la tâche (`derniere`), qui la révèle (règle de révélation, CLAUDE.md).
+  const passer = (etape: string, derniere = false) =>
+    validerEtSuivreGen7(page, { verdict: false, entre: async () => void verifier(derniere ? !(await sansVerdict()) : await sansVerdict(), `${l} gen7 coupé / ${etape} : ${derniere ? "la réponse qui termine la tâche la révèle" : "aucun verdict ni solution affichés après « Valider »"}`) });
+  for (const champ of ["coefficients", "allure", "axeSommet", "domaineImage", "racinesReconnaissance"]) {
+    verifier(!(await lireConsigneGen7(page)).includes("Ce que tu sais déjà"), `${l} gen7 coupé / ${champ} : jamais de panneau sous correction coupée`);
+    await repondreGen7(page, ex, champ);
+    await passer(champ);
+  }
+  await courant.locator(".moteur-champ").first().fill("3x(x-2)"); // fausse, mais exploitable
+  await passer("racinesChamp1");
+  const consigne2 = await lireConsigneGen7(page);
+  verifier(consigne2.includes("D'après ta factorisation") && consigne2.includes("$3x(x - 2) = 0$") && !consigne2.includes("(x + 2)") && (await courant.locator(".moteur-consigne .katex").count()) >= 1, `${l} gen7 coupé : racinesChamp2 est bâti sur la factorisation de l'élève, sans fuite de la vraie (« ${consigne2.replace(/\n/g, " / ").slice(0, 110)} »)`);
+  await page.screenshot({ path: join(CAPTURES, `${l}-gen7-coupe-cascade-racinesChamp2.png`), fullPage: true });
+  await courant.getByRole("radio", { name: "Au moins une racine" }).click();
+  await courant.locator(".moteur-liste-ligne .moteur-champ").first().fill("0");
+  await courant.locator(".moteur-liste-zone > .moteur-bouton-secondaire").click();
+  await courant.locator(".moteur-liste-ligne .moteur-champ").nth(1).fill("2");
+  await passer("racinesChamp2");
+  await page.waitForSelector(".moteur-table-structure");
+  const annotations = (await courant.locator(".moteur-table-structure .katex-mathml annotation").allTextContents()).map((t: string) => t.trim());
+  const symboles = annotations.filter((t: string) => /^x_(1|2|S)$/.test(t)).length;
+  verifier(symboles >= 3 && annotations.every((t: string) => !/\d/.test(t.replace(/x_[12]/, "x_"))), `${l} gen7 coupé : le tableau montre x_1, x_S, x_2 (${symboles}) et aucune valeur numérique de x (${JSON.stringify(annotations)})`);
+  verifier((await sansVerdict()) && !(await lireConsigneGen7(page)).includes("Ce que tu sais déjà"), `${l} gen7 coupé : toujours ni verdict ni panneau devant le tableau`);
+  await page.screenshot({ path: join(CAPTURES, `${l}-gen7-coupe-tableau-symbolique.png`), fullPage: true });
+  await repondreGen7(page, ex, "tableauSignes");
+  await passer("tableauSignes", true);
+  await page.waitForSelector(".moteur-fin");
+  await page.getByRole("button", { name: "Terminer" }).click();
+  await page.waitForSelector("#tableau-de-bord:not([hidden])");
+  const rep = s.base.table("reponses");
+  const ligne2 = rep.find((r) => r.champ === "racinesChamp2");
+  verifier(ligne2?.statut === "correct", `${l} gen7 coupé : « 0 ; 2 » est correct pour l'équation de l'élève (${ligne2?.statut})`);
+  verifier(rep.find((r) => r.champ === "racinesChamp1")?.statut === "not_equivalent", `${l} gen7 coupé : la factorisation fausse est enregistrée comme fausse (côté serveur seulement)`);
+  verifier(journal.pageerrors.length === 0, `${l} gen7 coupé : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+  await contexte.close();
+}
+
+/** Le professeur COMPOSE une tâche gen7 dans prof.html (champs actifs, création réelle), puis l'assigne ; l'élève la reçoit. */
+async function scenarioGen7Prof(navigateur: any, base: string, largeur: number) {
+  const l = `${largeur}`;
+  const s: Scenario = creerScenario();
+  installerBase(s.base);
+  const { page, contexte, journal } = await preparerPage(navigateur, base, largeur, largeur < 600 ? 800 : 900, `prof:${s.profId}`, "p@x");
+  await page.goto(base + "/prof.html");
+  await page.waitForSelector('button[data-onglet="taches"]:visible');
+  await page.locator('button[data-onglet="taches"]').click();
+  await page.locator("#bouton-accordeon-creer").click();
+  await page.waitForSelector("#composition-dynamique input.stepper-valeur", { state: "attached" });
+  const variantes = ["af_mise_en_evidence", "af_binome_conjugue", "af_produit_remarquable", "af_irreductible"];
+  const etat = (await page.evaluate(`(${JSON.stringify(variantes)}).map((v) => { const i = document.querySelector('#composition-dynamique input[data-variante-id="' + v + '"]'); return i ? { v, desactive: i.disabled } : { v, absent: true }; })`)) as { v: string; desactive?: boolean; absent?: boolean }[];
+  verifier(etat.every((e) => !e.absent && e.desactive === false), `${l} prof gen7 : les 4 champs « nombre d'exercices » existent et ne sont PAS disabled (${JSON.stringify(etat)})`);
+  await page.locator("#nom-tache").fill("Étude de fonctions");
+  for (const v of ["af_mise_en_evidence", "af_irreductible"]) {
+    await page.evaluate(`(() => { const i = document.querySelector('#composition-dynamique input[data-variante-id="${v}"]'); i.value = "1"; i.dispatchEvent(new Event("input", { bubbles: true })); i.dispatchEvent(new Event("change", { bubbles: true })); })()`);
+  }
+  verifier(await page.locator("#btn-creer-tache").isEnabled(), `${l} prof gen7 : « Créer » est actif dès que le nom et un exercice gen7 sont saisis`);
+  await page.locator("#btn-creer-tache").click();
+  await page.waitForFunction(`document.getElementById("nom-tache").value === ""`);
+  const composition = s.base.table("taches_composition");
+  verifier(composition.length === 2 && composition.every((c) => c.generateur_id === "gen7") && composition.map((c) => c.variante_id).sort().join() === "af_irreductible,af_mise_en_evidence", `${l} prof gen7 : la tâche créée par l'interface contient les 2 variantes gen7 (${JSON.stringify(composition.map((c) => c.variante_id))})`);
+  const tacheId = s.base.table("taches").find((t) => t.nom === "Étude de fonctions")!.id as string;
+  // Assignation par la route réelle (la même que le bouton « Assigner »), puis l'élève reçoit deux exercices de deux catégories.
+  const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tacheId, eleve_ids: ["eleve-1"] } });
+  verifier(a.statut === 201 && a.corps.nombre_exercices_generes === 2, `${l} prof gen7 : assignation de la tâche créée : ${a.statut} ${JSON.stringify(a.corps)}`);
+  const lignes = s.base.table("exercices_assignes").filter((x) => x.tache_id === tacheId);
+  verifier(lignes.map((x) => x.variante_id).sort().join() === "af_irreductible,af_mise_en_evidence" && lignes.every((x) => x.generateur_id === "gen7"), `${l} prof gen7 : les exercices assignés portent les bonnes variantes`);
+  await page.screenshot({ path: join(CAPTURES, `${l}-gen7-prof-tache-creee.png`), fullPage: false });
+  verifier(journal.pageerrors.length === 0, `${l} prof gen7 : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+  await contexte.close();
+
+  // L'élève résout le PREMIER exercice de la tâche composée par le professeur.
+  const premiere = lignes[0]!;
+  const categorie = (premiere.variante_id as string).slice(3) as CategorieAnalyseFonction;
+  const ex = genererGen7(categorie, Number(premiere.graine));
+  const { page: p2, contexte: c2 } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+  const courant = p2.locator(".moteur-ecran-courant");
+  verifier((await courant.locator(".moteur-consigne").innerText()).startsWith("Étudie la fonction suivante :") && (await courant.locator(".moteur-consigne .katex").count()) >= 1, `${l} prof gen7 : l'élève voit l'énoncé de la tâche composée par le professeur`);
+  await repondreGen7(p2, ex, "coefficients");
+  await courant.getByRole("button", { name: "Valider", exact: true }).click();
+  await p2.waitForSelector(".moteur-statut-correct");
+  await c2.close();
+}
+
 async function main() {
   const { serveur, url } = await demarrerServeur();
   const navigateur = await chromium.launch();
@@ -1292,6 +1596,12 @@ async function main() {
       controlerReponsesHttp(`${largeur} admin`, [{ statut: 403, motif: /^GET \/api\/admin\/profs$/, pourquoi: "un prof non admin appelle l'API admin à la main : refus serveur attendu (403)" }]);
       await scenarioPoids(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} poids`);
+      await scenarioGen7Parties(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} gen7 parties`);
+      await scenarioGen7Coupe(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} gen7 coupé`);
+      await scenarioGen7Prof(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} gen7 prof`);
     }
   } catch (e) {
     // Un scénario qui plante (timeout d'attente d'un élément) ne passe jamais par `controlerReponsesHttp` :
