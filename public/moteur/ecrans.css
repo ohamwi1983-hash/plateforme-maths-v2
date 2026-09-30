@@ -276,6 +276,15 @@
 }
 
 /* ── Tableau de signes ── */
+/* PLEIN-BORD (RAPPORT §30, systématique) : le tableau sort du padding de la carte ET de la gouttière de page, jusqu'aux
+   bords de la colonne de contenu (bords de l'écran sur mobile, colonne de 720px sur bureau). `--retrait-plein-bord`
+   (défini par style.css, là où vivent la gouttière et la largeur de colonne) = padding de la carte + sa bordure + la
+   gouttière. Le reste de la carte garde son padding. Fond opaque : il recouvre la bordure verticale de la carte. */
+.moteur-tableau-signes {
+  margin-inline: calc(-1*var(--retrait-plein-bord,0px));
+  background: var(--surface);
+}
+
 .moteur-tableau-defilement {
   max-width: 100%;
   overflow-x: auto;
@@ -317,6 +326,11 @@
 /* Case : même traitement que le QCM (défaut en creux ; renseignée = violet, avant validation). Une case
    remplie n'est ni juste ni fausse tant que le serveur n'a pas répondu. */
 .moteur-case-signe {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  vertical-align: middle;
   min-width: calc(var(--espace-5) + var(--espace-1));
   min-height: calc(var(--espace-5) + var(--espace-1));
   font-family: var(--font-corps);
@@ -353,6 +367,81 @@
 .moteur-ecran:is(:has(.moteur-statut-correct), :has(.moteur-statut-not_equivalent), :has(.moteur-statut-parse_error)) .moteur-tableau-defilement {
   border: 1px solid var(--etat-filet);
   border-radius: var(--radius-sm);
+}
+
+/* ── Tableau de signes STRUCTURÉ (2N+1 colonnes, cases fusionnées sur les variations) ──
+   Largeur = celle de la colonne, jamais de défilement ni de largeur minimale : empiler des lignes change la
+   HAUTEUR, jamais la largeur (les cases gardent la même taille). Colonnes de valeur en --violet-clair sur TOUTES
+   les lignes (fond de <col>, traversant symboles, x, signes et variations). */
+.moteur-table-structure {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  background: var(--surface);
+}
+
+.moteur-table-structure .moteur-col-valeur {
+  background: var(--violet-clair);
+}
+
+.moteur-table-structure td,
+.moteur-table-structure th {
+  padding: 0;
+  border: 0;
+  text-align: center;
+  font-weight: 600;
+}
+
+/* Titre de section : petites capitales espacées obtenues par taille, espacement et couleur — JAMAIS par
+   `text-transform` (« f(x) » deviendrait « F(X) »). Le texte est écrit dans sa bonne casse par l'auteur. */
+.moteur-titre-tableau,
+.moteur-table-structure .moteur-titre-ligne {
+  padding: var(--espace-2) calc(var(--retrait-plein-bord,0px));
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 0.75em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-align: left;
+}
+
+.moteur-titre-tableau {
+  caption-side: top;
+  padding-top: 0;
+}
+
+.moteur-ligne-tableau,
+.moteur-entete-x {
+  border-top: 1px solid var(--border);
+}
+
+.moteur-rangee-symboles td {
+  height: var(--espace-4);
+  font-size: 0.85em;
+}
+
+.moteur-rangee-symboles .moteur-cellule-valeur {
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+}
+
+.moteur-rangee-x td {
+  padding: var(--espace-1) 0;
+  color: var(--text);
+}
+
+.moteur-rangee-x .moteur-cellule-intervalle {
+  color: var(--text-muted);
+}
+
+.moteur-rangee-signe td,
+.moteur-rangee-variation td {
+  padding: var(--espace-2) 0;
+}
+
+/* Verdict du serveur : filets haut et bas du tableau plein-bord (il n'a ni cadre arrondi ni bords latéraux). */
+.moteur-ecran:is(:has(.moteur-statut-correct), :has(.moteur-statut-not_equivalent), :has(.moteur-statut-parse_error)) .moteur-table-structure {
+  border-block: 1px solid var(--etat-filet);
 }
 
 /* ── Retour du serveur ── */
@@ -593,18 +682,7 @@
   box-shadow: inset 0 0 0 1px var(--etat-bordure);
 }
 
-/* ── Tableau de signes étendu ── */
-.moteur-sous-libelle {
-  display: block;
-  font-size: 0.85em;
-  font-weight: 600;
-}
-
-.moteur-table-signes .moteur-borne {
-  background: var(--surface-sunken);
-  color: var(--text-muted);
-}
-
+/* ── Symboles de variation dessinés ── */
 .moteur-symbole {
   width: 1.5em;
   height: 1.5em;

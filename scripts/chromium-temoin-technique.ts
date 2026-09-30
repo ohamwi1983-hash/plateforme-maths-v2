@@ -21,7 +21,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
 import { appeler, creerScenario, creerTache, imposerProfilAssignation, installerBase, type Scenario } from "./support/harnaisRouteur";
 import {
-  CHAMP_ALLURE, CHAMP_AXE, CHAMP_COEFFICIENTS, CHAMP_DIVISEURS, CHAMP_EXTREMUM, CHAMP_IMAGE, CHAMP_PARITE, CHAMP_RACINES, CHAMP_SIGNES, CHAMP_SIGNES_VARIATION, CHAMP_SOMME,
+  CHAMP_ALLURE, CHAMP_AXE, CHAMP_COEFFICIENTS, CHAMP_DIVISEURS, CHAMP_EXTREMUM, CHAMP_IMAGE, CHAMP_PARITE, CHAMP_QUOTIENT, CHAMP_RACINES, CHAMP_SIGNES, CHAMP_SIGNES_VARIATION, CHAMP_SOMME,
   generateurTemoinTechnique as temoin, graineDeProfil, reponseBruteCorrecte, VARIANTE_TEMOIN, type ExerciceEtendu, type ExerciceTemoin,
 } from "../src/generateurs/_temoinTechnique";
 
@@ -334,6 +334,11 @@ async function scenarioEleve(navigateur: any, base: string, largeur: number) {
   verifier(reponsesEnvoyees(journal) === avantTableau, `${l} : remplir le tableau n'envoie rien tant qu'on ne valide pas`);
   await page.screenshot({ path: join(CAPTURES, `${l}-08-tableau-signes.png`), fullPage: true });
   await verifierMiseEnPage(page, "tableau_signes", largeur);
+  // Tableau HÉRITÉ (5 colonnes) : les règles transversales s'appliquent aussi (plein-bord, jamais de retour à « ? »).
+  await verifierPleinBord(page, `${l} tableau hérité`, largeur);
+  const cycleHerite = await cycler(page.locator(".moteur-table-signes tbody tr").first().locator("td button").first());
+  verifier(cycleHerite.slice(1).every((v: string) => v !== "vide") && new Set(cycleHerite.slice(1)).size === 3, `${l} : tableau hérité : le cycle (+ - 0) ne revient jamais à « ? » : ${JSON.stringify(cycleHerite)}`);
+  await remplir();
   await page.locator(".moteur-ecran-courant .moteur-bouton-principal").click();
   await page.waitForSelector(".moteur-statut-correct");
   await page.getByRole("button", { name: "Voir la fin" }).click();
@@ -655,6 +660,107 @@ const genE = (graine: number): ExerciceEtendu => {
   return ex.etendu;
 };
 
+/** Le tableau plein-bord (RAPPORT §30) touche les bords de la colonne de contenu, et le reste de la carte garde son padding. */
+async function verifierPleinBord(page: any, etiquette: string, largeur: number) {
+  const m = (await page.evaluate(`(() => {
+    const carteEl = document.querySelector(".moteur-ecran-courant");
+    const t = carteEl.querySelector(".moteur-tableau-signes").getBoundingClientRect();
+    const corps = document.body.getBoundingClientRect();
+    const carte = carteEl.getBoundingClientRect();
+    const consigne = carteEl.querySelector(".moteur-consigne").getBoundingClientRect();
+    const titre = carteEl.querySelector(".moteur-titre-ligne");
+    const titreG = titre ? titre.getBoundingClientRect().left + parseFloat(getComputedStyle(titre).paddingLeft) : null;
+    return { titreG, g: t.left, d: t.right, corpsG: corps.left, corpsD: corps.right, fenetre: window.innerWidth, carteG: carte.left, carteD: carte.right, consG: consigne.left, consD: consigne.right };
+  })()`)) as Record<string, number>;
+  const ok = (a: number, b: number) => Math.abs(a - b) <= 1;
+  verifier(ok(m.g, m.corpsG) && ok(m.d, m.corpsD), `${etiquette} (${largeur}px) : le tableau touche les bords de la colonne de contenu (tableau ${m.g}→${m.d}, colonne ${m.corpsG}→${m.corpsD})`);
+  if (largeur <= 720) verifier(m.g <= 1 && m.d >= m.fenetre - 1, `${etiquette} (${largeur}px) : sur mobile le tableau touche les bords de l'ÉCRAN (${m.g}→${m.d} sur ${m.fenetre})`);
+  else verifier(ok(m.d - m.g, 720), `${etiquette} (${largeur}px) : sur bureau le tableau fait la largeur de la colonne (720px), pas de l'écran (${m.d - m.g})`);
+  verifier(m.g < m.carteG && m.d > m.carteD, `${etiquette} (${largeur}px) : le tableau sort de la carte des deux côtés`);
+  verifier(m.titreG === null || ok(m.titreG, m.consG), `${etiquette} (${largeur}px) : les titres de ligne s'alignent sur le texte de la carte (${Math.round(m.titreG)} contre ${Math.round(m.consG)}) malgré le plein-bord`);
+  verifier(m.consG - m.carteG >= 24 && m.carteD - m.consD >= 24, `${etiquette} (${largeur}px) : le reste de la carte GARDE son padding (consigne à ${m.consG - m.carteG}px du bord gauche, ${m.carteD - m.consD}px du droit)`);
+}
+
+/** Valeur courante lue dans l'`aria-label` d'une case (« … : + . Toucher pour changer. ») ; « vide » = `?`. */
+const valeurDeCase = async (bouton: any) => ((await bouton.getAttribute("aria-label")) ?? "").replace(/^.*: ([^:]*)\. Toucher pour changer\.$/, "$1");
+
+/** Clique 9 fois et relève la suite des valeurs : [état initial, 1er clic, 2e clic, …]. */
+async function cycler(bouton: any): Promise<string[]> {
+  const suite = [await valeurDeCase(bouton)];
+  for (let k = 0; k < 9; k++) {
+    await bouton.click();
+    suite.push(await valeurDeCase(bouton));
+  }
+  return suite;
+}
+
+/**
+ * Depuis « ? » le 1er clic donne la 1re valeur du cycle ; depuis une valeur, la suivante. Dans tous les cas : jamais de retour à « ? »
+ * et le cycle se referme sur sa première valeur. `obtenu[0]` est l'état AVANT le premier clic.
+ */
+function verifierCycle(etiquette: string, obtenu: string[], cycle: string[]) {
+  const depart = obtenu[0] === "vide" ? 0 : cycle.indexOf(obtenu[0]) + 1;
+  const attendu = depart === 0 && obtenu[0] !== "vide" ? [] : [obtenu[0], ...Array.from({ length: 9 }, (_, k) => cycle[(depart + k) % cycle.length])];
+  verifier(JSON.stringify(obtenu) === JSON.stringify(attendu), `${etiquette} : cycle ${cycle.length} valeurs [${cycle.join(" ")}] (départ « ${obtenu[0]} »), JAMAIS de retour à « ? » — obtenu ${JSON.stringify(obtenu)}`);
+}
+
+/**
+ * Audit d'un tableau STRUCTURÉ (RAPPORT §30) : colonnes alternées sans −∞/+∞, colonnes de valeur en --violet-clair sur toutes les
+ * lignes, bande de symboles, alignement des cases (fusions comprises), boutons de même taille quel que soit le nombre de lignes,
+ * pas de colspan sur les lignes de signe, titres sans text-transform. Renvoie la largeur d'un bouton.
+ */
+async function auditerTableau(page: any, etiquette: string, largeur: number, attendu: { colonnes: number; fusions: number[]; lignesSigne: number; symboles: number } /* fusions vide = pas de ligne de variations */): Promise<number> {
+  const m = (await page.evaluate(`(() => {
+    const t = document.querySelector(".moteur-ecran-courant .moteur-table-structure");
+    const r = (el) => { const b = el.getBoundingClientRect(); return { g: b.left, d: b.right, h: b.height, l: b.width }; };
+    const caption = t.querySelector("caption");
+    return {
+      cols: [...t.querySelectorAll("col")].map((c) => ({ valeur: c.classList.contains("moteur-col-valeur"), fond: getComputedStyle(c).backgroundColor })),
+      x: [...t.querySelectorAll(".moteur-rangee-x td")].map((td) => ({ ...r(td), texte: td.innerText, valeur: td.classList.contains("moteur-cellule-valeur") })),
+      symboles: [...t.querySelectorAll(".moteur-rangee-symboles td")].map((td) => ({ ...r(td), texte: td.innerText, fond: getComputedStyle(td).backgroundColor, math: td.querySelectorAll(".moteur-math").length })),
+      lignes: [...t.querySelectorAll(".moteur-ligne-tableau")].map((tb) => ({
+        titre: tb.querySelector("th").innerText,
+        transformTitre: getComputedStyle(tb.querySelector("th")).textTransform,
+        variation: tb.querySelector("tr.moteur-rangee-variation") !== null,
+        cellules: [...tb.querySelectorAll("tr:not(.moteur-rangee-titre) td")].map((td) => ({ ...r(td), span: td.colSpan, bouton: r(td.querySelector("button")) })),
+      })),
+      titre: caption ? { texte: caption.innerText, transform: getComputedStyle(caption).textTransform } : null,
+      texte: t.innerText,
+      tableau: r(t),
+    };
+  })()`)) as any;
+  const ok = (a: number, b: number) => Math.abs(a - b) <= 1;
+  const e = `${etiquette} (${largeur}px)`;
+  verifier(m.cols.length === attendu.colonnes && m.x.length === attendu.colonnes, `${e} : ${attendu.colonnes} colonnes (2N+1), obtenu ${m.cols.length}`);
+  verifier(!m.texte.includes("∞"), `${e} : aucune colonne −∞/+∞`);
+  verifier(m.cols.every((c: any, i: number) => c.valeur === (i % 2 === 1)) && m.x.every((c: any, i: number) => c.valeur === (i % 2 === 1)), `${e} : les colonnes alternent intervalle, valeur, …, intervalle`);
+  verifier(m.cols.filter((c: any) => c.valeur).every((c: any) => c.fond === "rgb(241, 235, 252)") && m.cols.filter((c: any) => !c.valeur).every((c: any) => c.fond === "rgba(0, 0, 0, 0)"), `${e} : colonnes de valeur en --violet-clair (rgb(241, 235, 252)), colonnes « < » sans fond`);
+  verifier(m.x.filter((c: any) => !c.valeur).every((c: any) => c.texte.trim() === "<") && m.x.filter((c: any) => c.valeur).every((c: any) => c.texte.trim() !== ""), `${e} : ligne des x : « < » entre les valeurs, une valeur par colonne de valeur`);
+  verifier(m.x.every((c: any, i: number) => (i === 0 || ok(c.g, m.x[i - 1].d)) && ok(c.l, m.x[0].l)), `${e} : colonnes contiguës et de même largeur (${m.x.map((c: any) => Math.round(c.l)).join(",")})`);
+  verifier(ok(m.x[0].g, m.tableau.g) && ok(m.x[m.x.length - 1].d, m.tableau.d), `${e} : les colonnes occupent toute la largeur du tableau (aucun défilement)`);
+  verifier(m.symboles.length === attendu.colonnes && m.symboles.filter((c: any) => c.math > 0).length === attendu.symboles && m.symboles.filter((c: any) => c.math === 0).every((c: any) => c.texte.trim() === ""), `${e} : bande de symboles : ${attendu.symboles} symboles (KaTeX), rien au-dessus des « < »`);
+  verifier(m.symboles.filter((c: any) => c.math > 0).every((c: any) => c.fond === "rgb(246, 243, 251)"), `${e} : la bande de symboles est en --surface-sunken (rgb(246, 243, 251))`);
+  const avecVariations = attendu.fusions.length > 0;
+  verifier(m.lignes.length === attendu.lignesSigne + (avecVariations ? 1 : 0) && m.lignes[m.lignes.length - 1].variation === avecVariations, `${e} : ${attendu.lignesSigne} ligne(s) de signe empilée(s)${avecVariations ? " puis la ligne des variations" : " (aucune ligne de variations)"}`);
+  const largeursBoutons = new Set<number>();
+  m.lignes.forEach((ligne: any, i: number) => {
+    const spans = ligne.cellules.map((c: any) => c.span);
+    verifier(ligne.variation ? JSON.stringify(spans) === JSON.stringify(attendu.fusions) : spans.every((sp: number) => sp === 1) && spans.length === attendu.colonnes, `${e} : ligne ${i} « ${ligne.titre} » : colspan ${JSON.stringify(spans)} (${ligne.variation ? "variations FUSIONNÉES " + JSON.stringify(attendu.fusions) : "une case par colonne, jamais de fusion sur un signe"})`);
+    let debut = 0;
+    for (const c of ligne.cellules) {
+      const fin = debut + c.span - 1;
+      verifier(ok(c.g, m.x[debut].g) && ok(c.d, m.x[fin].d), `${e} : ligne ${i} : la case ${debut}-${fin} est alignée sur les colonnes de la ligne des x (${Math.round(c.g)}→${Math.round(c.d)} attendu ${Math.round(m.x[debut].g)}→${Math.round(m.x[fin].d)})`);
+      verifier(c.bouton.l >= 43.5 && c.bouton.h >= 43.5, `${e} : ligne ${i} : bouton ${Math.round(c.bouton.l)}×${Math.round(c.bouton.h)} (44px minimum)`);
+      largeursBoutons.add(Math.round(c.bouton.l * 10) / 10);
+      debut = fin + 1;
+    }
+    verifier(debut === attendu.colonnes && ligne.transformTitre === "none" && /SIGNE DE|VARIATIONS/.test(ligne.titre) && !/F\(X\)/.test(ligne.titre), `${e} : titre de ligne « ${ligne.titre} » : casse écrite dans le contenu, text-transform: ${ligne.transformTitre}`);
+  });
+  verifier(largeursBoutons.size === 1, `${e} : tous les boutons ont la même largeur, quel que soit le nombre de lignes empilées (${[...largeursBoutons].join(", ")})`);
+  verifier(m.titre !== null && m.titre.transform === "none" && m.titre.texte.trim() === "TABLEAU DE SIGNES", `${e} : titre « TABLEAU DE SIGNES » sans text-transform`);
+  return [...largeursBoutons][0];
+}
+
 /**
  * Phase 3b-1 — profil ÉTENDU du témoin unique joué de bout en bout dans un vrai navigateur : champs_multiples (avec et sans
  * illustration), intervalle, liste_valeurs.permetAucune, tableau_signes étendu (3 PUIS 7 colonnes sur deux
@@ -872,63 +978,126 @@ async function scenarioEtendu(navigateur: any, base: string, largeur: number) {
   await page.waitForSelector(".moteur-statut-correct");
   await suivante().click();
 
-  // ── Écran 7 (exercice 1) : tableau étendu à 3 colonnes ──
-  const remplir = async (ex: typeof exA, colonnes: number) => {
-    const sol = JSON.parse(reponseBruteCorrecte(U(ex), CHAMP_SIGNES_VARIATION)) as Record<string, Record<string, string>>;
-    const lignes = courant.locator(".moteur-table-signes tbody tr");
-    for (const [i, id] of ["signe", "variation"].entries()) {
+  // ── Écran 7 (exercice 1) : tableau STRUCTURÉ à 3 colonnes (racine double) ──
+  const remplir = async (sol: Record<string, Record<string, string>>) => {
+    const lignes = courant.locator(".moteur-ligne-tableau");
+    for (const [i, id] of Object.keys(sol).entries()) {
       const boutons = lignes.nth(i).locator("td button");
-      for (let c = 0; c < colonnes; c++) {
-        const attendu = sol[id][`c${c}`];
+      for (const [c, attendu] of Object.values(sol[id]).entries()) {
         const bouton = boutons.nth(c);
         for (let k = 0; k < 6; k++) {
-          const ok = i === 0 ? (await bouton.innerText()) === attendu : ((await bouton.getAttribute("aria-label")) ?? "").includes(NOMS_SYMBOLES[attendu]);
+          // Égalité EXACTE : « décroissante » contient « croissante » (une comparaison par sous-chaîne prenait ↘ pour ↗).
+          const ok = Object.hasOwn(NOMS_SYMBOLES, attendu) ? (await valeurDeCase(bouton)) === NOMS_SYMBOLES[attendu] : (await bouton.innerText()) === attendu;
           if (ok) break;
           await bouton.click();
         }
       }
     }
   };
-  await page.waitForSelector(".moteur-table-signes");
-  verifier((await courant.locator("thead th[scope=col]").count()) === 3 && (await courant.locator("tbody td button").count()) === 6, `${l} étendu : tableau à 3 colonnes (6 cases de réponse)`);
-  verifier((await courant.locator("thead .moteur-borne").count()) === 2 && (await courant.locator("thead .moteur-borne .moteur-math").count()) === 2 && (await courant.locator("tbody .moteur-borne button").count()) === 0, `${l} étendu : deux colonnes de bornes d'affichage, mathématiques, sans case de réponse`);
-  verifier((await courant.locator("thead .moteur-sous-libelle .moteur-math").count()) === 1, `${l} étendu : sous-libellé x_S sous la colonne du sommet`);
-  verifier((await courant.locator("tbody tr").nth(1).locator("th .moteur-math").count()) === 0 && (await courant.locator("tbody tr").nth(0).locator("th .moteur-math").count()) >= 1, `${l} étendu : libellés de ligne rendus par rendreTexte`);
+  /** Cycle attendu, écrit à la main d'après la spécification (jamais dérivé du code testé). */
+  const S2 = ["+", "-"], S3 = ["+", "-", "0"], S4 = ["+", "-", "0", "∅"];
+  const V_INTERVALLE = ["croissante", "décroissante"], V_SOMMET = ["maximum (en bosse)", "minimum (en creux)"];
+  const cyclerTout = async (etiquette: string, attendus: string[][][]) => {
+    const lignes = courant.locator(".moteur-ligne-tableau");
+    for (const [i, ligne] of attendus.entries()) {
+      const boutons = lignes.nth(i).locator("td button");
+      verifier((await boutons.count()) === ligne.length, `${etiquette} ligne ${i} : ${ligne.length} cases, obtenu ${await boutons.count()}`);
+      for (const [c, cycle] of ligne.entries()) {
+        const obtenu = await cycler(boutons.nth(c));
+        // Variations : l'ordre des symboles est celui de l'alphabet servi (↗ ↘ / ⌢ ⌣) ; on compare les noms accessibles.
+        verifierCycle(`${etiquette} ligne ${i} case ${c}`, obtenu, cycle);
+      }
+    }
+  };
+  await page.waitForSelector(".moteur-table-structure");
   const av7 = reponsesEnvoyees(journal);
-  await courant.locator("tbody tr").nth(1).locator("td button").first().click();
-  verifier((await courant.locator("tbody tr").nth(1).locator("td button svg.moteur-symbole").count()) === 1, `${l} étendu : un symbole de variation est DESSINÉ (svg), pas un caractère`);
-  verifier((await courant.locator("tbody tr").nth(1).locator("td button").first().getAttribute("aria-label"))!.includes("maximum (en bosse)"), `${l} étendu : le symbole est nommé en toutes lettres (aria-label)`);
+  const largeurUn = await auditerTableau(page, `${l} étendu : tableau 3 colonnes`, largeur, { colonnes: 3, fusions: [1, 1, 1], lignesSigne: 1, symboles: 1 });
+  await verifierPleinBord(page, `${l} étendu : tableau 3 colonnes`, largeur);
+  verifier((await courant.locator("tbody td button").count()) === 6, `${l} étendu : tableau à 3 colonnes (6 cases de réponse)`);
+  verifier((await courant.locator(".moteur-titre-ligne .moteur-math").count()) === 1 && (await courant.locator(".moteur-titre-ligne").nth(1).innerText()) === "VARIATIONS", `${l} étendu : titre « SIGNE DE $f(x)$ » rendu par rendreTexte (f(x) en mathématiques, casse conservée)`);
+  await courant.locator(".moteur-rangee-variation td button").first().click();
+  verifier((await courant.locator(".moteur-rangee-variation td button svg.moteur-symbole").count()) === 1, `${l} étendu : un symbole de variation est DESSINÉ (svg), pas un caractère`);
+  verifier((await valeurDeCase(courant.locator(".moteur-rangee-variation td button").first())) === "croissante", `${l} étendu : le symbole est nommé en toutes lettres (aria-label)`);
+  verifier(reponsesEnvoyees(journal) === av7, `${l} étendu : cliquer les cases n'envoie rien`);
   await ouvrirAide();
   await page.waitForSelector(".moteur-aide-croquis svg.moteur-croquis");
   verifier((await courant.locator(".croquis-indice").count()) === 1 && (await courant.locator("text.croquis-etiquette-petite").count()) === 2, `${l} étendu : croquis (racine double) : UNE marque fusionnée portant l'indice x_S`);
-  await remplir(exA, 3);
+  // Cycles de CHAQUE type de case (racine double : x_S est LA racine, donc 3 valeurs) — aucun retour à « ? ».
+  await cyclerTout(`${l} étendu 3 colonnes`, [
+    [S2, S3, S2],
+    [V_INTERVALLE, V_SOMMET, V_INTERVALLE],
+  ]);
+  await remplir(JSON.parse(reponseBruteCorrecte(U(exA), CHAMP_SIGNES_VARIATION)));
   verifier(reponsesEnvoyees(journal) === av7, `${l} étendu : remplir le tableau n'envoie rien`);
   await page.screenshot({ path: cap("09-tableau-3-colonnes"), fullPage: true });
   await verifierMiseEnPage(page, "tableau étendu 3 colonnes", largeur);
   await valider().click();
   await page.waitForSelector(".moteur-statut-correct");
   const cases3 = JSON.parse(dernierPost().reponse_brute);
-  verifier(Object.keys(cases3.signe).join() === "c0,c1,c2" && Object.keys(cases3.variation).join() === "c0,c1,c2", `${l} étendu : la réponse ne contient que les 3 colonnes de réponse (jamais les bornes)`);
+  verifier(Object.keys(cases3.signe).join() === "c0,c1,c2" && Object.keys(cases3.variation).join() === "c0,c1,c2", `${l} étendu : 3 cases de signe et 3 cases de variation (racine double : sommet seul au centre)`);
+  await suivante().click();
+
+  // ── Écran 8 (exercice 1) : tableau de QUOTIENT, 4 lignes empilées, « ∅ » au pôle ──
+  await page.waitForSelector(".moteur-ecran-courant tbody.moteur-ligne-tableau:nth-of-type(5)"); // 4e ligne de signe : le tableau de QUOTIENT est affiché (et non le tableau précédent, terminé)
+  const pointsA = [...exA.quotient.racines, exA.quotient.pole].sort((u, v) => u - v);
+  const colPoleA = 2 * pointsA.indexOf(exA.quotient.pole) + 1;
+  const facteurs = [S2, S3, S2, S3, S2, S3, S2];
+  const finale = (colPole: number) => facteurs.map((c, i) => (i === colPole ? S4 : c));
+  const largeurQuotient = await auditerTableau(page, `${l} étendu : quotient`, largeur, { colonnes: 7, fusions: [], lignesSigne: 4, symboles: 3 });
+  await verifierPleinBord(page, `${l} étendu : quotient`, largeur);
+  verifier(largeurQuotient === largeurUn, `${l} étendu : boutons de 44px partout, tableau à 1 ligne ou à 4 lignes (${largeurUn} / ${largeurQuotient})`);
+  await cyclerTout(`${l} étendu quotient`, [facteurs, facteurs, facteurs, finale(colPoleA)]);
+  await remplir(JSON.parse(reponseBruteCorrecte(U(exA), CHAMP_QUOTIENT)));
+  await page.screenshot({ path: cap("09b-quotient"), fullPage: true });
+  await verifierMiseEnPage(page, "tableau de quotient", largeur);
+  await valider().click();
+  await page.waitForSelector(".moteur-statut-correct");
+  const casesQ = JSON.parse(dernierPost().reponse_brute);
+  verifier(Object.keys(casesQ).join() === "facteur1,facteur2,facteur3,quotient" && casesQ.quotient[`c${colPoleA}`] === "∅" && Object.values(casesQ.quotient).filter((v) => v === "0").length === 2, `${l} étendu : réponse du quotient à 4 lignes, « ∅ » au pôle (c${colPoleA}), deux « 0 »`);
   await page.getByRole("button", { name: "Voir la fin" }).click();
   await page.waitForSelector(".moteur-fin");
   await page.getByRole("button", { name: "Terminer" }).click();
 
   // ── Exercice 2 : le tableau passe de 3 à 7 colonnes — l'état local d'édition doit repartir de zéro ──
-  await page.waitForSelector(".moteur-table-signes thead th[scope=col]:nth-of-type(8)", { state: "attached" });
-  verifier((await courant.locator("thead th[scope=col]").count()) === 7 && (await courant.locator("tbody td button").count()) === 14, `${l} étendu : 3 puis 7 colonnes : 14 cases de réponse`);
+  await page.waitForSelector(".moteur-table-structure col:nth-of-type(7)", { state: "attached" });
+  verifier((await courant.locator(".moteur-table-structure col").count()) === 7 && (await courant.locator("tbody td button").count()) === 10, `${l} étendu : 3 puis 7 colonnes : 7 cases de signe + 3 cases de variation FUSIONNÉES = 10 cases de réponse`);
   const etats = await courant.locator("tbody td button").allInnerTexts();
-  verifier(etats.length === 14 && etats.every((e: string) => e === "?"), `${l} étendu : aucune case ne garde l'état de l'exercice précédent (${JSON.stringify(etats)})`);
+  verifier(etats.length === 10 && etats.every((e: string) => e === "?"), `${l} étendu : aucune case ne garde l'état de l'exercice précédent (${JSON.stringify(etats)})`);
   verifier((await valider().isDisabled()), `${l} étendu : « Valider » désactivé sur le nouveau tableau vide`);
+  const largeurSept = await auditerTableau(page, `${l} étendu : tableau 7 colonnes`, largeur, { colonnes: 7, fusions: [3, 1, 3], lignesSigne: 1, symboles: 3 });
+  await verifierPleinBord(page, `${l} étendu : tableau 7 colonnes`, largeur);
+  // Toutes les cases sauf la dernière : « Valider » reste désactivé ; la dernière l'active.
+  const boutonsSept = courant.locator("tbody td button");
+  const nbSept = await boutonsSept.count();
+  for (let i = 0; i < nbSept - 1; i++) await boutonsSept.nth(i).click();
+  verifier(await valider().isDisabled(), `${l} étendu : 9 cases sur 10 renseignées : « Valider » reste désactivé (jamais soumissible incomplet)`);
+  await boutonsSept.nth(nbSept - 1).click();
+  verifier(!(await valider().isDisabled()), `${l} étendu : 10 cases sur 10 : « Valider » actif`);
   await ouvrirAide();
   await page.waitForSelector(".moteur-aide-croquis svg.moteur-croquis");
   verifier((await courant.locator(".croquis-indice").count()) === 1 && (await courant.locator("text.croquis-etiquette-petite").count()) === 4, `${l} étendu : croquis (deux racines) : 2 racines + le sommet, indice x_S`);
-  await remplir(exB, 7);
+  // Deux racines : x_1 et x_2 (3 valeurs), x_S et les intervalles (2 valeurs) ; variations fusionnées (3 | 1 | 3).
+  await cyclerTout(`${l} étendu 7 colonnes`, [
+    [S2, S3, S2, S2, S2, S3, S2],
+    [V_INTERVALLE, V_SOMMET, V_INTERVALLE],
+  ]);
+  await remplir(JSON.parse(reponseBruteCorrecte(U(exB), CHAMP_SIGNES_VARIATION)));
   await page.screenshot({ path: cap("10-tableau-7-colonnes"), fullPage: true });
   await verifierMiseEnPage(page, "tableau étendu 7 colonnes", largeur);
   await valider().click();
   await page.waitForSelector(".moteur-statut-correct");
   const cases7 = JSON.parse(dernierPost().reponse_brute);
-  verifier(Object.keys(cases7.signe).length === 7 && Object.keys(cases7.variation).length === 7, `${l} étendu : réponse à 7 colonnes`);
+  verifier(Object.keys(cases7.signe).length === 7 && Object.keys(cases7.variation).join() === "c0,c3,c4", `${l} étendu : réponse à 7 cases de signe et 3 cases de variation (clés d'ancrage c0, c3, c4)`);
+  await suivante().click();
+  await page.waitForSelector(".moteur-ecran-courant tbody.moteur-ligne-tableau:nth-of-type(5)"); // 4e ligne de signe : le tableau de QUOTIENT est affiché (et non le tableau précédent, terminé)
+  const largeurQuotientB = await auditerTableau(page, `${l} étendu : quotient (exercice 2)`, largeur, { colonnes: 7, fusions: [], lignesSigne: 4, symboles: 3 });
+  verifier(largeurQuotientB === largeurSept, `${l} étendu : les boutons du tableau à 4 lignes ont la MÊME largeur que ceux du tableau à 1 ligne (${largeurQuotientB} contre ${largeurSept})`);
+  const pointsB = [...exB.quotient.racines, exB.quotient.pole].sort((u, v) => u - v);
+  const colPoleB = 2 * pointsB.indexOf(exB.quotient.pole) + 1;
+  await cyclerTout(`${l} étendu quotient 2`, [facteurs, facteurs, facteurs, finale(colPoleB)]);
+  await remplir(JSON.parse(reponseBruteCorrecte(U(exB), CHAMP_QUOTIENT)));
+  await valider().click();
+  await page.waitForSelector(".moteur-statut-correct");
   await page.getByRole("button", { name: "Voir la fin" }).click();
   await page.waitForSelector(".moteur-fin");
   await page.getByRole("button", { name: "Terminer" }).click();
@@ -936,7 +1105,7 @@ async function scenarioEtendu(navigateur: any, base: string, largeur: number) {
 
   // Bilan : chaque réponse vient d'un clic sur « Valider » et n'a que les 3 clés du contrat.
   const posts = journal.requetes.filter((r) => r.methode === "POST" && r.url.endsWith("/api/reponses"));
-  verifier(posts.length === 11, `${l} étendu : 11 réponses envoyées par le navigateur attendues (2+1+1+2+1+2+1 sur l'exercice 1, 1 sur l'exercice 2), obtenu ${posts.length}`);
+  verifier(posts.length === 13, `${l} étendu : 13 réponses envoyées par le navigateur attendues (2+1+1+2+1+2+1+1 sur l'exercice 1, 2 sur l'exercice 2), obtenu ${posts.length}`);
   verifier(posts.every((p) => Object.keys(JSON.parse(p.corps ?? "{}")).sort().join() === "champ,exercice_assigne_id,reponse_brute" && typeof JSON.parse(p.corps ?? "{}").reponse_brute === "string"), `${l} étendu : chaque réponse n'a que les 3 clés du contrat, `+`reponse_brute est une chaîne`);
   verifier(journal.requetes.filter((r) => r.url.includes("/api/reponses/aide")).length === 6, `${l} étendu : 6 demandes d'aide (coefficients, axe, image, racines, tableau des deux exercices)`);
   verifier(journal.pageerrors.length === 0, `${l} étendu : erreurs JS non interceptées : ${journal.pageerrors.join(" | ")}`);

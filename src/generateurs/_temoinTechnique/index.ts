@@ -1,6 +1,7 @@
 import { creerPrng, type Prng } from "../../../lib/prng";
 import { decoderChampsMultiples, decoderIntervalle, decoderListeValeurs, decoderListeValeursOuAucune, decoderTableauSignes, lireNombreOuFraction } from "../../../lib/reponsesEcran";
-import { etatActuelSequentiel, type EcranDeclare, type Generateur, type ReponseConfirmee, type ResultatVerification, type SousChamp } from "../../../lib/contratGenerateur";
+import { etatActuelSequentiel, type ColonneTableauSignes, type EcranDeclare, type EcranTableauSignes, type Generateur, type ReponseConfirmee, type ResultatVerification, type SousChamp } from "../../../lib/contratGenerateur";
+import { comparerCasesTableau, resoudreRangees } from "../../../lib/structureTableau";
 import type { AideTypee } from "../../../lib/aideTypee";
 
 /**
@@ -47,9 +48,10 @@ export const CHAMP_AXE = "axe";
 export const CHAMP_IMAGE = "image";
 export const CHAMP_RACINES = "racines";
 export const CHAMP_SIGNES_VARIATION = "signes_variation";
+export const CHAMP_QUOTIENT = "quotient_signes";
 
 export const CHAMPS_BASE = [CHAMP_SOMME, CHAMP_PARITE, CHAMP_DIVISEURS, CHAMP_SIGNES];
-export const CHAMPS_ETENDUS = [CHAMP_COEFFICIENTS, CHAMP_ALLURE, CHAMP_EXTREMUM, CHAMP_AXE, CHAMP_IMAGE, CHAMP_RACINES, CHAMP_SIGNES_VARIATION];
+export const CHAMPS_ETENDUS = [CHAMP_COEFFICIENTS, CHAMP_ALLURE, CHAMP_EXTREMUM, CHAMP_AXE, CHAMP_IMAGE, CHAMP_RACINES, CHAMP_SIGNES_VARIATION, CHAMP_QUOTIENT];
 
 export type ProfilTemoin = "base" | "etendu";
 
@@ -61,6 +63,8 @@ export interface ExerciceEtendu {
   large: boolean;
   r1: number;
   r2: number;
+  /** g(x) = (x − racines[0])(x − racines[1]) / (x − pole) : tableau de signes à 4 lignes empilées, `∅` au pôle (RAPPORT §30). Entiers distincts de [−4 ; 4]. */
+  quotient: { racines: [number, number]; pole: number };
 }
 
 export interface ExerciceTemoin {
@@ -228,9 +232,6 @@ function ecransBase(ex: ExerciceTemoin): EcranDeclare[] {
 // PROFIL « etendu » (phase 3b-1)
 // ════════════════════════════════════════════════════════════════════════════════════════════
 
-const ALPHABET_SIGNE = ["+", "-", "0"];
-const ALPHABET_VARIATION = ["⌢", "⌣", "↗", "↘"];
-
 function signe(v: number): string {
   return v > 0 ? "+" : v < 0 ? "-" : "0";
 }
@@ -270,37 +271,120 @@ function sommet(ex: ExerciceEtendu): { xS: number; yS: number } {
 
 const f = (ex: ExerciceEtendu, x: number): number => ex.a * x * x + ex.b * x + ex.c;
 
-/** Colonnes du tableau : [zone, point, zone, …] autour des valeurs remarquables (7 ou 3 colonnes). */
-function colonnesTableau(ex: ExerciceEtendu): { id: string; libelle: string; sousLibelle?: string; x: number; estPoint: boolean; estSommet: boolean }[] {
+interface ColonneCalculee {
+  colonne: ColonneTableauSignes;
+  /** Valeur de x représentative de la colonne (la valeur elle-même, ou un point strictement à l'intérieur de l'intervalle). */
+  x: number;
+}
+
+const colonneIntervalle = (id: string, libelle: string, x: number): ColonneCalculee => ({ colonne: { id, libelle, genre: "intervalle" }, x });
+const colonneValeur = (id: string, x: number, symbole: string, options: { racine?: boolean; pole?: boolean; sommet?: boolean }): ColonneCalculee => ({
+  colonne: { id, libelle: `$x = ${latexNombre(x)}$`, genre: "valeur", valeur: `$${latexNombre(x)}$`, symbole, ...options },
+  x,
+});
+
+/** Colonnes du tableau structuré (RAPPORT §30) : 2N+1 colonnes `<, x₁, <, …, <` (7 colonnes à deux racines, 3 à racine double). */
+function colonnesTableau(ex: ExerciceEtendu): ColonneCalculee[] {
   const { xS } = sommet(ex);
+  const n = latexNombre;
   if (!ex.large) {
-    return [
-      { id: "c0", libelle: `$x < ${xS}$`, x: xS - 1, estPoint: false, estSommet: false },
-      { id: "c1", libelle: `$x = ${xS}$`, sousLibelle: "$x_S$", x: xS, estPoint: true, estSommet: true },
-      { id: "c2", libelle: `$x > ${xS}$`, x: xS + 1, estPoint: false, estSommet: false },
-    ];
+    return [colonneIntervalle("c0", `$x < ${n(xS)}$`, xS - 1), colonneValeur("c1", xS, "$x_S$", { racine: true, sommet: true }), colonneIntervalle("c2", `$x > ${n(xS)}$`, xS + 1)];
   }
   const [g, d] = [ex.r1, ex.r2];
   return [
-    { id: "c0", libelle: `$x < ${g}$`, x: g - 1, estPoint: false, estSommet: false },
-    { id: "c1", libelle: `$x = ${g}$`, x: g, estPoint: true, estSommet: false },
-    { id: "c2", libelle: `$${g} < x < ${xS}$`, x: (g + xS) / 2, estPoint: false, estSommet: false },
-    { id: "c3", libelle: `$x = ${xS}$`, sousLibelle: "$x_S$", x: xS, estPoint: true, estSommet: true },
-    { id: "c4", libelle: `$${xS} < x < ${d}$`, x: (xS + d) / 2, estPoint: false, estSommet: false },
-    { id: "c5", libelle: `$x = ${d}$`, x: d, estPoint: true, estSommet: false },
-    { id: "c6", libelle: `$x > ${d}$`, x: d + 1, estPoint: false, estSommet: false },
+    colonneIntervalle("c0", `$x < ${g}$`, g - 1),
+    colonneValeur("c1", g, "$x_1$", { racine: true }),
+    colonneIntervalle("c2", `$${g} < x < ${n(xS)}$`, (g + xS) / 2),
+    colonneValeur("c3", xS, "$x_S$", { sommet: true }), // le sommet n'est PAS une racine ici : jamais de « 0 » (2 valeurs)
+    colonneIntervalle("c4", `$${n(xS)} < x < ${d}$`, (xS + d) / 2),
+    colonneValeur("c5", d, "$x_2$", { racine: true }),
+    colonneIntervalle("c6", `$x > ${d}$`, d + 1),
   ];
+}
+
+function ecranSignesVariation(ex: ExerciceEtendu): EcranTableauSignes {
+  return {
+    champ: CHAMP_SIGNES_VARIATION,
+    type: "tableau_signes",
+    consigne: `Complète le tableau de signe et de variation de $f(x) = ${formeF(ex)}$.`,
+    aide: { type: "croquis_parabole", a: ex.a, b: ex.b, c: ex.c, marqueS: true, surlignageImf: true, marquesOx: true },
+    titre: "TABLEAU DE SIGNES",
+    colonnes: colonnesTableau(ex).map((c) => c.colonne),
+    lignes: [
+      { id: "signe", libelle: "SIGNE DE $f(x)$" },
+      { id: "variation", libelle: "VARIATIONS", nature: "variation" },
+    ],
+  };
 }
 
 function solutionTableau(ex: ExerciceEtendu): Record<string, Record<string, string>> {
   const { xS } = sommet(ex);
+  const colonnes = colonnesTableau(ex);
+  const x = new Map(colonnes.map((c) => [c.colonne.id, c.x]));
+  const sommets = new Set(colonnes.filter((c) => c.colonne.sommet).map((c) => c.colonne.id));
   const signes: Record<string, string> = {};
   const variation: Record<string, string> = {};
-  for (const col of colonnesTableau(ex)) {
-    signes[col.id] = signe(f(ex, col.x));
-    variation[col.id] = col.estSommet ? (ex.a > 0 ? "⌣" : "⌢") : col.x < xS ? (ex.a > 0 ? "↘" : "↗") : ex.a > 0 ? "↗" : "↘";
+  for (const rangee of resoudreRangees(ecranSignesVariation(ex))) {
+    for (const cellule of rangee.cellules) {
+      const abscisse = x.get(cellule.ancre)!;
+      if (rangee.ligne === "signe") signes[cellule.ancre] = signe(f(ex, abscisse));
+      else variation[cellule.ancre] = cellule.couvre.some((id) => sommets.has(id)) ? (ex.a > 0 ? "⌣" : "⌢") : abscisse < xS ? (ex.a > 0 ? "↘" : "↗") : ex.a > 0 ? "↗" : "↘";
+    }
   }
   return { signe: signes, variation };
+}
+
+// ── Tableau de signes d'un QUOTIENT : facteurs empilés + ligne finale, `∅` au pôle (RAPPORT §30) ──
+
+function facteur(p: number): string {
+  return p === 0 ? "x" : p > 0 ? `x - ${p}` : `x + ${-p}`;
+}
+
+/** Les 3 points remarquables triés (2 racines du numérateur, 1 pôle), avec leur rôle. */
+function pointsQuotient(ex: ExerciceEtendu): { valeur: number; role: "racine" | "pole" }[] {
+  const { racines, pole } = ex.quotient;
+  return [...racines.map((valeur) => ({ valeur, role: "racine" as const })), { valeur: pole, role: "pole" as const }].sort((u, v) => u.valeur - v.valeur);
+}
+
+function ecranQuotient(ex: ExerciceEtendu): EcranTableauSignes {
+  const points = pointsQuotient(ex);
+  const [r1, r2] = ex.quotient.racines;
+  const colonnes: ColonneTableauSignes[] = [];
+  points.forEach((p, i) => {
+    colonnes.push({ id: `c${2 * i}`, libelle: i === 0 ? `$x < ${p.valeur}$` : `$${points[i - 1].valeur} < x < ${p.valeur}$`, genre: "intervalle" });
+    colonnes.push({ id: `c${2 * i + 1}`, libelle: `$x = ${p.valeur}$`, genre: "valeur", valeur: `$${p.valeur}$`, symbole: `$x_${i + 1}$`, racine: true, ...(p.role === "pole" ? { pole: true } : {}) });
+  });
+  colonnes.push({ id: "c6", libelle: `$x > ${points[2].valeur}$`, genre: "intervalle" });
+  return {
+    champ: CHAMP_QUOTIENT,
+    type: "tableau_signes",
+    consigne: `Complète le tableau de signe de $g(x) = \\dfrac{(${facteur(r1)})(${facteur(r2)})}{${facteur(ex.quotient.pole)}}$.`,
+    titre: "TABLEAU DE SIGNES",
+    colonnes,
+    lignes: [
+      { id: "facteur1", libelle: `SIGNE DE $${facteur(r1)}$` },
+      { id: "facteur2", libelle: `SIGNE DE $${facteur(r2)}$` },
+      { id: "facteur3", libelle: `SIGNE DE $${facteur(ex.quotient.pole)}$` },
+      { id: "quotient", libelle: "SIGNE DE $g(x)$", nature: "quotient" },
+    ],
+  };
+}
+
+function solutionQuotient(ex: ExerciceEtendu): Record<string, Record<string, string>> {
+  const points = pointsQuotient(ex);
+  const [r1, r2] = ex.quotient.racines;
+  const { pole } = ex.quotient;
+  // Abscisse représentative de chaque colonne c0..c6 (valeur du point, ou milieu / point extérieur).
+  const abscisses = [points[0].valeur - 1, points[0].valeur, (points[0].valeur + points[1].valeur) / 2, points[1].valeur, (points[1].valeur + points[2].valeur) / 2, points[2].valeur, points[2].valeur + 1];
+  const resultat: Record<string, Record<string, string>> = { facteur1: {}, facteur2: {}, facteur3: {}, quotient: {} };
+  abscisses.forEach((x, i) => {
+    const id = `c${i}`;
+    resultat.facteur1[id] = signe(x - r1);
+    resultat.facteur2[id] = signe(x - r2);
+    resultat.facteur3[id] = signe(x - pole);
+    resultat.quotient[id] = x === pole ? "∅" : signe((x - r1) * (x - r2) * (x - pole)); // même signe que le quotient hors du pôle
+  });
+  return resultat;
 }
 
 function ecransEtendus(ex: ExerciceEtendu): EcranDeclare[] {
@@ -376,19 +460,8 @@ function ecransEtendus(ex: ExerciceEtendu): EcranDeclare[] {
       etiquetteAucune: "Pas de racine",
       etiquetteAuMoinsUne: "Au moins une racine",
     },
-    {
-      champ: CHAMP_SIGNES_VARIATION,
-      type: "tableau_signes",
-      consigne: `Complète le tableau de signe et de variation de $f(x) = ${F}$.`,
-      aide: { type: "croquis_parabole", a: ex.a, b: ex.b, c: ex.c, marqueS: true, surlignageImf: true, marquesOx: true },
-      colonnes: colonnesTableau(ex).map(({ id, libelle, sousLibelle }) => (sousLibelle ? { id, libelle, sousLibelle } : { id, libelle })),
-      lignes: [
-        { id: "signe", libelle: "Signe de $f(x)$", signesAutorises: ALPHABET_SIGNE },
-        { id: "variation", libelle: "Variation", signesAutorises: ALPHABET_VARIATION, rendu: "symboles_variation" },
-      ],
-      signesAutorises: ALPHABET_SIGNE,
-      bornes: { gauche: "$-\\infty$", droite: "$+\\infty$" },
-    },
+    ecranSignesVariation(ex),
+    ecranQuotient(ex),
   ];
 }
 
@@ -396,13 +469,20 @@ function ecransEtendus(ex: ExerciceEtendu): EcranDeclare[] {
 function genererEtendu(prng: Prng): ExerciceEtendu {
   const a = prng.entierEntre(1, 3);
   const large = prng.entierEntre(0, 1) === 1;
+  let f: Omit<ExerciceEtendu, "quotient">;
   if (large) {
     const r1 = prng.entierEntre(-4, 0);
     const r2 = r1 + prng.entierEntre(2, 5);
-    return { a, b: -a * (r1 + r2), c: a * r1 * r2, large, r1, r2 };
+    f = { a, b: -a * (r1 + r2), c: a * r1 * r2, large, r1, r2 };
+  } else {
+    const r = prng.choisir([-4, -3, -2, -1, 1, 2, 3, 4]);
+    f = { a, b: -2 * a * r, c: a * r * r, large, r1: r, r2: r };
   }
-  const r = prng.choisir([-4, -3, -2, -1, 1, 2, 3, 4]);
-  return { a, b: -2 * a * r, c: a * r * r, large, r1: r, r2: r };
+  // Tirés APRÈS tout le reste (l'ordre des tirages d'origine ne bouge pas) : 2 racines et 1 pôle DISTINCTS du tableau de quotient.
+  const pool = [-4, -3, -2, -1, 0, 1, 2, 3, 4];
+  const tirer = (): number => pool.splice(pool.indexOf(prng.choisir(pool)), 1)[0];
+  const [u, v] = [tirer(), tirer()];
+  return { ...f, quotient: { racines: u < v ? [u, v] : [v, u], pole: tirer() } };
 }
 
 /** Sous-champs déclarés de l'écran `champs_multiples` d'un champ : les décodeurs valident contre la DÉCLARATION. */
@@ -474,17 +554,13 @@ function verifierEtendu(ex: ExerciceEtendu, champ: string, reponseBrute: string)
     const attendues = new Set(ex.large ? [ex.r1, ex.r2] : [ex.r1]);
     return saisis.size === attendues.size && [...attendues].every((r) => saisis.has(r)) ? resultat("correct") : resultat("not_equivalent");
   }
-  if (champ === CHAMP_SIGNES_VARIATION) {
+  if (champ === CHAMP_SIGNES_VARIATION || champ === CHAMP_QUOTIENT) {
     const d = decoderTableauSignes(reponseBrute);
     if (!d.ok) return parseError(d.message);
-    const attendu = solutionTableau(ex);
-    for (const ligne of Object.keys(attendu)) {
-      for (const id of Object.keys(attendu[ligne])) {
-        if (typeof d.valeur[ligne]?.[id] !== "string") return parseError("Complète toutes les cases du tableau avant de valider.");
-      }
-    }
-    const tous = Object.entries(attendu).every(([ligne, cols]) => Object.entries(cols).every(([id, v]) => d.valeur[ligne][id] === v));
-    return tous ? resultat("correct") : resultat("not_equivalent");
+    const quotient = champ === CHAMP_QUOTIENT;
+    const comparaison = comparerCasesTableau(resoudreRangees(quotient ? ecranQuotient(ex) : ecranSignesVariation(ex)), d.valeur, quotient ? solutionQuotient(ex) : solutionTableau(ex));
+    if (!comparaison.ok) return parseError(comparaison.message);
+    return comparaison.tousJustes ? resultat("correct") : resultat("not_equivalent");
   }
   throw new Error(`Champ inconnu pour ${VARIANTE_TEMOIN} : ${champ}`);
 }
@@ -497,10 +573,11 @@ function solutionAttendueEtendue(ex: ExerciceEtendu, champ: string): string {
   if (champ === CHAMP_AXE) return `$x = ${latexNombre(xS)}$ ; $x_S = ${latexNombre(xS)}$ ; $y_S = ${latexNombre(yS)}$`;
   if (champ === CHAMP_IMAGE) return `$[${latexNombre(yS)}\\,;\\,+\\infty[$`;
   if (champ === CHAMP_RACINES) return (ex.large ? [ex.r1, ex.r2] : [ex.r1]).map((r) => `$${r}$`).join(" ; ");
-  if (champ === CHAMP_SIGNES_VARIATION) {
-    const sol = solutionTableau(ex);
-    return Object.entries(sol)
-      .map(([ligne, cols]) => `${ligne} : ${colonnesTableau(ex).map((c) => cols[c.id]).join(" ")}`)
+  if (champ === CHAMP_SIGNES_VARIATION || champ === CHAMP_QUOTIENT) {
+    const quotient = champ === CHAMP_QUOTIENT;
+    const solution = quotient ? solutionQuotient(ex) : solutionTableau(ex);
+    return resoudreRangees(quotient ? ecranQuotient(ex) : ecranSignesVariation(ex))
+      .map((rangee) => `${rangee.ligne} : ${rangee.cellules.map((c) => solution[rangee.ligne][c.ancre]).join(" ")}`)
       .join(" ; ");
   }
   throw new Error(`Champ inconnu pour ${VARIANTE_TEMOIN} : ${champ}`);
@@ -515,6 +592,7 @@ function reponseBruteCorrecteEtendue(ex: ExerciceEtendu, champ: string): string 
   if (champ === CHAMP_IMAGE) return JSON.stringify({ crochetGauche: "[", borneGauche: fraction(Math.round(yS * 4), 4), crochetDroit: "[", borneDroite: "+inf" });
   if (champ === CHAMP_RACINES) return JSON.stringify((ex.large ? [ex.r1, ex.r2] : [ex.r1]).map(String));
   if (champ === CHAMP_SIGNES_VARIATION) return JSON.stringify(solutionTableau(ex));
+  if (champ === CHAMP_QUOTIENT) return JSON.stringify(solutionQuotient(ex));
   throw new Error(`Champ inconnu pour ${VARIANTE_TEMOIN} : ${champ}`);
 }
 

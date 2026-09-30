@@ -16,6 +16,7 @@
     "test-admin-profs": "tsx scripts/test-admin-profs.ts",
     "test-texte-math": "tsx scripts/test-texte-math.ts",
     "test-design-system": "tsx scripts/test-design-system.ts",
+    "test-structure-tableau": "tsx scripts/test-structure-tableau.ts",
     "chromium-temoin": "tsx scripts/chromium-temoin-technique.ts"
   },
   "dependencies": {

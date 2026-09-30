@@ -2,6 +2,7 @@ import type { RequeteHttp, ReponseHttp } from "../../httpTypes";
 import { avecGestionErreurs } from "../../avecGestionErreurs";
 import { eleveAuthentifie, supabaseAdmin } from "../../supabaseAdmin";
 import { ecransServis } from "../../cascadeEcrans";
+import { resoudreRangees } from "../../structureTableau";
 import { calculerEtatExercice, chargerContexteTache, chargerDonneesExercice, COLONNES_EXERCICE_ASSIGNE, projeterExercice, regenererExercice, revelationFinDeTache, tacheEstCompletePourEleve, type LigneExerciceAssigne } from "../../etatExercice";
 import { aidePresente } from "../../aideTypee";
 import { construireChampVue, REGLAGES_FORCEES_ANTERIEURES } from "../../tableauDeBord";
@@ -95,7 +96,9 @@ export const gererExercicesId = avecGestionErreurs(async function handler(req: R
     saisie_possible: !anterieure,
     ecrans: ecransServis(projete.ecrans, new Set(etat.reponsesConfirmees.map((r) => r.champ)), anterieure).map((ecran) => {
       const { aide, ...publics } = ecran;
-      return { ...publics, aide_disponible: contexte.aideActivee && aidePresente(aide) };
+      // Tableau de signes (RAPPORT §30) : le navigateur reçoit la structure DÉJÀ résolue (cases, fusions, alphabets) — il ne la recalcule pas.
+      const servi = ecran.type === "tableau_signes" ? { ...publics, rangees: resoudreRangees(ecran) } : publics;
+      return { ...servi, aide_disponible: contexte.aideActivee && aidePresente(aide) };
     }),
     champs,
     champ_courant: anterieure ? null : etat.champCourant,

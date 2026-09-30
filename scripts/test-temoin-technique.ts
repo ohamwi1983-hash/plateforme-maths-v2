@@ -19,7 +19,7 @@ import { verifierBalisageMath, versTexteBrut } from "./support/texteMath";
 import { validerAide, aidePresente, NB_SEGMENTS_MAX, LONGUEUR_LATEX_MAX } from "../lib/aideTypee";
 import type { EcranDeclare, Generateur } from "../lib/contratGenerateur";
 import {
-  CHAMP_ALLURE, CHAMP_AXE, CHAMP_COEFFICIENTS, CHAMP_DIVISEURS, CHAMP_EXTREMUM, CHAMP_IMAGE, CHAMP_PARITE, CHAMP_RACINES, CHAMP_SIGNES, CHAMP_SIGNES_VARIATION, CHAMP_SOMME, CHAMPS_ETENDUS,
+  CHAMP_ALLURE, CHAMP_AXE, CHAMP_COEFFICIENTS, CHAMP_DIVISEURS, CHAMP_EXTREMUM, CHAMP_IMAGE, CHAMP_PARITE, CHAMP_QUOTIENT, CHAMP_RACINES, CHAMP_SIGNES, CHAMP_SIGNES_VARIATION, CHAMP_SOMME, CHAMPS_ETENDUS,
   CODE_AXE_NOTATION, CODE_ERREUR_CALCUL, CODE_MAUVAIS_CHOIX, generateurTemoinTechnique as temoin, graineDeProfil, reponseBruteCorrecte, VARIANTE_TEMOIN,
   type ExerciceEtendu, type ExerciceTemoin,
 } from "../src/generateurs/_temoinTechnique";
@@ -402,10 +402,11 @@ function textesAuteur(ecran: EcranDeclare): { nature: string; texte: string }[] 
   if (ecran.type === "tableau_signes") {
     for (const c of ecran.colonnes) {
       t.push({ nature: "libellé de colonne", texte: c.libelle });
-      if (c.sousLibelle) t.push({ nature: "sous-libellé de colonne", texte: c.sousLibelle });
+      if (c.symbole) t.push({ nature: "symbole de colonne", texte: c.symbole });
+      if (c.valeur) t.push({ nature: "valeur de colonne", texte: c.valeur });
     }
     for (const l of ecran.lignes) t.push({ nature: "libellé de ligne", texte: l.libelle });
-    if (ecran.bornes) t.push({ nature: "borne d'affichage", texte: ecran.bornes.gauche }, { nature: "borne d'affichage", texte: ecran.bornes.droite });
+    if (ecran.titre) t.push({ nature: "titre de tableau", texte: ecran.titre });
   }
   return t;
 }
@@ -437,7 +438,7 @@ async function sectionB(): Promise<void> {
   verifier((formes.get(true) ?? 0) > 20 && (formes.get(false) ?? 0) > 20, `les deux formes (7 et 3 colonnes) doivent être bien représentées : ${JSON.stringify([...formes])}`);
   const graineLarge = graineDeProfil("etendu", 0, { large: true });
   const graineEtroite = graineDeProfil("etendu", 0, { large: false });
-  verifier(JSON.stringify(temoin.ecrans(U(genE(graineLarge))).map((e) => e.champ)) === JSON.stringify(CHAMPS), "les 7 écrans, dans l'ordre");
+  verifier(JSON.stringify(temoin.ecrans(U(genE(graineLarge))).map((e) => e.champ)) === JSON.stringify(CHAMPS), `les ${CHAMPS.length} écrans, dans l'ordre`);
 
   // ── 2. Balisage : chaque nature de texte d'auteur porte du balisage valide ──
   const naturesAvecMath = new Set<string>();
@@ -459,12 +460,12 @@ async function sectionB(): Promise<void> {
       verifier(problemes.length === 0, `graine ${graine} : solution attendue de ${champ} : ${problemes.join(" ; ")}`);
     }
   }
-  for (const nature of ["consigne", "aide (chaîne)", "libellé de choix (qcm)", "étiquette d'ajout", "libellé de sous-champ", "libellé de choix (sous-champ)", "libellé de colonne", "sous-libellé de colonne", "libellé de ligne", "borne d'affichage"]) {
+  for (const nature of ["consigne", "aide (chaîne)", "libellé de choix (qcm)", "étiquette d'ajout", "libellé de sous-champ", "libellé de choix (sous-champ)", "libellé de colonne", "symbole de colonne", "valeur de colonne", "libellé de ligne"]) {
     verifier(naturesAvecMath.has(nature), `le témoin doit porter du balisage mathématique dans « ${nature} » (couverture)`);
   }
   verifier(verifierBalisageMath(temoin.solutionAttendue(U(genE(graineLarge)), CHAMP_AXE)).length === 0, "solution d'axe saine");
 
-  // ── 3. verifier : 7 écrans × statuts ──
+  // ── 3. verifier : tous les écrans × statuts ──
   const ex = genE(graineLarge);
   const ex3 = genE(graineEtroite);
   const v = (e: typeof ex, champ: string, brute: string) => temoin.verifier(U(e), champ, brute);
@@ -505,12 +506,33 @@ async function sectionB(): Promise<void> {
   verifier(v(ex, CHAMP_RACINES, JSON.stringify(["", " "])).statut === "parse_error", "racines : valeurs vides → parse_error (≠ « aucune »)");
   verifier(v(ex3, CHAMP_RACINES, JSON.stringify([String(ex3.r1), String(ex3.r1)])).statut === "correct", "racines : racine double saisie deux fois (comparaison en ensemble)");
   const tableau = JSON.parse(reponseBruteCorrecte(U(ex), CHAMP_SIGNES_VARIATION));
+  tableau.variation.c3 = "⌢";
+  verifier(v(ex, CHAMP_SIGNES_VARIATION, JSON.stringify(tableau)).statut === "not_equivalent", "tableau : variation fausse (sommet ⌢ au lieu de ⌣) → not_equivalent");
   tableau.variation.c3 = "↗";
-  verifier(v(ex, CHAMP_SIGNES_VARIATION, JSON.stringify(tableau)).statut === "not_equivalent", "tableau : variation fausse → not_equivalent");
+  verifier(v(ex, CHAMP_SIGNES_VARIATION, JSON.stringify(tableau)).statut === "parse_error", "tableau : ↗ n'existe pas sur la case du sommet (⌢ ⌣) → parse_error, jamais un essai raté");
   delete tableau.variation.c3;
   verifier(v(ex, CHAMP_SIGNES_VARIATION, JSON.stringify(tableau)).statut === "parse_error", "tableau : case manquante → parse_error");
   const sol = JSON.parse(reponseBruteCorrecte(U(ex), CHAMP_SIGNES_VARIATION));
-  verifier(sol.variation.c3 === "⌣" && sol.variation.c0 === "↘" && sol.variation.c6 === "↗", "tableau : sommet ⌣, flèches ↘ puis ↗ (a > 0)");
+  verifier(JSON.stringify(Object.keys(sol.variation)) === JSON.stringify(["c0", "c3", "c4"]), `tableau : variations FUSIONNÉES, clés d'ancrage c0 (c0-c2), c3 (sommet), c4 (c4-c6) : ${JSON.stringify(Object.keys(sol.variation))}`);
+  verifier(sol.variation.c3 === "⌣" && sol.variation.c0 === "↘" && sol.variation.c4 === "↗", "tableau : sommet ⌣, flèches ↘ puis ↗ (a > 0)");
+  const paire = (o: any, ligne: string, id: string, valeur: string) => JSON.stringify({ ...o, [ligne]: { ...o[ligne], [id]: valeur } });
+  const juste = JSON.parse(reponseBruteCorrecte(U(ex), CHAMP_SIGNES_VARIATION));
+  verifier(v(ex, CHAMP_SIGNES_VARIATION, JSON.stringify(juste)).statut === "correct", "tableau : réponse juste → correct");
+  verifier(v(ex, CHAMP_SIGNES_VARIATION, paire(juste, "signe", "c0", "0")).statut === "parse_error", "tableau : « 0 » sur une colonne d'INTERVALLE (2 valeurs) → parse_error");
+  verifier(v(ex, CHAMP_SIGNES_VARIATION, paire(juste, "signe", "c3", "0")).statut === "parse_error", "tableau : « 0 » sur le sommet, qui n'est pas une racine ici (2 valeurs) → parse_error");
+  verifier(v(ex, CHAMP_SIGNES_VARIATION, paire(juste, "signe", "c1", "∅")).statut === "parse_error", "tableau : « ∅ » hors d'un pôle de quotient → parse_error");
+  verifier(v(ex, CHAMP_SIGNES_VARIATION, paire(juste, "signe", "c2", "?")).statut === "parse_error", "tableau : « ? » n'est jamais une réponse (Valider reste désactivé côté client) → parse_error");
+  verifier(v(ex, CHAMP_SIGNES_VARIATION, paire(juste, "variation", "c1", "↘")).statut === "parse_error", "tableau : c1 est COUVERTE par la case fusionnée c0 : sa clé n'existe pas → parse_error");
+  verifier(v(ex, CHAMP_SIGNES_VARIATION, paire(juste, "fantome", "c0", "+")).statut === "parse_error", "tableau : ligne inconnue → parse_error");
+  verifier(v(ex, CHAMP_SIGNES_VARIATION, '{"signe":{"__proto__":"+"},"variation":{}}').statut === "parse_error", "tableau : clé « __proto__ » → parse_error");
+  verifier(v(ex, CHAMP_SIGNES_VARIATION, JSON.stringify({ ...juste, signe: { ...juste.signe, constructor: "+" } })).statut === "parse_error", "tableau : clé « constructor » (case inconnue) → parse_error, jamais lue dans le prototype");
+  // Quotient : quatre lignes empilées, « ∅ » au pôle uniquement, jamais « 0 » sur le pôle de la ligne finale.
+  const quotient = JSON.parse(reponseBruteCorrecte(U(ex), CHAMP_QUOTIENT));
+  const idPole = Object.entries(quotient.quotient).find(([, val]) => val === "∅")![0];
+  verifier(v(ex, CHAMP_QUOTIENT, JSON.stringify(quotient)).statut === "correct", "quotient : réponse juste → correct");
+  verifier(Object.values(quotient.quotient).filter((val) => val === "∅").length === 1 && Object.values(quotient.quotient).filter((val) => val === "0").length === 2, "quotient : un seul ∅ (le pôle) et deux 0 (les racines du numérateur)");
+  verifier(v(ex, CHAMP_QUOTIENT, paire(quotient, "quotient", idPole, "0")).statut === "not_equivalent", "quotient : « 0 » au pôle au lieu de « ∅ » → not_equivalent (les deux existent, ils sont distincts)");
+  verifier(v(ex, CHAMP_QUOTIENT, paire(quotient, "facteur1", idPole, "∅")).statut === "parse_error", "quotient : « ∅ » sur une ligne de FACTEUR → parse_error (seule la ligne finale l'offre)");
   verifier(Object.keys(sol.signe).length === 7 && Object.values(sol.signe).filter((s) => s === "0").length === 2, "tableau (7 colonnes) : exactement 2 zéros (les racines)");
   const sol3 = JSON.parse(reponseBruteCorrecte(U(ex3), CHAMP_SIGNES_VARIATION));
   verifier(Object.keys(sol3.signe).length === 3 && sol3.signe.c1 === "0" && sol3.signe.c0 === "+" && sol3.signe.c2 === "+", "tableau (3 colonnes) : racine double, + 0 +");
@@ -550,18 +572,21 @@ async function sectionB(): Promise<void> {
   const ok = await appeler("assignations", "POST", { jeton: jetonProf, corps: { tache_id: tache, eleve_ids: ["eleve-1"] } });
   verifier(ok.statut === 201 && ok.corps.nombre_exercices_generes === 2, `assignation du témoin étendu : ${JSON.stringify(ok.corps)}`);
   const lignes = s.base.table("exercices_assignes").filter((l) => l.tache_id === tache);
-  verifier(lignes.every((l) => JSON.stringify(l.champs_attendus) === JSON.stringify(CHAMPS) && l.variante_id === VARIANTE_TEMOIN), "champs_attendus = les 7 champs dans l'ordre");
+  verifier(lignes.every((l) => JSON.stringify(l.champs_attendus) === JSON.stringify(CHAMPS) && l.variante_id === VARIANTE_TEMOIN), "champs_attendus = tous les champs dans l'ordre");
   const lg = lignes[0];
   const exReel = genE(Number(lg.graine));
   const get = await appeler(`exercices/${lg.id}`, "GET", { jeton: jetonEleve });
-  verifier(get.statut === 200 && get.corps.ecrans.length === 7 && get.corps.champ_courant === CHAMP_COEFFICIENTS, `GET exercice : ${get.statut}`);
-  const attendueDisponible: Record<string, boolean> = { [CHAMP_COEFFICIENTS]: true, [CHAMP_ALLURE]: false, [CHAMP_EXTREMUM]: false, [CHAMP_AXE]: true, [CHAMP_IMAGE]: true, [CHAMP_RACINES]: true, [CHAMP_SIGNES_VARIATION]: true };
+  verifier(get.statut === 200 && get.corps.ecrans.length === CHAMPS.length && get.corps.champ_courant === CHAMP_COEFFICIENTS, `GET exercice : ${get.statut}`);
+  const attendueDisponible: Record<string, boolean> = { [CHAMP_COEFFICIENTS]: true, [CHAMP_ALLURE]: false, [CHAMP_EXTREMUM]: false, [CHAMP_AXE]: true, [CHAMP_IMAGE]: true, [CHAMP_RACINES]: true, [CHAMP_SIGNES_VARIATION]: true, [CHAMP_QUOTIENT]: false };
   verifier(get.corps.ecrans.every((e: any) => e.aide === undefined && e.aide_disponible === attendueDisponible[e.champ]), `aide jamais envoyée avec l'écran ; aide_disponible par écran (typée ou chaîne) : ${JSON.stringify(get.corps.ecrans.map((e: any) => [e.champ, e.aide_disponible, e.aide === undefined]))}`);
   verifier(!JSON.stringify(get.corps).includes('"segments"') && !JSON.stringify(get.corps).includes("croquis_parabole"), "aucune aide typée (ni ses données) dans GET /api/exercices/:id");
   const allure = get.corps.ecrans.find((e: any) => e.champ === CHAMP_ALLURE);
   verifier(allure.type === "champs_multiples" && allure.illustration.type === "croquis_allure" && allure.illustration.c === exReel.c && allure.champs.length === 2, "écran d'allure : champs_multiples avec illustration (c public)");
   const tab = get.corps.ecrans.find((e: any) => e.champ === CHAMP_SIGNES_VARIATION);
-  verifier(tab.bornes && tab.lignes.length === 2 && tab.lignes[1].rendu === "symboles_variation" && tab.lignes[1].signesAutorises.length === 4, "tableau étendu servi : bornes, alphabet par ligne, rendu");
+  verifier(tab.bornes === undefined && tab.lignes.length === 2 && tab.lignes[1].nature === "variation" && tab.colonnes.every((c: any, i: number) => c.genre === (i % 2 === 0 ? "intervalle" : "valeur")), "tableau étendu servi : colonnes alternées, ni bornes ni −∞/+∞");
+  verifier(Array.isArray(tab.rangees) && tab.rangees.length === 2 && tab.rangees[0].cellules.length === tab.colonnes.length && tab.rangees[1].cellules.length === 3 && tab.rangees[1].cellules.every((c: any) => c.alphabet.length === 2), "tableau étendu servi : structure RÉSOLUE par le serveur (7 cases de signe, 3 cases de variation à 2 valeurs)");
+  const tabQuotient = get.corps.ecrans.find((e: any) => e.champ === CHAMP_QUOTIENT);
+  verifier(tabQuotient.rangees.length === 4 && tabQuotient.rangees[3].cellules.some((c: any) => c.alphabet.length === 4 && c.alphabet.includes("∅")) && tabQuotient.rangees[0].cellules.every((c: any) => !c.alphabet.includes("∅")), "quotient servi : 4 lignes empilées, un seul type de case à 4 valeurs (le pôle), sur la ligne finale");
   verifier(get.corps.ecrans.find((e: any) => e.champ === CHAMP_RACINES).permetAucune === true, "permetAucune servi");
   verifier(!JSON.stringify(get.corps.ecrans).includes(reponseBruteCorrecte(U(exReel), CHAMP_COEFFICIENTS)), "un écran semble contenir la solution des coefficients");
 

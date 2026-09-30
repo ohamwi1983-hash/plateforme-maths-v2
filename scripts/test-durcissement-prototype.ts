@@ -122,7 +122,9 @@ function siteDecodeurTableau(): void {
 function siteClient(): void {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const tableau = require("../public/moteur/ecrans/tableauSignes.js").default as { resumer(ecran: unknown, valeurSaisie: string): string };
-  const ecran = { lignes: [{ id: "variation", libelle: "Variation", rendu: "symboles_variation" }], colonnes: [{ id: "c0", libelle: "a" }, { id: "c1", libelle: "b" }] };
+  const ecran = { lignes: [{ id: "variation", libelle: "Variation", rendu: "symboles_variation" }], colonnes: [{ id: "c0", libelle: "a" }, { id: "c1", libelle: "b" }],
+    // `rangees` = la structure RÉSOLUE par le serveur (lib/structureTableau.ts), telle que servie au navigateur.
+    rangees: [{ ligne: "variation", cellules: [{ ancre: "c0", couvre: ["c0"], alphabet: ["↗", "↘"] }, { ancre: "c1", couvre: ["c1"], alphabet: ["↗", "↘"] }] }] };
   const resume = (v: unknown) => tableau.resumer(ecran, JSON.stringify({ variation: { c0: v, c1: "↗" } }));
   for (const cle of CLES_HERITEES) {
     const texte = resume(cle);
