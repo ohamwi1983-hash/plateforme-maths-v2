@@ -1319,3 +1319,13 @@ Entrées déjà présentes, libellés identiques à `CATALOGUE_GENERATEURS` (`li
 - Aucun changement de schéma SQL : rien à reporter dans `cumulatif.sql`.
 
 Régression : voir le message de PR (export propre du commit exact : `tsc -b`, tous les `scripts/test-*.ts` + smoke, `chromium-temoin`, `chromium-design`).
+
+## §34 : `inscription-prof` — une panne de la base n'est plus un « code d'invitation invalide »
+
+**Défaut** (signalé en fin de §33, ligne 73 avant correction) : `if (erreurInvitation || !invitation)` renvoyait le même 404 « Code d'invitation invalide » pour un code inexistant ET pour une erreur de lecture de la base. Pendant une panne, un professeur muni d'un code valide croyait son code faux, et rien n'apparaissait dans les journaux (même famille de masquage que §25).
+
+**Correction** : `lib/routes/inscription-prof.ts:75-81` — une erreur de lecture est levée (`throw new Error("Lecture du code d'invitation impossible : …")`), donc 500 journalisé par `avecGestionErreurs` avec la cause dans `detail` ; seul `!invitation` reste un 404. Le message générique du 404 (code inexistant, e-mail discordant) est inchangé, donc l'anti-fuite de §26 aussi.
+
+**Test** : `scripts/test-inscription-prof.ts` — panne simulée de la lecture de `invitations_prof` (`panne.invitations`) : 500, cause dans le détail, message différent du 404, aucun compte créé. Mutant vérifié : avec l'ancienne condition, le test échoue (« 500 attendu, obtenu 404 »).
+
+Aucun changement de schéma SQL.

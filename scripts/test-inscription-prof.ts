@@ -25,6 +25,9 @@ function creerBaseEnMemoire() {
     return `${prefixe}-${compteurId}`;
   }
 
+  /** Panne simulée de la lecture de `invitations_prof` (null = base saine). */
+  const panne: { invitations: string | null } = { invitations: null };
+
   const emailParId: Record<string, string> = {};
   const motDePasseParId: Record<string, string> = {};
 
@@ -58,7 +61,7 @@ function creerBaseEnMemoire() {
             filtres.push((l) => l[col] === val);
             return chaine;
           },
-          maybeSingle: () => Promise.resolve({ data: lignesFiltrees()[0] ?? null, error: null }),
+          maybeSingle: () => Promise.resolve(table === "invitations_prof" && panne.invitations !== null ? { data: null, error: { message: panne.invitations } } : { data: lignesFiltrees()[0] ?? null, error: null }),
           insert: (payload: Ligne | Ligne[]) => {
             const lignesAInserer = Array.isArray(payload) ? payload : [payload];
             const inserees = lignesAInserer.map((l) => ({ id: l.id ?? nouvelId(table), ...l }));
@@ -84,10 +87,10 @@ function creerBaseEnMemoire() {
     };
   }
 
-  return { tables, admin: construireAdmin() };
+  return { tables, panne, admin: construireAdmin() };
 }
 
-const { tables, admin } = creerBaseEnMemoire();
+const { tables, panne, admin } = creerBaseEnMemoire();
 
 require.cache[cheminSupabaseAdmin] = {
   id: cheminSupabaseAdmin,
@@ -158,6 +161,20 @@ async function main() {
   const nombreProfsApresReutilise = tables.profs.length;
   if (nombreProfsApresReutilise !== 1) throw new Error(`Code déjà utilisé : toujours 1 seule ligne "profs" attendue (usage unique), obtenu ${nombreProfsApresReutilise}`);
   console.log(`OK : code d'invitation déjà utilisé (2e tentative) -> rejet (400), message : "${corpsReutilise.erreur}" — usage unique respecté`);
+
+  // --- Panne de la base pendant la lecture du code -> 500 (journalisé), JAMAIS le 404 « code invalide », aucun compte créé. ---
+  const profsAvantPanne = tables.profs.length;
+  panne.invitations = "connection reset by peer";
+  const { statusCode: scPanne, corps: corpsPanne } = await appeler({
+    method: "POST",
+    body: { codeInvitation: "INVIT-VALIDE", email: "panne@test.fr", motDePasse: "secret1", nom: "Panne" },
+  });
+  panne.invitations = null;
+  if (scPanne !== 500) throw new Error(`Panne de lecture du code : 500 attendu (et non le 404 « code invalide »), obtenu ${scPanne}, ${JSON.stringify(corpsPanne)}`);
+  if (corpsPanne.erreur === "Code d'invitation invalide") throw new Error("Panne de lecture du code : le message ne doit pas être « Code d'invitation invalide »");
+  if (!String(corpsPanne.detail).includes("connection reset by peer")) throw new Error(`Panne de lecture du code : la cause doit figurer dans le détail journalisé, obtenu ${JSON.stringify(corpsPanne)}`);
+  if (tables.profs.length !== profsAvantPanne) throw new Error("Panne de lecture du code : aucun compte ne doit être créé");
+  console.log(`OK : panne de la base à la lecture du code -> 500 avec la cause ("${corpsPanne.detail}"), pas un faux « code invalide »`);
 
   console.log("TOUS LES TESTS D'INSCRIPTION PROFESSEUR PASSENT");
 }
