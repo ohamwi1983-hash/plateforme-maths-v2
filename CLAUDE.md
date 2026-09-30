@@ -118,13 +118,17 @@ sait exécuter) et leur cohérence est vérifiée au chargement du registre (éc
 
 ## Design system (phase 2)
 
-Les 35 tokens de `:root` (`public/style.css`) sont documentés dans `docs/design-system.md`
+Les 36 tokens de `:root` (`public/style.css`) sont documentés dans `docs/design-system.md`
 (`scripts/test-design-system.ts` vérifie qu'ils restent identiques, et que `public/moteur/ecrans.css`
 n'utilise que des `var(--token)`). Ne jamais ajouter de valeur en dur (couleur, police, espacement,
 rayon) dans un composant d'écran ; ne jamais inventer un token sans mettre à jour le document (et le compte attendu par le test). Ombre de carte :
-`var(--ombre-carte)`, jamais recopiée littéralement. Les 3 tokens `--coef-a|b|c` (surbrillance d'un
+`var(--ombre-carte)`, jamais recopiée littéralement ; ombre de « Valider » : `var(--ombre-bouton)`. Les 3 tokens `--coef-a|b|c` (surbrillance d'un
 coefficient) sont **réservés** à `.moteur-coef-*` — jamais un verdict — et leur contraste (≥ 4,5:1 sur tous
 les fonds de carte) est calculé par le test.
+
+## Fidélité au design : la référence fait foi, mesurée sur le style CALCULÉ (RAPPORT §32)
+
+Le CSS source ne prouve rien : une règle de `ecrans.css` peut être écrasée par une règle plus spécifique de `style.css` (cas de `.moteur-champ`, corrigé en §32). Les cinq composants (champ, QCM, liste, champs multiples, intervalle) ont une référence EXACTE dans `docs/reference/composants-ecran.html` (le tableau de signes dans `docs/reference/tableau-signes.html`) ; `npm run chromium-design` rend la référence et l'application dans le même Chromium et compare les styles calculés. Toute retouche visuelle d'un composant se règle sur ce fichier, jamais sur une description ; un écart admis se documente dans le RAPPORT (hauteurs tactiles de 44px, bouton d'aide, ±∞). Un nouveau composant d'écran exige sa référence AVANT d'être construit. Les scénarios Chromium cliquent l'OPTION d'un QCM (label), jamais le radio natif, masqué visuellement mais jamais `display: none`.
 
 ## Correction immédiate coupée (règle de révélation)
 

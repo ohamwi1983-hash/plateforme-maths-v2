@@ -1,7 +1,7 @@
 # Design system — tokens
 
 Source de vérité **technique** : le bloc `:root` de `public/style.css`. Ce document en est la
-description ; `scripts/test-design-system.ts` vérifie qu'ils restent identiques (mêmes 35 noms, mêmes
+description ; `scripts/test-design-system.ts` vérifie qu'ils restent identiques (mêmes 36 noms, mêmes
 valeurs, aucun token non documenté). **Aucune valeur n'a été inventée** : les 31 variables issues du « système visuel partagé v3 » (phase 1)
 ont été regroupées par famille et nommées par rôle ; le 32e token, `--ombre-carte`, **nomme** l'ombre de carte
 qui était répétée à l'identique dans cinq règles de `style.css` (sans en changer la valeur ; ces cinq règles
@@ -114,6 +114,7 @@ chromatique, et le nom de chaque coefficient figure dans l'`aria-label` de l'aid
 | Token | Valeur | Rôle |
 |---|---|---|
 | `--ombre-carte` | `0 10px 24px -18px rgba(59,20,112,.3)` | Ombre de toute carte (`.panneau`, `.item-liste`, `.item-eleve`, `.carte-formulaire`, cartes d'écran du moteur) |
+| `--ombre-bouton` | `0 8px 16px -6px rgba(124,58,237,.45)` | Ombre du bouton principal « Valider » du moteur (`.moteur-bouton-principal`), valeur de la référence validée (RAPPORT §32) |
 
 ### Typographie
 | Token | Valeur | Rôle |

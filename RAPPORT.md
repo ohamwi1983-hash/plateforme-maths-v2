@@ -1251,3 +1251,29 @@ Cellules à filets fins (`border-top`/`border-right: 1px solid var(--border)`) ;
 
 ### D. Limites
 Le tableau « hérité » (5 colonnes, Section A du témoin) garde son ancien style : il n'est utilisé que par le témoin. Les symboles de la bande (`x_1`) et les valeurs (`-2`) s'affichent encore en source LaTeX tant que KaTeX n'est pas branché (3b-3, commit 4) ; la référence utilise `x₁` et `−2`. Rendu de la carte : la référence est un seul bloc de 390px ; ici le tableau sort de la carte jusqu'aux bords de l'écran (décision du propriétaire, §30-E).
+
+
+## §32 : Design des composants d'écran — corrections E1-E5 et E7 de l'audit, test de fidélité permanent
+
+Aucun SQL. Suite de l'audit (étape 1, aucune correction) : les décisions du propriétaire sont E1/E2 = vrais bugs, E3/E4 = améliorations à garder en changeant seulement le style, E5 = resserrer à 12px, E6 = rien, E7 = comblé par deux références exactes (champs multiples, intervalle). Les cinq références sont stockées dans le dépôt : `docs/reference/composants-ecran.html`.
+
+### A. Ce qui était faux, et pourquoi les tests ne le voyaient pas
+Les composants avaient été construits à partir de descriptions en mots ; le CSS *source* disait presque la bonne chose, le style *appliqué* non. **E1** : `ecrans.css` déclarait `.moteur-champ { background: var(--surface-sunken); padding: 8px 16px }` mais `style.css` a `input[type="text"] { background: var(--surface); padding: 8px 12px }` (spécificité 0,1,1 contre 0,1,0) : le fond en creux et le padding étaient du code mort. Aucun test ne comparait un fond calculé.
+
+### B. Corrections (`public/moteur/ecrans.css`, `public/moteur/ecrans/listeValeurs.js`, `public/style.css`)
+- **E1** (`ecrans.css:175`) : sélecteur `.moteur-ecran .moteur-champ` (0,2,0) ; fond `--surface-sunken`, padding 10px 12px, 0,95em, `margin: 0` (un `input` de `style.css` ajoutait 4px). Hauteur 44px conservée (cible tactile). **Aucun sélecteur partagé n'est modifié** : seul `eleve.html` charge `ecrans.css` ; le diff de `style.css` est une seule variable (`--ombre-bouton`, inutilisée ailleurs). `prof.html` et `index.html` sont donc inchangés par construction (`git diff --stat`), et le scénario `prof` de Chromium (vrai `prof.html`) reste vert.
+- **E2** (`ecrans.css:128`) : « Valider » = bordure 2px, padding 9px 18px (1,125 × `--espace-2`/`--espace-3`, multiples exacts de l'échelle), 0,95em, ombre nommée par le **36e token `--ombre-bouton`** (`style.css:90`, `docs/design-system.md`, `scripts/test-design-system.ts` : 36 tokens ; désactivé : sans ombre). Les valeurs 9/10/12/14px de la référence ne sont pas des tokens : elles sont écrites `calc(token × facteur)`, jamais en dur.
+- **E3** (`ecrans.css:204-240`) : le radio natif reste dans l'arbre d'accessibilité (`opacity: 0`, 1×1px, **jamais** `display: none` ni `visibility: hidden`), focalisable, flèches du clavier opérationnelles ; le focus clavier se lit sur l'option (`:has(input:focus-visible)`, contour 2px). Option = padding 10px 14px ; retenue = **vraie** bordure de 2px (au lieu de 1px + anneau intérieur).
+- **E4** (`listeValeurs.js:88`, `ecrans.css:279`) : glyphe `🗑` à 18px ; le vrai bouton (44×48px, `aria-label` « Retirer cette valeur ») est conservé. « Ajouter » : 0,9em, hauteur tactile 44px conservée.
+- **E5** (`ecrans.css:62`) : espacement de la carte 16 → 12px (`calc(--espace-3 × 0,75)`) ; le bouton d'aide reste entre le champ et « Valider » (12 + 44 + 12).
+- **E7** : champs multiples — gap 8px, libellé `min-width: 24px` (les champs `a`, `b`, `c` étaient décalés de 1px). Intervalle — crochets **ronds de 32×32px** (bordure 2px violette, fond blanc), **cible tactile de 44×44px conservée par un pseudo-élément** qui déborde de 6px (`ecrans.css:776`) ; bornes de 64px, texte centré, padding 8px 10px, 0,9em ; gap 6px. `border-radius: 50%` admis par le test du design system (forme, pas une valeur).
+
+### C. Test permanent : `scripts/chromium-fidelite-design.ts` (`npm run chromium-design`)
+Rend la référence et l'application réelle dans le **même Chromium** et compare les styles **calculés** élément par élément (couleurs en hexadécimal, rayons, paddings, ombre, police, graisse, tailles) + espacements verticaux mesurés sur les boîtes. Vérifie aussi : radio masqué mais présent et focalisable, focus visible, suppression = vrai bouton 44×44 avec `aria-label` et glyphe `🗑`, hauteur des champs ≥ 44px, alignement des libellés, crochets 32×32 et zone tactile 44×44 (`elementFromPoint` : touché à 5px, plus à 9px). **222 vérifications**. Mutation : remettre `.moteur-champ` (E1) → 11 échecs explicites. Deux pièges rencontrés : (1) le fond d'un champ passe par une **transition** (focus → repos) : capturé trop tôt, il paraissait blanc alors que le style calculé était juste — on attend 450ms après le flou ; (2) le survol change le fond du bouton « Ajouter » : la souris est écartée avant toute mesure.
+Le serveur et le stub Supabase de Chromium sont factorisés (`scripts/support/serveurChromium.ts`), utilisés par les deux scripts. Les scénarios existants cliquent désormais l'**option** (label), pas le radio masqué : c'est ce que fait un vrai utilisateur.
+
+### D. Vérification
+`tsc -b` ; tous les `scripts/test-*.ts` + smoke-test ; `test-design-system` (524, 36 tokens) ; Chromium `chromium-temoin` **1 463** (couleurs de sélection du QCM incluses) ; `chromium-design` **222**. Captures : `captures-chromium/fidelite-{ref,app}-{champ,qcm,liste,multiples,intervalle}.png`.
+
+### E. Écarts ADMIS (documentés, pas des oublis)
+Hauteur des champs et des options (44px tactile contre 39-42px) ; hauteur du bouton « Ajouter » ; le bouton « Besoin d'un indice ? » (absent des références) ; le libellé du bouton « Ajouter » vient du générateur (la référence écrit « + Ajouter une valeur ») ; les boutons ±∞ de l'intervalle n'ont pas de référence. Rendu à 1280px non recapturé (règles identiques). Polices : seule la famille déclarée est comparée (polices bloquées dans le bac à sable).

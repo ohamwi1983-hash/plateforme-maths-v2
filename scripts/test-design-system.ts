@@ -1,6 +1,6 @@
 // Test permanent — phase 2 §E : le design system reste (1) fidèle à sa documentation et (2) le seul
 // vocabulaire des composants d'écran du moteur.
-//  - les 35 tokens de `:root` (public/style.css) et le tableau de docs/design-system.md sont
+//  - les 36 tokens de `:root` (public/style.css) et le tableau de docs/design-system.md sont
 //    identiques (mêmes noms, mêmes valeurs, aucun token non documenté ni fantôme) ;
 //  - public/moteur/ecrans.css n'utilise que des `var(--token)` existants : aucune couleur, police,
 //    rayon ni longueur en dur (exceptions documentées : 0, 1px, 2px, 100%, em) ;
@@ -28,7 +28,7 @@ const bloc = css.slice(debut, fin).replace(/\/\*[\s\S]*?\*\//g, "");
 const tokensCss = new Map<string, string>();
 for (const m of bloc.matchAll(/^\s*(--[a-z0-9-]+):\s*(.+?);\s*$/gm)) tokensCss.set(m[1], m[2]);
 
-const NB_TOKENS = 35;
+const NB_TOKENS = 36;
 verifier(tokensCss.size === NB_TOKENS, `:root doit contenir exactement ${NB_TOKENS} tokens, trouvé ${tokensCss.size}`);
 
 const doc = readFileSync(join(RACINE, "docs/design-system.md"), "utf8");
@@ -49,7 +49,7 @@ verifier(!/\b(rgb|rgba|hsl|hsla)\(/.test(ecrans), "ecrans.css : couleur rgb()/hs
 for (const m of ecrans.matchAll(/font-family:\s*([^;]+);/g)) verifier(/^var\(--font-(corps|marque)\)$/.test(m[1].trim()), `ecrans.css : font-family en dur « ${m[1].trim()} »`);
 for (const m of ecrans.matchAll(/(?<![\w.-])(\d+(?:\.\d+)?)px\b/g)) verifier(m[1] === "1" || m[1] === "2" || m[1] === "0", `ecrans.css : longueur en dur « ${m[0]} » (utiliser l'échelle --espace-* ou --radius*)`);
 verifier(!/\brem\b|\d+rem\b/.test(ecrans), "ecrans.css : unité rem en dur");
-for (const m of ecrans.matchAll(/border-radius:\s*([^;]+);/g)) verifier(/var\(--radius(-sm)?\)/.test(m[1]), `ecrans.css : border-radius en dur « ${m[1].trim()} »`);
+for (const m of ecrans.matchAll(/border-radius:\s*([^;]+);/g)) verifier(/var\(--radius(-sm)?\)/.test(m[1]) || m[1].trim() === "50%", `ecrans.css : border-radius en dur « ${m[1].trim()} »`);
 // Alias locaux (`--etat-*`) : autorisés SEULEMENT s'ils sont définis exclusivement par `var(--token)` existant.
 const aliasLocaux = new Set<string>();
 for (const m of ecrans.matchAll(/^\s*(--[a-z0-9-]+):\s*([^;]+);/gm)) {
@@ -58,7 +58,7 @@ for (const m of ecrans.matchAll(/^\s*(--[a-z0-9-]+):\s*([^;]+);/gm)) {
 }
 for (const m of ecrans.matchAll(/var\((--[a-z0-9-]+)\)/g)) verifier(tokensCss.has(m[1]) || aliasLocaux.has(m[1]), `ecrans.css : token inconnu ${m[1]}`);
 verifier(/box-shadow:\s*var\(--ombre-carte\)/.test(ecrans), "ecrans.css : la carte d'écran doit utiliser var(--ombre-carte)");
-for (const m of ecrans.matchAll(/box-shadow:\s*([^;]+);/g)) verifier(/^(none|var\(--ombre-carte\)|inset 0 0 0 1px var\(--[a-z0-9-]+\))$/.test(m[1].trim()), `ecrans.css : box-shadow non conforme « ${m[1].trim()} »`);
+for (const m of ecrans.matchAll(/box-shadow:\s*([^;]+);/g)) verifier(/^(none|var\(--ombre-carte\)|var\(--ombre-bouton\)|inset 0 0 0 1px var\(--[a-z0-9-]+\))$/.test(m[1].trim()), `ecrans.css : box-shadow non conforme « ${m[1].trim()} »`);
 for (const m of ecrans.matchAll(/(?<![\w-])(margin|padding|gap)(-[a-z]+)?:\s*([^;]+);/g)) {
   const valeurs = m[3].trim().split(/\s+/);
   verifier(valeurs.every((v) => v === "0" || v === "auto" || v === "1px" || v === "2px" || v.startsWith("var(--espace-") || v.startsWith("calc(")), `ecrans.css : ${m[1]}${m[2] ?? ""} en dur « ${m[3].trim()} »`);

@@ -16,9 +16,9 @@ export {}; // module
 // Code exécuté DANS la page (fonctions passées à `locator.evaluate`) : le projet n'inclut pas la bibliothèque DOM.
 declare const getComputedStyle: (el: unknown) => Record<string, string>;
 
-import { createServer, type Server } from "node:http";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { extname, join, normalize } from "node:path";
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { demarrerServeur, stubSupabase } from "./support/serveurChromium";
 import { appeler, creerScenario, creerTache, imposerProfilAssignation, installerBase, type Scenario } from "./support/harnaisRouteur";
 import {
   CHAMP_ALLURE, CHAMP_AXE, CHAMP_COEFFICIENTS, CHAMP_DIVISEURS, CHAMP_EXTREMUM, CHAMP_IMAGE, CHAMP_PARITE, CHAMP_QUOTIENT, CHAMP_RACINES, CHAMP_SIGNES, CHAMP_SIGNES_VARIATION, CHAMP_SOMME,
@@ -31,60 +31,6 @@ mkdirSync(CAPTURES, { recursive: true });
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { chromium } = require("playwright");
-
-const TYPES_MIME: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json", ".png": "image/png" };
-
-function demarrerServeur(): Promise<{ serveur: Server; url: string }> {
-  process.env.SUPABASE_URL = "http://supabase.invalide";
-  process.env.SUPABASE_ANON_KEY = "anon-invalide";
-  const serveur = createServer(async (req, res) => {
-    try {
-      const url = new URL(req.url ?? "/", "http://x");
-      if (url.pathname.startsWith("/api/")) {
-        const corpsBrut = await new Promise<string>((ok) => {
-          let d = "";
-          req.on("data", (c) => (d += c));
-          req.on("end", () => ok(d));
-        });
-        const { default: routeur } = require("../api/router");
-        let statut = 200;
-        let charge: unknown = null;
-        // Les paramètres d'URL (`?classe_id=`, `?tache_id=`) atteignent le routeur comme sur Vercel.
-        await routeur(
-          { method: req.method, headers: req.headers, query: { path: url.pathname.slice(5), ...Object.fromEntries(url.searchParams) }, body: corpsBrut ? JSON.parse(corpsBrut) : {} },
-          {
-            status(c: number) {
-              statut = c;
-              return this;
-            },
-            json(o: unknown) {
-              charge = o;
-            },
-            end() {},
-          },
-        );
-        res.writeHead(statut, { "Content-Type": "application/json" }).end(JSON.stringify(charge));
-        return;
-      }
-      const chemin = normalize(join(RACINE, "public", url.pathname === "/" ? "index.html" : url.pathname));
-      if (!chemin.startsWith(join(RACINE, "public")) || !existsSync(chemin)) {
-        res.writeHead(404).end("introuvable");
-        return;
-      }
-      res.writeHead(200, { "Content-Type": TYPES_MIME[extname(chemin)] ?? "application/octet-stream" }).end(readFileSync(chemin));
-    } catch (e) {
-      res.writeHead(500).end(String(e));
-    }
-  });
-  return new Promise((ok) => serveur.listen(0, "127.0.0.1", () => ok({ serveur, url: `http://127.0.0.1:${(serveur.address() as any).port}` })));
-}
-
-function stubSupabase(jeton: string, email: string): string {
-  return `window.supabase = { createClient: () => ({ auth: {
-    getSession: async () => ({ data: { session: { access_token: ${JSON.stringify(jeton)}, refresh_token: "r", user: { email: ${JSON.stringify(email)} } } } }),
-    setSession: async () => ({ data: {}, error: null }), signInWithPassword: async () => ({ data: {}, error: null }),
-    signOut: async () => ({ error: null }), updateUser: async () => ({ error: null }) } }) };`;
-}
 
 const echecs: string[] = [];
 let nb = 0;
@@ -222,7 +168,9 @@ async function verifierMiseEnPage(page: any, etiquette: string, largeur: number)
     const petits = [];
     for (const el of document.querySelectorAll("#conteneur-moteur .moteur-bouton, #conteneur-moteur .moteur-case-signe, #conteneur-moteur .moteur-choix, #conteneur-moteur .moteur-champ")) {
       const r = el.getBoundingClientRect();
-      if (r.width > 0 && r.height > 0 && r.height < 43.5) petits.push(el.className + " " + Math.round(r.height) + "px");
+      // Les crochets de l'intervalle mesurent 32px (référence validée) mais gardent une cible de 44px par pseudo-élément :
+      // vérifié par elementFromPoint dans scripts/chromium-fidelite-design.ts.
+      if (r.width > 0 && r.height > 0 && r.height < 43.5 && !el.classList.contains("moteur-bouton-crochet")) petits.push(el.className + " " + Math.round(r.height) + "px");
     }
     const titre = document.querySelector("#conteneur-moteur .moteur-titre");
     return { debordement: trop, petits, titreLisible: !titre || titre.getBoundingClientRect().width >= 100 };
@@ -282,7 +230,7 @@ async function scenarioEleve(navigateur: any, base: string, largeur: number) {
   const mauvaiseParite = bonneParite === "pair" ? "impair" : "pair";
   verifier((await page.locator(".moteur-ecran-courant .moteur-bouton-principal").isDisabled()), `${l} : « Valider » désactivé tant que rien n'est choisi`);
   const avantQcm = reponsesEnvoyees(journal);
-  await page.locator(`.moteur-qcm input[value="${mauvaiseParite}"]`).check();
+  await page.locator(`.moteur-choix:has(input[value="${mauvaiseParite}"])`).click();
   verifier(reponsesEnvoyees(journal) === avantQcm, `${l} : choisir un QCM n'envoie rien tant qu'on ne valide pas`);
   await page.screenshot({ path: join(CAPTURES, `${l}-05-qcm-choix.png`), fullPage: true });
   await verifierMiseEnPage(page, "qcm", largeur);
@@ -290,7 +238,7 @@ async function scenarioEleve(navigateur: any, base: string, largeur: number) {
   await page.waitForSelector(".moteur-statut-not_equivalent");
   verifier((await page.locator(".moteur-tentatives").innerText()).includes("1 essai"), `${l} : tentatives restantes affichées`);
   await page.screenshot({ path: join(CAPTURES, `${l}-06-qcm-not-equivalent.png`), fullPage: true });
-  await page.locator(`.moteur-qcm input[value="${bonneParite}"]`).check();
+  await page.locator(`.moteur-choix:has(input[value="${bonneParite}"])`).click();
   await page.locator(".moteur-ecran-courant .moteur-bouton-principal").click();
   await page.waitForSelector(".moteur-statut-correct");
   await page.getByRole("button", { name: "Question suivante" }).click();
@@ -389,7 +337,7 @@ async function scenarioSansCorrection(navigateur: any, base: string, largeur: nu
   await page.screenshot({ path: join(CAPTURES, `${l}-13-sans-correction-reponse-fausse.png`), fullPage: true });
   await page.getByRole("button", { name: "Question suivante" }).click();
   await page.waitForSelector(".moteur-qcm");
-  await page.locator(`.moteur-qcm input[value="${reponseBruteCorrecte(ex, CHAMP_PARITE)}"]`).check(); // juste
+  await page.locator(`.moteur-choix:has(input[value="${reponseBruteCorrecte(ex, CHAMP_PARITE)}"])`).click(); // juste
   await valider();
   await page.getByRole("button", { name: "Question suivante" }).click();
   await page.waitForSelector(".moteur-liste-valeurs");
@@ -439,7 +387,7 @@ async function agirSurComposant(page: any, ex: ReturnType<typeof temoin.generer>
   const brute = etat === "selectionne" ? reponseApi(ex, indice, "not_equivalent") : reponseApi(ex, indice, etat);
   const carte = page.locator(".moteur-ecran-courant");
   if (indice === 0) await carte.locator(".moteur-champ").fill(brute);
-  if (indice === 1) await carte.locator(`.moteur-qcm input[value="${brute}"]`).check();
+  if (indice === 1) await carte.locator(`.moteur-choix:has(input[value="${brute}"])`).click();
   if (indice === 2) {
     const valeurs: string[] = etat === "parse_error" ? ["a"] : JSON.parse(brute);
     await carte.locator(".moteur-liste-ligne .moteur-champ").first().fill(valeurs[0]);
@@ -562,10 +510,10 @@ async function scenarioRetentative(navigateur: any, base: string, largeur: numbe
   await page.waitForSelector(".moteur-qcm");
   const mauvaise = reponseApi(ex, 1, "not_equivalent");
   const autre = (ex.a + ex.b) % 2 === 0 ? "pair" : "impair";
-  await page.locator(`.moteur-qcm input[value="${mauvaise}"]`).check();
+  await page.locator(`.moteur-choix:has(input[value="${mauvaise}"])`).click();
   await page.locator(".moteur-ecran-courant .moteur-bouton-principal").click();
   await page.waitForSelector(".moteur-statut-not_equivalent");
-  await page.locator(`.moteur-qcm input[value="${autre}"]`).check(); // nouvelle sélection en attente de validation
+  await page.locator(`.moteur-choix:has(input[value="${autre}"])`).click(); // nouvelle sélection en attente de validation
   const etat = (await page.evaluate(`(() => { const carte = document.querySelector(".moteur-ecran-courant"); const opt = document.querySelector(".moteur-choix:has(input:checked)"); return { carte: getComputedStyle(carte).borderTopColor, option: getComputedStyle(opt).borderTopColor, fond: getComputedStyle(opt).backgroundColor }; })()`)) as { carte: string; option: string; fond: string };
   verifier(etat.carte === RGB.danger, `${l} retentative : la carte garde le verdict précédent (rouge), obtenu ${etat.carte}`);
   verifier(etat.option === RGB.violetVif && etat.fond === RGB.violetClair, `${l} retentative : la nouvelle sélection reste violette (jamais rouge avant la réponse du serveur), obtenu ${etat.option} / ${etat.fond}`);
@@ -883,22 +831,22 @@ async function scenarioEtendu(navigateur: any, base: string, largeur: number) {
   verifier((await courant.locator(".moteur-sous-champ-choix .moteur-choix .moteur-math").count()) === 5, `${l} étendu : les 5 libellés de choix des sous-champs sont rendus comme mathématiques`);
   const av2 = reponsesEnvoyees(journal);
   const neutre = await points();
-  await courant.locator('input[name="mc-allure-signeA"][value="+"]').check();
+  await courant.locator('.moteur-choix:has(input[name="mc-allure-signeA"][value="+"])').click();
   verifier((await courant.locator(".moteur-illustration .croquis-courbe-neutre").count()) === 1 && (await points()) === neutre, `${l} étendu : un seul choix : l'illustration reste neutre`);
-  await courant.locator('input[name="mc-allure-signeAB"][value="-"]').check();
+  await courant.locator('.moteur-choix:has(input[name="mc-allure-signeAB"][value="-"])').click();
   const droite = await points();
   verifier((await courant.locator(".moteur-illustration .croquis-courbe-neutre").count()) === 0 && droite !== neutre && (await svgAllure().getAttribute("aria-label"))!.includes("à droite"), `${l} étendu : deux choix (a>0, ab<0) : l'illustration montre le sommet à droite`);
   await page.screenshot({ path: cap("04-allure-illustration-droite"), fullPage: true });
-  await courant.locator('input[name="mc-allure-signeAB"][value="+"]').check();
+  await courant.locator('.moteur-choix:has(input[name="mc-allure-signeAB"][value="+"])').click();
   verifier((await points()) !== droite && (await svgAllure().getAttribute("aria-label"))!.includes("à gauche"), `${l} étendu : l'illustration suit un changement de choix (sommet à gauche)`);
-  await courant.locator('input[name="mc-allure-signeA"][value="-"]').check();
+  await courant.locator('.moteur-choix:has(input[name="mc-allure-signeA"][value="-"])').click();
   verifier((await svgAllure().getAttribute("aria-label"))!.includes("ouverte vers le bas"), `${l} étendu : a<0 : parabole ouverte vers le bas`);
   verifier(reponsesEnvoyees(journal) === av2, `${l} étendu : l'illustration ne déclenche AUCUNE requête (état local d'édition)`);
   verifier((await page.locator(".moteur-illustration").innerText()).length < 200 && (await courant.locator(".moteur-statut").count()) === 0, `${l} étendu : l'illustration n'affiche aucun verdict`);
   verifier((await page.getByRole("button", { name: "Besoin d'un indice ?" }).count()) === 0, `${l} étendu : l'illustration n'est PAS une aide (aucun indice sur l'écran d'allure)`);
   await verifierMiseEnPage(page, "allure", largeur);
   const allureJuste = JSON.parse(reponseBruteCorrecte(U(exA), CHAMP_ALLURE));
-  for (const [id, valeur] of Object.entries(allureJuste)) await courant.locator(`input[name="mc-allure-${id}"][value="${valeur}"]`).check();
+  for (const [id, valeur] of Object.entries(allureJuste)) await courant.locator(`.moteur-choix:has(input[name="mc-allure-${id}"][value="${valeur}"])`).click();
   await valider().click();
   await page.waitForSelector(".moteur-statut-correct");
   await suivante().click();
@@ -906,7 +854,7 @@ async function scenarioEtendu(navigateur: any, base: string, largeur: number) {
   // ── Écran 3 : qcm à libellés mathématiques ──
   await page.waitForSelector('input[name="qcm-extremum"]'); // (l'écran d'allure utilise aussi `.moteur-qcm` : attendre CE champ)
   verifier((await courant.locator(".moteur-choix .moteur-math").count()) === 2, `${l} étendu : les libellés du QCM sont rendus comme mathématiques`);
-  await courant.locator(`.moteur-qcm input[value="${reponseBruteCorrecte(U(exA), CHAMP_EXTREMUM)}"]`).check();
+  await courant.locator(`.moteur-choix:has(input[value="${reponseBruteCorrecte(U(exA), CHAMP_EXTREMUM)}"])`).click();
   await valider().click();
   await page.waitForSelector(".moteur-statut-correct");
   await suivante().click();
