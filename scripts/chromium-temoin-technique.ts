@@ -1767,6 +1767,8 @@ async function scenarioApercuRetour(navigateur: any, base: string, largeur: numb
     popup.on("response", (r: any) => { if (r.status() >= 400) journal.reponsesEnErreur.push({ statut: r.status(), methode: r.request().method(), url: new URL(r.url()).pathname }); });
     await popup.waitForSelector("#bandeau-mode-apercu:not([hidden])");
     await popup.waitForSelector(".moteur-ecran-courant");
+    const bandeau = await popup.locator("#bandeau-reglages-apercu").innerText();
+    verifier(bandeau.includes("correction immédiate coupée") && bandeau.includes(retour ? "retour en arrière activé" : "retour en arrière désactivé (case"), `${l} : le bandeau de l'aperçu annonce les réglages effectifs (« ${bandeau} »)`);
     const tache = s.base.table("taches")[0]!;
     verifier(tache.est_apercu === true && tache.feedback_immediat === false && tache.autoriser_retour_arriere === retour, `${l} : la tâche d'aperçu reprend le formulaire (retour = ${String(tache.autoriser_retour_arriere)})`);
     const premier = s.base.table("exercices_assignes")[0]!;
