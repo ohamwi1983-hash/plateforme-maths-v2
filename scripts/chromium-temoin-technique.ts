@@ -26,7 +26,7 @@ import {
 } from "../src/generateurs/_temoinTechnique";
 
 import {
-  champsAnalyseFonction, genererExercice as genererGen7, rangeesTableau, reponseBruteCorrecteAnalyseFonction as reponseGen7, type CategorieAnalyseFonction, type ExerciceAnalyseFonction,
+  champsAnalyseFonction, factorisationVersLatex, genererExercice as genererGen7, rangeesTableau, reponseBruteCorrecteAnalyseFonction as reponseGen7, type CategorieAnalyseFonction, type ExerciceAnalyseFonction,
 } from "../src/generateurs/analyseFonction";
 
 const RACINE = join(__dirname, "..");
@@ -1433,8 +1433,8 @@ async function ouvrirTacheGen7(navigateur: any, base: string, largeur: number, s
 }
 
 /** Assigne (API réelle) une tâche d'UNE variante gen7 avec la graine voulue ; renvoie l'exercice régénéré. */
-async function assignerGen7(s: Scenario, categorie: CategorieAnalyseFonction, graine: number, options: { feedback?: boolean; tentatives?: number } = {}): Promise<{ ex: ExerciceAnalyseFonction; tacheId: string }> {
-  const tacheId = creerTache(s, { nom: `gen7 ${categorie}`, feedback_immediat: options.feedback ?? true, tentatives_supplementaires: options.tentatives ?? 0, reponse_visible: true, variantes: [{ variante_id: `af_${categorie}`, nombre_exercices: 1 }] });
+async function assignerGen7(s: Scenario, categorie: CategorieAnalyseFonction, graine: number, options: { feedback?: boolean; tentatives?: number; retour?: boolean } = {}): Promise<{ ex: ExerciceAnalyseFonction; tacheId: string }> {
+  const tacheId = creerTache(s, { nom: `gen7 ${categorie}`, autoriser_retour_arriere: options.retour ?? false, feedback_immediat: options.feedback ?? true, tentatives_supplementaires: options.tentatives ?? 0, reponse_visible: true, variantes: [{ variante_id: `af_${categorie}`, nombre_exercices: 1 }] });
   const origine = Math.random;
   Math.random = () => graine / 2 ** 32;
   try {
@@ -1551,6 +1551,131 @@ async function scenarioGen7Coupe(navigateur: any, base: string, largeur: number)
   verifier(rep.find((r) => r.champ === "racinesChamp1")?.statut === "not_equivalent", `${l} gen7 coupé : la factorisation fausse est enregistrée comme fausse (côté serveur seulement)`);
   verifier(journal.pageerrors.length === 0, `${l} gen7 coupé : erreurs JS : ${journal.pageerrors.join(" | ")}`);
   await contexte.close();
+}
+
+
+/**
+ * Retour en arrière (RAPPORT §37), joué dans le navigateur sur gen7 (cascade racinesChamp1 -> racinesChamp2 -> tableau) :
+ * « Modifier ma réponse » sur chaque écran (les SIX composants pré-remplis, aller-retour sans altération : re-valider sans changer
+ * = « inchangée », aucune ligne écrite), modification de racinesChamp1 qui périme racinesChamp2 ET le tableau, remise explicite,
+ * révélation d'un coup APRÈS la remise seulement ; et le réglage sans effet sous correction immédiate.
+ */
+async function scenarioRetourArriere(navigateur: any, base: string, largeur: number) {
+  const l = `${largeur} retour`;
+  const s: Scenario = creerScenario();
+  installerBase(s.base);
+  const { ex, tacheId } = await assignerGen7(s, "mise_en_evidence", 12345, { feedback: false, retour: true }); // f = 4x² + 8x
+  const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+  const courant = page.locator(".moteur-ecran-courant");
+  const lignes = () => s.base.table("reponses").length;
+  const sansVerdict = async () => (await page.locator(".moteur-statut-correct, .moteur-statut-not_equivalent, .moteur-statut-parse_error, .moteur-solution").count()) === 0;
+  /** « Valider » puis le bouton de suite ; renvoie le message affiché entre les deux. */
+  const validerRetour = async (suite: RegExp): Promise<string> => {
+    await courant.getByRole("button", { name: "Valider", exact: true }).click();
+    await page.waitForSelector(".moteur-ecran-courant .moteur-retour .moteur-statut");
+    const message = ((await courant.locator(".moteur-retour .moteur-statut").textContent()) ?? "").replace(/\s+/g, " ").trim();
+    await courant.getByRole("button", { name: suite }).click();
+    return message;
+  };
+  const carte = (champ: string) => page.locator(`.moteur-ecran:has(.moteur-consigne)`).nth(ORDRE_GEN7.indexOf(champ));
+  const ORDRE_GEN7 = champsAnalyseFonction("mise_en_evidence");
+
+  // ── Parcours des 8 écrans ; jamais de verdict, jamais de « Question suivante » : un écran répondu reste modifiable ──
+  for (const [i, champ] of ORDRE_GEN7.entries()) {
+    await page.waitForFunction(`document.querySelectorAll(".moteur-ecran-courant").length === 1`);
+    await repondreGen7(page, ex, champ);
+    const message = await validerRetour(i === ORDRE_GEN7.length - 1 ? /Revoir mes réponses/ : /Écran suivant/);
+    verifier(message === "Réponse enregistrée.", `${l} / ${champ} : message neutre (« ${message} »)`);
+    verifier(await sansVerdict(), `${l} / ${champ} : aucun verdict ni solution`);
+  }
+  await page.waitForSelector(".moteur-remise");
+  verifier((await page.getByRole("button", { name: "Modifier ma réponse" }).count()) === 8, `${l} : « Modifier ma réponse » sur chacun des 8 écrans`);
+  verifier((await page.locator(".moteur-ecran-courant").count()) === 0 && (await sansVerdict()), `${l} : panneau « Rendre » affiché, rien de corrigé`);
+  await page.screenshot({ path: join(CAPTURES, `${l}-01-panneau-remise.png`), fullPage: true });
+
+  // ── Chaque composant est pré-rempli, et re-valider sans changer n'écrit RIEN (round-trip exact de la réponse) ──
+  const avantTout = lignes();
+  for (const champ of ORDRE_GEN7) {
+    await carte(champ).getByRole("button", { name: "Modifier ma réponse" }).click();
+    await page.waitForFunction(`document.querySelectorAll(".moteur-ecran-courant").length === 1`);
+    verifier((await page.locator(".moteur-remise").count()) === 0 && (await page.getByRole("button", { name: "Annuler" }).count()) === 1, `${l} / ${champ} : un seul formulaire ouvert, avec « Annuler », sans panneau de remise`);
+    const valider = courant.getByRole("button", { name: "Valider", exact: true });
+    verifier(await valider.isEnabled(), `${l} / ${champ} : l'écran s'ouvre pré-rempli (« Valider » actif sans rien toucher)`);
+    if (champ === "coefficients") {
+      const attendu = JSON.parse(reponseGen7(ex, "coefficients"));
+      const lus = { a: await courant.locator("#mc-coefficients-a").inputValue(), b: await courant.locator("#mc-coefficients-b").inputValue(), c: await courant.locator("#mc-coefficients-c").inputValue() };
+      verifier(JSON.stringify(lus) === JSON.stringify(attendu), `${l} : champs_multiples pré-rempli (attendu ${JSON.stringify(attendu)}, lu ${JSON.stringify(lus)})`);
+    }
+    if (champ === "racinesReconnaissance") verifier((await courant.locator(".moteur-choix input:checked").count()) === 1, `${l} : qcm pré-rempli (un choix coché)`);
+    if (champ === "racinesChamp1") verifier((await courant.locator(".moteur-champ").first().inputValue()) === reponseGen7(ex, "racinesChamp1"), `${l} : champ_expression pré-rempli`);
+    if (champ === "racinesChamp2") verifier((await courant.locator(".moteur-liste-ligne .moteur-champ").count()) === 2, `${l} : liste_valeurs pré-rempli (2 valeurs)`);
+    if (champ === "domaineImage") verifier((await courant.locator(".moteur-apercu").textContent()) !== "?… ; …?" && (await courant.locator(".moteur-bouton-crochet").first().textContent()) !== "?", `${l} : intervalle pré-rempli`);
+    if (champ === "tableauSignes") verifier((await courant.locator(".moteur-case-renseignee").count()) === (await courant.locator(".moteur-case-signe").count()), `${l} : tableau_signes pré-rempli (toutes les cases renseignées)`);
+    if (champ === "racinesChamp1") await page.screenshot({ path: join(CAPTURES, `${l}-02-modification-prerempli.png`), fullPage: true });
+    const message = await validerRetour(/Revoir mes réponses|Continuer/);
+    verifier(message.includes("Réponse inchangée."), `${l} / ${champ} : re-valider sans changer = « inchangée » (« ${message} »)`);
+    await page.waitForSelector(".moteur-remise");
+  }
+  verifier(lignes() === avantTout, `${l} : aller-retour exact des six composants : AUCUNE ligne écrite (${avantTout} -> ${lignes()})`);
+
+  // ── Annuler ──
+  await carte("allure").getByRole("button", { name: "Modifier ma réponse" }).click();
+  await page.getByRole("button", { name: "Annuler" }).click();
+  await page.waitForSelector(".moteur-remise");
+  verifier(lignes() === avantTout, `${l} : « Annuler » n'écrit rien`);
+
+  // ── Modifier racinesChamp1 : racinesChamp2 ET le tableau sont périmés ; le panneau disparaît ──
+  await carte("racinesChamp1").getByRole("button", { name: "Modifier ma réponse" }).click();
+  const autreEcriture = `(${reponseGen7(ex, "racinesChamp1")})`; // même factorisation, chaîne DIFFÉRENTE : c'est une modification
+  await courant.locator(".moteur-champ").first().fill(autreEcriture);
+  const message = await validerRetour(/Continuer/);
+  verifier(message.includes("Réponse modifiée.") && message.includes("à refaire (2)"), `${l} : la modification annonce 2 écrans à refaire (« ${message} »)`);
+  await page.waitForSelector(".moteur-ecran-courant");
+  verifier((await page.locator(".moteur-message-succes").first().textContent())?.includes("2 écrans qui en dépendent") === true, `${l} : la notice de tête le rappelle`);
+  verifier((await lireConsigneGen7(page)).includes(`$${factorisationVersLatex(autreEcriture)} = 0$`), `${l} : racinesChamp2 est bâti sur la NOUVELLE factorisation (${autreEcriture})`);
+  verifier((await page.locator(".moteur-remise").count()) === 0 && (await page.getByRole("button", { name: "Modifier ma réponse" }).count()) === 6, `${l} : plus de « Rendre » ; 6 écrans intacts restent modifiables`);
+  verifier((await page.locator(".moteur-table-structure").count()) === 0, `${l} : le tableau (aval) a disparu`);
+  await page.screenshot({ path: join(CAPTURES, `${l}-03-aval-perime.png`), fullPage: true });
+  await repondreGen7(page, ex, "racinesChamp2");
+  await validerRetour(/Écran suivant/);
+  await page.waitForSelector(".moteur-table-structure");
+  await repondreGen7(page, ex, "tableauSignes");
+  await validerRetour(/Revoir mes réponses/);
+  await page.waitForSelector(".moteur-remise");
+  verifier(await sansVerdict(), `${l} : toujours rien de corrigé avant la remise`);
+  verifier(s.base.table("exercices_assignes")[0]!.remis_le === null, `${l} : pas encore rendu`);
+
+  // ── Remise : confirmation en deux clics, puis TOUT est révélé d'un coup ──
+  await page.getByRole("button", { name: "Rendre cet exercice" }).click();
+  verifier(s.base.table("exercices_assignes")[0]!.remis_le === null, `${l} : le premier clic ne rend pas (confirmation demandée)`);
+  await page.getByRole("button", { name: /Confirmer : après avoir rendu/ }).click();
+  await page.waitForSelector(".moteur-fin:has-text('Exercice terminé')");
+  verifier(s.base.table("exercices_assignes")[0]!.remis_le !== null, `${l} : remis_le écrit`);
+  verifier((await page.getByRole("button", { name: "Modifier ma réponse" }).count()) === 0, `${l} : plus aucun « Modifier » après la remise`);
+  {
+    const [justes, faux] = [await page.locator(".moteur-statut-correct").count(), await page.locator(".moteur-statut-not_equivalent").count()];
+    verifier(justes === 8 && faux === 0, `${l} : après la remise, les 8 verdicts sont révélés d'un coup (dernières réponses, toutes justes) : ${justes} justes, ${faux} faux ${JSON.stringify(s.base.table("reponses").slice(8).map((r) => [r.champ, r.statut]))}`);
+  }
+  await page.screenshot({ path: join(CAPTURES, `${l}-04-apres-remise.png`), fullPage: true });
+  await page.getByRole("button", { name: "Terminer" }).click();
+  await page.waitForSelector("#tableau-de-bord:not([hidden])");
+  verifier(s.base.table("reponses").length === avantTout + 3, `${l} : les anciennes lignes sont conservées (${s.base.table("reponses").length})`);
+  verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+  await contexte.close();
+
+  // ── Réglage sans effet sous correction immédiate ──
+  {
+    const s2: Scenario = creerScenario();
+    installerBase(s2.base);
+    const { ex: ex2 } = await assignerGen7(s2, "mise_en_evidence", 12345, { feedback: true, retour: true });
+    const c2 = await ouvrirTacheGen7(navigateur, base, largeur, s2);
+    await repondreGen7(c2.page, ex2, "coefficients");
+    await c2.page.locator(".moteur-ecran-courant").getByRole("button", { name: "Valider", exact: true }).click();
+    await c2.page.waitForSelector(".moteur-statut-correct");
+    verifier((await c2.page.getByRole("button", { name: "Question suivante" }).count()) === 1 && (await c2.page.getByRole("button", { name: /Modifier ma réponse/ }).count()) === 0, `${l} : sous correction immédiate le réglage est sans effet (verdict, « Question suivante », aucun « Modifier »)`);
+    await c2.contexte.close();
+  }
+  void tacheId;
 }
 
 /** Le professeur COMPOSE une tâche gen7 dans prof.html (champs actifs, création réelle), puis l'assigne ; l'élève la reçoit. */
@@ -1741,6 +1866,8 @@ async function main() {
       controlerReponsesHttp(`${largeur} gen7 prof`);
       await scenarioApercu(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} aperçu`);
+      await scenarioRetourArriere(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} retour en arrière`);
     }
   } catch (e) {
     // Un scénario qui plante (timeout d'attente d'un élément) ne passe jamais par `controlerReponsesHttp` :

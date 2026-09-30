@@ -17,10 +17,11 @@ import { construireCroquisAllure } from "../croquis.js";
 export default {
   type: "champs_multiples",
 
-  creer(ecran, { surSoumission, surChangement }) {
+  creer(ecran, { surSoumission, surChangement, valeurInitiale }) {
     const element = document.createElement("div");
     element.className = "moteur-champs-multiples";
     const lecteurs = new Map(); // id -> () => string | null (valeur courante, rognée ; null si vide)
+    const poseurs = new Map(); // id -> (valeur: string) => void (restaure une réponse déjà confirmée)
     const desactivables = [];
     let premier = null;
 
@@ -70,6 +71,9 @@ export default {
           const retenu = radios.find((r) => r.checked);
           return retenu ? retenu.value : null;
         });
+        poseurs.set(sous.id, (valeur) => {
+          for (const r of radios) r.checked = r.value === valeur;
+        });
         desactivables.push(...radios);
         if (!premier) premier = radios[0];
       } else {
@@ -100,8 +104,22 @@ export default {
           const v = entree.value.trim();
           return v === "" ? null : v;
         });
+        poseurs.set(sous.id, (valeur) => {
+          entree.value = valeur;
+        });
         desactivables.push(entree);
         if (!premier) premier = entree;
+      }
+    }
+    // Réponse déjà confirmée (retour en arrière) : objet JSON `{ [sousChampId]: string }` ; toute autre forme est ignorée (écran vierge).
+    if (typeof valeurInitiale === "string") {
+      try {
+        const valeurs = JSON.parse(valeurInitiale);
+        if (typeof valeurs === "object" && valeurs !== null && !Array.isArray(valeurs)) {
+          for (const [id, poser] of poseurs) if (Object.hasOwn(valeurs, id) && typeof valeurs[id] === "string") poser(valeurs[id]);
+        }
+      } catch {
+        /* réponse illisible : écran vierge */
       }
     }
     if (illustration) {

@@ -7,7 +7,7 @@ import { rendreTexte } from "../rendreTexte.js";
 export default {
   type: "qcm",
 
-  creer(ecran, { surChangement }) {
+  creer(ecran, { surChangement, valeurInitiale }) {
     const element = document.createElement("div");
     element.className = "moteur-qcm";
     element.setAttribute("role", "radiogroup");
@@ -21,6 +21,7 @@ export default {
       bouton.type = "radio";
       bouton.name = nom;
       bouton.value = choix.id;
+      bouton.checked = valeurInitiale === choix.id; // réponse déjà confirmée (retour en arrière)
       bouton.addEventListener("change", () => surChangement());
       const texte = document.createElement("span");
       rendreTexte(texte, choix.libelle, { math: true });

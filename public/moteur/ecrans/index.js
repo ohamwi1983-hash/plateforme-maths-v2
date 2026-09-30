@@ -5,7 +5,10 @@
  * lib/contratGenerateur.ts et un générateur témoin, qui doit alors couvrir le nouveau type).
  *
  * Interface d'un composant :
- *   creer(ecran, { surSoumission, surChangement }) -> { element, lireReponse(), desactiver(bool), focus() }
+ *   creer(ecran, { surSoumission, surChangement, valeurInitiale }) -> { element, lireReponse(), desactiver(bool), focus() }
+ *       `valeurInitiale` (optionnelle, retour en arrière) : la `reponseBrute` DÉJÀ CONFIRMÉE de cet écran, à restaurer dans l'état d'édition.
+ *       Chaîne d'élève : décodée défensivement (JSON illisible, forme inattendue, valeur hors alphabet -> ignorée, écran vierge) et
+ *       jamais interprétée comme du balisage. Absente = écran vierge, comme avant.
  *   resumer(ecran, valeurSaisie) -> résumé d'une réponse déjà enregistrée :
  *       `string` (texte d'ÉLÈVE, jamais interprété)
  *       ou `{ texte: string, auteur?: boolean }[]` (pièces ; `auteur: true` = texte d'AUTEUR, rendu avec

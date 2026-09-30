@@ -106,7 +106,7 @@ function dessinerFleche(bouton, montante) {
 function creerCase({ nomCellule, rendu, alphabet, surChangement, plate }) {
   const bouton = element("button", plate ? "moteur-case-signe moteur-case-plate" : "moteur-case-signe");
   bouton.type = "button";
-  const etat = { bouton, valeur: null };
+  const etat = { bouton, valeur: null, poser: (v) => {} };
   const nomme = rendu !== "texte" || (plate && alphabet.some((v) => Object.hasOwn(NOMS_SYMBOLES, v)));
   const visible = (v) => (plate && v === "-" ? "\u2212" : v); // moins typographique À L'ÉCRAN ; la valeur envoyée reste « - »
   const rafraichir = () => {
@@ -135,6 +135,12 @@ function creerCase({ nomCellule, rendu, alphabet, surChangement, plate }) {
       if (etat.valeur !== null) rafraichir();
     }).observe(bouton);
   }
+  // Restaure une valeur déjà confirmée (retour en arrière) ; ignorée si elle n'appartient pas à l'alphabet de CETTE case.
+  etat.poser = (valeur) => {
+    if (typeof valeur !== "string" || !alphabet.includes(valeur)) return;
+    etat.valeur = valeur;
+    rafraichir();
+  };
   rafraichir();
   return etat;
 }
@@ -253,12 +259,27 @@ function construireHeritee(ecran, cases, surChangement) {
 export default {
   type: "tableau_signes",
 
-  creer(ecran, { surChangement }) {
+  creer(ecran, { surChangement, valeurInitiale }) {
     const racine = element("div", "moteur-tableau-signes");
     const cases = new Map(); // "ligne|ancre" -> { bouton, valeur }
     const structure = ecran.colonnes.some((c) => c.genre !== undefined);
     racine.classList.toggle("moteur-tableau-structure-hote", structure);
     racine.appendChild(structure ? construireStructure(ecran, cases, surChangement) : construireHeritee(ecran, cases, surChangement));
+    // Réponse déjà confirmée (retour en arrière) : `{ [ligneId]: { [ancre]: valeur } }` ; `Object.hasOwn` (clés venues de l'élève).
+    if (typeof valeurInitiale === "string") {
+      try {
+        const saisie = JSON.parse(valeurInitiale);
+        if (typeof saisie === "object" && saisie !== null && !Array.isArray(saisie)) {
+          for (const rangee of ecran.rangees) {
+            const ligne = Object.hasOwn(saisie, rangee.ligne) ? saisie[rangee.ligne] : null;
+            if (typeof ligne !== "object" || ligne === null) continue;
+            for (const cellule of rangee.cellules) if (Object.hasOwn(ligne, cellule.ancre)) cases.get(rangee.ligne + "|" + cellule.ancre).poser(ligne[cellule.ancre]);
+          }
+        }
+      } catch {
+        /* réponse illisible : tableau vierge */
+      }
+    }
 
     return {
       element: racine,
