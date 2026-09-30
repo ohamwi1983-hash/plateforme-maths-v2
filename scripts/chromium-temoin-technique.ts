@@ -977,7 +977,8 @@ async function scenarioEtendu(navigateur: any, base: string, largeur: number) {
   await courant.locator("#mc-axe-axeTexte").fill("x = 999");
   await courant.locator("#mc-axe-xS").fill("$x$"); // texte d'élève contenant des délimiteurs
   await valider().click(); // 2e et dernière tentative : verrouillage, révélation (correction immédiate active ET « Afficher la réponse attendue » cochée, RAPPORT §42)
-  await page.waitForSelector(".moteur-solution");
+  // Sous « Afficher la réponse attendue », un écran RÉUSSI montre aussi sa solution : attendre celle de l'écran COURANT (jamais une solution déjà à l'écran).
+  await courant.locator(".moteur-solution").waitFor({ state: "visible" });
   verifier((await courant.locator(".moteur-solution .moteur-math").count()) >= 3, `${l} étendu : « Réponse attendue » (texte d'auteur) rend ses mathématiques`);
   await page.screenshot({ path: cap("06-axe-verrouille-revele"), fullPage: true });
   await suivante().click();
