@@ -43,6 +43,16 @@ export function tentativesMaxEffectif(feedbackImmediat: boolean, tentativesSuppl
 }
 
 /**
+ * Retour en arrière (RAPPORT §37) : le réglage `taches.autoriser_retour_arriere` n'a d'effet que sous correction
+ * immédiate COUPÉE — sous `feedback_immediat = true`, un champ terminé montre déjà son verdict, et le modifier
+ * après coup ferait de la tâche un exercice à réponses répétées. Seul point de cette règle (comme
+ * `tentativesMaxEffectif`) : tout appelant qui dérive l'usage du retour d'une ligne `taches` passe par ici.
+ */
+export function retourArriereEffectif(feedbackImmediat: boolean, autoriserRetourArriere: boolean): boolean {
+  return !feedbackImmediat && autoriserRetourArriere;
+}
+
+/**
  * Correctif "Chrono de réponse" — un seul mode actif par tâche, jamais superposés.
  * `par_ecran` : la limite s'applique au champ courant seul (toutes tentatives cumulées).
  * `global` : la limite s'applique au temps écoulé depuis le PREMIER écran affiché de l'exercice_assigne.

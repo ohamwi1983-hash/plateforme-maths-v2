@@ -102,6 +102,11 @@ create table taches (
   -- lib/moteurTentatives.ts (calculerChronoExpire), jamais depuis un booléen envoyé par le client.
   chrono_mode text not null default 'aucun',
   chrono_duree_secondes int,
+  -- Retour en arrière (RAPPORT §37) : l'élève peut revenir sur un écran déjà traversé et modifier sa réponse
+  -- jusqu'à la remise (`exercices_assignes.remis_le`). N'a d'effet que si `feedback_immediat = false` (règle
+  -- effective : `retourArriereEffectif`, lib/moteurTentatives.ts) ; incompatible avec `chrono_mode = 'par_ecran'`
+  -- (validé côté serveur, lib/validationCorpsTaches.ts).
+  autoriser_retour_arriere boolean not null default false,
   -- Prompt "Aperçu d'une tâche avant création" : `true` pour la tâche éphémère générée par
   -- POST /api/taches/apercu (bouton "Aperçu" du formulaire "Créer une tâche") — exclue de toute
   -- liste/statistique orientée prof (GET /api/taches, GET /api/profs/tableau-de-bord, GET
@@ -199,7 +204,10 @@ create table exercices_assignes (
   -- base : il est RÉGÉNÉRÉ à chaque appel depuis cette graine (un seul état de vérité, jamais un
   -- `enonce` jsonb qui pourrait diverger du générateur). Nullable : les lignes antérieures n'en ont
   -- pas ; une ligne sans graine n'est pas exécutable par le registre (lib/registreGenerateurs.ts).
-  graine bigint
+  graine bigint,
+  -- Retour en arrière (RAPPORT §37) : instant où l'élève a « rendu » cet exercice (étape explicite « Rendre cet
+  -- exercice »). Nul = pas encore rendu. Une fois posé, l'exercice est verrouillé (plus aucune modification).
+  remis_le timestamptz
 );
 
 create table reponses (

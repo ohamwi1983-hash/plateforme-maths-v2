@@ -648,6 +648,20 @@
               <button type="button" class="stepper-bouton" data-stepper-cible="tentatives-supplementaires" data-stepper-delta="1" aria-label="Augmenter">+</button>
             </div>
           </div>
+          <!--
+            Retour en arrière (RAPPORT §37) : l'élève peut revenir sur un écran déjà traversé et modifier sa réponse
+            jusqu'à ce qu'il rende l'exercice. Même patron que `reponse-visible` : toujours visible, GRISÉ et remis à
+            décoché quand il n'a pas de sens (`appliquerVerrouReglages`) — sous correction immédiate (le verdict est
+            déjà connu) ou avec un chrono « par écran » (un écran chronométré ne se rouvre pas). Le serveur applique la
+            même règle (`retourArriereEffectif`, lib/moteurTentatives.ts ; lib/validationCorpsTaches.ts).
+          -->
+          <div class="ligne-reglage ligne-reglage-indent">
+            <span class="libelle-reglage">
+              <span class="icone-reglage icone-reglage-bleue" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path></svg></span>
+              <span id="libelle-retour-arriere">Autoriser le retour en arrière (si correction immédiate coupée)</span>
+            </span>
+            <input id="autoriser-retour-arriere" type="checkbox" class="toggle-natif" />
+          </div>
           <div class="ligne-reglage">
             <span class="libelle-reglage">
               <span class="icone-reglage icone-reglage-violette" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></span>
@@ -2446,6 +2460,20 @@
       for (const bouton of document.querySelectorAll('[data-stepper-cible="tentatives-supplementaires"]')) bouton.disabled = !feedbackImmediat;
       if (!feedbackImmediat) tentatives.value = "0";
 
+      // Retour en arrière (RAPPORT §37) : grisé + décoché sous correction immédiate ET avec un chrono « par écran »
+      // (incompatible, D6) ; réciproquement l'option « Par écran » du chrono est grisée tant que le retour est coché.
+      const retour = document.getElementById("autoriser-retour-arriere");
+      const selecteurChrono = document.getElementById("chrono-mode");
+      const retourImpossible = feedbackImmediat || selecteurChrono.value === "par_ecran";
+      retour.disabled = retourImpossible;
+      if (retourImpossible) retour.checked = false;
+      selecteurChrono.querySelector('option[value="par_ecran"]').disabled = retour.checked;
+      document.getElementById("libelle-retour-arriere").title = feedbackImmediat
+        ? "Sans effet sous correction immédiate : décochez d'abord la correction immédiate."
+        : selecteurChrono.value === "par_ecran"
+          ? "Incompatible avec un chrono par écran."
+          : "";
+
       const aideActivee = document.getElementById("aide-activee").checked;
       const penalite = document.getElementById("aide-penalite-pourcent");
       penalite.disabled = !aideActivee;
@@ -2515,6 +2543,7 @@
 
     document.getElementById("feedback-immediat").addEventListener("change", appliquerVerrouReglages);
     document.getElementById("aide-activee").addEventListener("change", appliquerVerrouReglages);
+    document.getElementById("autoriser-retour-arriere").addEventListener("change", appliquerVerrouReglages);
     document.getElementById("chrono-mode").addEventListener("change", () => {
       if (document.getElementById("chrono-mode").value === "par_ecran") preremplirDureesVariantesParDefaut();
       appliquerVerrouReglages();
@@ -2538,6 +2567,7 @@
       }
       document.getElementById("feedback-immediat").checked = true;
       document.getElementById("reponse-visible").checked = false;
+      document.getElementById("autoriser-retour-arriere").checked = false;
       document.getElementById("tentatives-supplementaires").value = "0";
       document.getElementById("aide-activee").checked = false;
       document.getElementById("aide-penalite-pourcent").value = "0";
@@ -2589,6 +2619,7 @@
       remplirFormulaireComposition(tache.composition);
       document.getElementById("feedback-immediat").checked = tache.feedback_immediat;
       document.getElementById("reponse-visible").checked = tache.reponse_visible;
+      document.getElementById("autoriser-retour-arriere").checked = tache.autoriser_retour_arriere ?? false;
       document.getElementById("tentatives-supplementaires").value = tache.tentatives_supplementaires ?? 0;
       document.getElementById("aide-activee").checked = tache.aide_activee ?? false;
       document.getElementById("aide-penalite-pourcent").value = tache.aide_penalite_pourcent ?? 0;
@@ -2970,6 +3001,7 @@
       remplirFormulaireComposition(tache.composition);
       document.getElementById("feedback-immediat").checked = tache.feedback_immediat;
       document.getElementById("reponse-visible").checked = tache.reponse_visible;
+      document.getElementById("autoriser-retour-arriere").checked = tache.autoriser_retour_arriere ?? false;
       document.getElementById("tentatives-supplementaires").value = tache.tentatives_supplementaires ?? 0;
       document.getElementById("aide-activee").checked = tache.aide_activee ?? false;
       document.getElementById("aide-penalite-pourcent").value = tache.aide_penalite_pourcent ?? 0;
@@ -4486,6 +4518,7 @@
 
       const feedbackImmediat = document.getElementById("feedback-immediat").checked;
       const reponseVisible = document.getElementById("reponse-visible").checked;
+      const autoriserRetourArriere = document.getElementById("autoriser-retour-arriere").checked;
       // Prompt "Tentatives, aide, récapitulatif" (3/3), Étape 1 : 4 réglages supplémentaires, mêmes conventions que ci-dessus.
       const tentativesSupplementaires = Number(document.getElementById("tentatives-supplementaires").value);
       const aideActivee = document.getElementById("aide-activee").checked;
@@ -4521,6 +4554,7 @@
           composition,
           feedback_immediat: feedbackImmediat,
           reponse_visible: reponseVisible,
+          autoriser_retour_arriere: autoriserRetourArriere,
           tentatives_supplementaires: tentativesSupplementaires,
           aide_activee: aideActivee,
           aide_penalite_pourcent: aidePenalitePourcent,

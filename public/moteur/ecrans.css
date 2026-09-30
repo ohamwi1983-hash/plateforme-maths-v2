@@ -647,6 +647,11 @@
   gap: var(--espace-3);
 }
 
+/* ── Retour en arrière (RAPPORT §37) : mêmes composants (carte terminée, bouton secondaire, panneau de fin) ; seul l'alignement du bouton « Modifier » est propre. ── */
+.moteur-bouton-modifier {
+  align-self: flex-start;
+}
+
 /* ══ Phase 3b-1 ══════════════════════════════════════════════════════════════════════════════════════
    Balisage mathématique, champs multiples, intervalle, tableau étendu, aides typées, croquis. Mêmes
    règles : uniquement des tokens (aucune couleur, épaisseur ou espacement en dur). ═══════════════ */

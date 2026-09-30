@@ -37,6 +37,7 @@ export function creerClientApi(lireJeton, fetchImpl = (...args) => fetch(...args
     chargerExercice: (id) => appeler("GET", "/api/exercices/" + encodeURIComponent(id)),
     envoyerReponse: (exerciceId, champ, reponseBrute) =>
       appeler("POST", "/api/reponses", { exercice_assigne_id: exerciceId, champ, reponse_brute: reponseBrute }),
+    rendreExercice: (exerciceId) => appeler("POST", "/api/exercices/" + encodeURIComponent(exerciceId) + "/remise"),
     demanderAide: (exerciceId, champ) => appeler("POST", "/api/reponses/aide", { exercice_assigne_id: exerciceId, champ }),
     signalerDebutEcran: (exerciceId, champ) => appeler("POST", "/api/reponses/debut-ecran", { exercice_assigne_id: exerciceId, champ }),
   };

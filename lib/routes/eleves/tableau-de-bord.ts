@@ -2,7 +2,7 @@ import type { RequeteHttp, ReponseHttp } from "../../httpTypes";
 import { avecGestionErreurs } from "../../avecGestionErreurs";
 import { eleveAuthentifie, supabaseAdmin } from "../../supabaseAdmin";
 import { recupererToutesLesLignes } from "../../supabasePagination";
-import { calculerEtatExercice, chargerContexteTache, COLONNES_EXERCICE_ASSIGNE, projeterExercice, regenererExercice, revelationFinDeTache, type ContexteTache, type DonneesExercice, type LigneExerciceAssigne, type LigneReponse } from "../../etatExercice";
+import { calculerEtatExercice, chargerContexteTache, COLONNES_EXERCICE_ASSIGNE, donneesDepuisLignes, projeterExercice, regenererExercice, revelationFinDeTache, type ContexteTache, type DonneesExercice, type LigneExerciceAssigne, type LigneReponse } from "../../etatExercice";
 import { poidsDansMap, poidsDesEcrans } from "../../poidsEcran";
 import { calculerSerieActuelle, classifierTache, construireChampVue, REGLAGES_FORCEES_ANTERIEURES, resumeExercice, resumeTache, tacheEstComplete, type CategorieTableauDeBord, type ResumeProgression } from "../../tableauDeBord";
 import type { LigneDebutEcran } from "../../moteurTentatives";
@@ -78,12 +78,11 @@ export const gererElevesTableauDeBord = avecGestionErreurs(async function handle
       aidesParExercice.get(a.exercice_assigne_id)!.add(a.champ);
     }
   }
-  const reponsesParExercice = new Map<string, Map<string, LigneReponse[]>>();
+  // Lignes par exercice, chronologique croissant (l'ordre d'insertion sert à la validité sous retour en arrière, RAPPORT §37).
+  const lignesParExercice = new Map<string, LigneReponse[]>();
   for (const r of reponsesToutes) {
-    if (!reponsesParExercice.has(r.exercice_assigne_id)) reponsesParExercice.set(r.exercice_assigne_id, new Map());
-    const parChamp = reponsesParExercice.get(r.exercice_assigne_id)!;
-    if (!parChamp.has(r.champ)) parChamp.set(r.champ, []);
-    parChamp.get(r.champ)!.push(r);
+    if (!lignesParExercice.has(r.exercice_assigne_id)) lignesParExercice.set(r.exercice_assigne_id, []);
+    lignesParExercice.get(r.exercice_assigne_id)!.push(r);
   }
 
   const exercicesParTache = new Map<string, LigneExerciceAssigne[]>();
@@ -114,7 +113,7 @@ export const gererElevesTableauDeBord = avecGestionErreurs(async function handle
       const contexte = cacheContextes.get(cle)!;
       if (!contexte) continue;
       contexteTache = contexte;
-      const donnees: DonneesExercice = { reponsesParChamp: reponsesParExercice.get(ligne.id) ?? new Map(), debuts: debutsParExercice.get(ligne.id) ?? [], champsAvecAide: aidesParExercice.get(ligne.id) ?? new Set() };
+      const donnees: DonneesExercice = donneesDepuisLignes(lignesParExercice.get(ligne.id) ?? [], debutsParExercice.get(ligne.id) ?? [], aidesParExercice.get(ligne.id) ?? new Set());
       etats.push({ ligne, regenere, contexte, etat: calculerEtatExercice(regenere, donnees, contexte, maintenant) });
     }
     if (etats.length === 0 || !contexteTache) continue;

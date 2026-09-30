@@ -25,7 +25,21 @@ export interface UtilisateurAuth {
 
 export class BaseMemoire {
   tables = new Map<string, Ligne[]>();
-  maintenant: () => string = () => new Date().toISOString();
+  private dernierMs = 0;
+  private micro = 0;
+  /**
+   * Horodatage par défaut d'une ligne insérée : STRICTEMENT croissant, comme les microsecondes de Postgres (deux insertions successives
+   * n'ont jamais le même `horodatage`). Sans cela, deux lignes insérées dans la même milliseconde seraient ex æquo et le tri `order("horodatage")`
+   * ne distinguerait plus l'ordre d'insertion — dont dépend la validité des réponses sous retour en arrière (RAPPORT §37). Les 3 chiffres
+   * de microsecondes (`…:00.123456Z`) ne décalent pas l'horloge : `new Date(...)` les tronque, l'ordre lexicographique les respecte.
+   */
+  maintenant: () => string = () => {
+    const ms = Date.now();
+    this.micro = ms === this.dernierMs ? this.micro + 1 : 0;
+    this.dernierMs = ms;
+    return new Date(ms).toISOString().replace("Z", `${String(this.micro).padStart(3, "0")}Z`);
+  };
+
 
   /** Comptes « Supabase Auth » simulés, pour les routes qui appellent `admin.auth.admin.*` (rôle admin-prof, RAPPORT §26). */
   utilisateursAuth = new Map<string, UtilisateurAuth>();
@@ -86,6 +100,9 @@ export class BaseMemoire {
     if (TABLES_AVEC_ID.has(nom) && complete.id === undefined) complete.id = randomUUID();
     // Défaut du schéma (`est_apercu boolean not null default false`) : sans lui, `.eq("est_apercu", false)` ne verrait aucune vraie tâche.
     if (nom === "taches" && complete.est_apercu === undefined) complete.est_apercu = false;
+    // Défauts du schéma (RAPPORT §37) : `autoriser_retour_arriere boolean not null default false`, `remis_le` nul.
+    if (nom === "taches" && complete.autoriser_retour_arriere === undefined) complete.autoriser_retour_arriere = false;
+    if (nom === "exercices_assignes" && complete.remis_le === undefined) complete.remis_le = null;
     for (const c of COLONNES_HORODATAGE) {
       if (complete[c] === undefined && (nom !== "taches_assignations" || c !== "horodatage") && this.colonneAttendue(nom, c)) complete[c] = this.maintenant();
     }

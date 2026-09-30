@@ -23,6 +23,9 @@
     "test-katex": "tsx scripts/test-katex.ts",
     "test-eleve-desactive": "tsx scripts/test-eleve-desactive.ts",
     "test-apercu-tache": "tsx scripts/test-apercu-tache.ts",
+    "test-completion-unique": "tsx scripts/test-completion-unique.ts",
+    "test-reglage-retour-arriere": "tsx scripts/test-reglage-retour-arriere.ts",
+    "test-retour-arriere": "tsx scripts/test-retour-arriere.ts",
     "chromium-temoin": "tsx scripts/chromium-temoin-technique.ts",
     "chromium-design": "tsx scripts/chromium-fidelite-design.ts"
   },

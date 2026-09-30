@@ -69,8 +69,12 @@ export const gererReponsesAide = avecGestionErreurs(async function handler(req: 
     const problemes = validerAide(ecranProjete.aide);
     if (problemes.length > 0) throw new Error(`Aide invalide pour ${ligne.variante_id} / ${champ} : ${problemes.join(" ; ")}`);
   }
-  if (etat.champs.find((c) => c.champ === champ)?.verrouille) {
-    res.status(409).json({ erreur: "Ce champ est déjà terminé" });
+  // Retour en arrière (RAPPORT §37, D5) : l'aide reste demandable sur un écran répondu mais encore modifiable (l'usage est collant : la
+  // pénalité ne se réinitialise jamais, sinon « aide puis retour » serait un moyen de la contourner) ; plus rien une fois l'exercice
+  // rendu ou expiré.
+  const etatChamp = etat.champs.find((c) => c.champ === champ);
+  if (etat.exerciceVerrouille || (etatChamp?.verrouille && !etatChamp.modifiable)) {
+    res.status(409).json({ erreur: etat.exerciceVerrouille ? "Cet exercice est rendu ou son temps est écoulé" : "Ce champ est déjà terminé" });
     return;
   }
 

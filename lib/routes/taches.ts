@@ -61,7 +61,7 @@ async function listerTaches(req: RequeteHttp, res: ReponseHttp): Promise<void> {
   const { data: taches, error: erreurTaches } = await admin
     .from("taches")
     .select(
-      "id, nom, date_creation, feedback_immediat, reponse_visible, tentatives_supplementaires, aide_activee, aide_penalite_pourcent, afficher_recapitulatif, chrono_mode, chrono_duree_secondes",
+      "id, nom, date_creation, feedback_immediat, reponse_visible, tentatives_supplementaires, aide_activee, aide_penalite_pourcent, afficher_recapitulatif, chrono_mode, chrono_duree_secondes, autoriser_retour_arriere",
     )
     .eq("prof_id", prof.id)
     // Prompt "Aperçu d'une tâche avant création" : exclut la tâche d'aperçu éphémère du prof
@@ -196,6 +196,7 @@ async function listerTaches(req: RequeteHttp, res: ReponseHttp): Promise<void> {
     afficher_recapitulatif: t.afficher_recapitulatif,
     chrono_mode: t.chrono_mode,
     chrono_duree_secondes: t.chrono_duree_secondes,
+    autoriser_retour_arriere: t.autoriser_retour_arriere,
     composition: compositionParTache.get(t.id as string) ?? [],
     assignee: tacheIdsAssignees.has(t.id as string),
     assignations: assignationsParTache.get(t.id as string) ?? [],
@@ -249,6 +250,7 @@ async function creerTache(req: RequeteHttp, res: ReponseHttp): Promise<void> {
       afficher_recapitulatif: req.body.afficher_recapitulatif ?? false,
       chrono_mode: req.body.chrono_mode ?? "aucun",
       chrono_duree_secondes: req.body.chrono_duree_secondes ?? null,
+      autoriser_retour_arriere: req.body.autoriser_retour_arriere ?? false,
     })
     .select("id")
     .single();

@@ -13,7 +13,7 @@ import { rendreTexte } from "../rendreTexte.js";
 export default {
   type: "liste_valeurs",
 
-  creer(ecran, { surSoumission, surChangement }) {
+  creer(ecran, { surSoumission, surChangement, valeurInitiale }) {
     const element = document.createElement("div");
     element.className = "moteur-liste-valeurs";
 
@@ -106,6 +106,24 @@ export default {
       surChangement();
     });
     ajouterLigne();
+    // Réponse déjà confirmée (retour en arrière) : tableau JSON de valeurs ; tout autre contenu est ignoré (écran vierge).
+    if (typeof valeurInitiale === "string") {
+      try {
+        const valeurs = JSON.parse(valeurInitiale);
+        if (Array.isArray(valeurs) && valeurs.every((v) => typeof v === "string")) {
+          if (valeurs.length === 0) {
+            if (ecran.permetAucune) mode = "aucune";
+          } else {
+            mode = "valeurs";
+            valeurs.forEach((v, i) => {
+              (i === 0 ? entrees[0] : ajouterLigne()).value = v;
+            });
+          }
+        }
+      } catch {
+        /* réponse illisible : écran vierge */
+      }
+    }
     majMode();
 
     return {

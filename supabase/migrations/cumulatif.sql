@@ -190,3 +190,7 @@ alter table profs add column if not exists est_admin boolean not null default fa
 alter table profs add column if not exists actif boolean not null default true;
 alter table invitations_prof add column if not exists email_cible text;
 alter table invitations_prof add column if not exists cree_par uuid references profs(id);
+
+-- Retour en arrière (RAPPORT §37) : voir supabase/schema.sql pour la justification complète. Idempotent.
+alter table taches add column if not exists autoriser_retour_arriere boolean not null default false;
+alter table exercices_assignes add column if not exists remis_le timestamptz;

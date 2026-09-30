@@ -58,6 +58,7 @@ async function modifierTache(req: RequeteHttp, res: ReponseHttp, params: Record<
       afficher_recapitulatif: req.body.afficher_recapitulatif ?? false,
       chrono_mode: req.body.chrono_mode ?? "aucun",
       chrono_duree_secondes: req.body.chrono_duree_secondes ?? null,
+      autoriser_retour_arriere: req.body.autoriser_retour_arriere ?? false,
     })
     .eq("id", tache.id);
   if (erreurMaj) {

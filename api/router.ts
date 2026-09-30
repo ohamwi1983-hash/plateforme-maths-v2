@@ -20,6 +20,7 @@ import { gererElevesMesResultats } from "../lib/routes/eleves/mes-resultats";
 import { gererElevesTableauDeBord } from "../lib/routes/eleves/tableau-de-bord";
 import { gererExercicesIndex } from "../lib/routes/exercices/index";
 import { gererExercicesId } from "../lib/routes/exercices/[id]";
+import { gererExercicesIdRemise } from "../lib/routes/exercices/[id]/remise";
 import { gererInscriptionEleve } from "../lib/routes/inscription-eleve";
 import { gererInscriptionProf } from "../lib/routes/inscription-prof";
 import { gererProfsCreerEleve } from "../lib/routes/profs/creer-eleve";
@@ -199,6 +200,13 @@ const TABLE_ROUTAGE: EntreeRoutage[] = [
     correspond: (s) => s.length === 2 && s[0] === "exercices",
     extraireParams: (s) => ({ id: s[1] }),
     gestionnaire: gererExercicesId,
+  },
+  {
+    methodes: ["POST"],
+    chemin: "/api/exercices/:id/remise",
+    correspond: (s) => s.length === 3 && s[0] === "exercices" && s[2] === "remise",
+    extraireParams: (s) => ({ id: s[1] }),
+    gestionnaire: gererExercicesIdRemise,
   },
   {
     methodes: ["GET"],

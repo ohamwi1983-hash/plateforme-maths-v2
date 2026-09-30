@@ -75,8 +75,10 @@ export const gererExercicesId = avecGestionErreurs(async function handler(req: R
       statut: vue.statut,
       solution_attendue: vue.solution_attendue,
       revele: vue.revele,
-      verrouille: c.verrouille || anterieure,
-      tentatives_restantes: c.verrouille || anterieure ? 0 : Math.max(0, contexte.tentativesMax - c.etat.tentativesUtilisees),
+      // `verrouille` pour le client = « ne peut plus être modifié » ; sous retour en arrière un écran répondu reste modifiable (`modifiable`).
+      verrouille: (c.verrouille && !c.modifiable) || anterieure,
+      modifiable: c.modifiable && !anterieure,
+      tentatives_restantes: (c.verrouille && !c.modifiable) || anterieure ? 0 : c.modifiable ? 1 : Math.max(0, contexte.tentativesMax - c.etat.tentativesUtilisees),
       aide_utilisee: c.aideUtilisee,
     };
   });
@@ -92,6 +94,7 @@ export const gererExercicesId = avecGestionErreurs(async function handler(req: R
       aide_penalite_pourcent: contexte.aidePenalitePourcent,
       chrono_mode: contexte.chronoMode,
       chrono_duree_secondes: contexte.chronoDureeSecondes,
+      retour_arriere: contexte.retourArriere,
     },
     saisie_possible: !anterieure,
     ecrans: ecransServis(projete.ecrans, new Set(etat.reponsesConfirmees.map((r) => r.champ)), anterieure).map((ecran) => {
@@ -103,5 +106,7 @@ export const gererExercicesId = avecGestionErreurs(async function handler(req: R
     champs,
     champ_courant: anterieure ? null : etat.champCourant,
     exercice_termine: etat.termine || anterieure,
+    // Retour en arrière (RAPPORT §37) : tous les écrans répondus et exercice pas encore rendu -> l'élève peut relire puis « Rendre ».
+    pret_a_rendre: !anterieure && etat.pretARendre,
   });
 });
