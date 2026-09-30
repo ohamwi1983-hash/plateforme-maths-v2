@@ -148,6 +148,7 @@ export const gererElevesTableauDeBord = avecGestionErreurs(async function handle
       chrono_mode: contexteTache.chronoMode,
       // Réglages effectifs de la tâche (l'élève les vit déjà) : l'aperçu professeur les rappelle dans son bandeau (RAPPORT §40).
       correction_immediate: contexteTache.reglages.feedback_immediat,
+      reponse_visible: contexteTache.reglages.reponse_visible,
       retour_arriere: contexteTache.retourArriere,
       date_debut: fenetre.date_debut,
       date_echeance: fenetre.date_echeance,

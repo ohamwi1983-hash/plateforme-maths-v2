@@ -4,7 +4,7 @@
 // Verrouille le scénario signalé par le propriétaire (f(x) = 4x² + 8x, graine 12345) : coefficients CONFIRMÉS a = 5, b = 4, c = −4 (faux) ;
 // axeSommet xS = −2/5 (cohérent avec SES coefficients), yS = 0 (faux même pour eux) ; domaineImage [0 ; +∞[ = la méthode juste appliquée à
 // SES valeurs confirmées (a = 5 > 0, yS = 0) -> doit être ACCEPTÉ. Dans les DEUX régimes de correction (D-A, cascade uniforme). Établit aussi
-// la mécanique de révélation sous correction immédiate (`revelee` => solution montrée, indépendamment de `reponse_visible`), le repli sur la
+// la mécanique de révélation sous correction immédiate (RAPPORT §42 : `revelee` => solution montrée SEULEMENT si `reponse_visible` ; sinon verdict et verrouillage, sans solution), le repli sur la
 // vraie fonction quand les coefficients confirmés sont inexploitables, le filtrage serveur des écrans dépendants, le panneau de faits, et
 // la cascade de `racinesChamp2` désormais aussi sous correction immédiate (déroge à §33-D).
 
@@ -178,25 +178,37 @@ async function main(): Promise<void> {
 
   // ── 7. MÉCANIQUE DE RÉVÉLATION (à confirmer explicitement) ──
   {
-    // Correction immédiate, `reponse_visible = false` : un champ révélé montre TOUJOURS la solution (le réglage n'agit que sur une réussite).
+    // Correction immédiate, `reponse_visible = false` (RAPPORT §42, remplace la révélation forcée de §38-C) : l'échec épuise le champ, le verrouille
+    // et montre le VERDICT, mais jamais la solution ni `revele`.
     const un = await nouveau({ feedback: true, reponseVisible: false });
     const r1 = await un.poster("coefficients", COEF_FAUX);
-    verifier(r1.corps.verrouille === true && r1.corps.revele === true && typeof r1.corps.solution_attendue === "string" && r1.corps.statut === "not_equivalent", `immédiat, 1 essai, reponse_visible=false : échec => verrouillé, révélé, solution montrée (${JSON.stringify(r1.corps).slice(0, 200)})`);
+    verifier(r1.corps.verrouille === true && r1.corps.revele === false && r1.corps.solution_attendue === undefined && r1.corps.statut === "not_equivalent", `immédiat, 1 essai, reponse_visible=false : échec => verrouillé, verdict, SANS solution (${JSON.stringify(r1.corps).slice(0, 200)})`);
+    const gv = await un.lire();
+    const cv = gv.champs.find((c: any) => c.champ === "coefficients");
+    verifier(cv.solution_attendue === null && cv.revele === false && cv.verrouille === true, "immédiat, reponse_visible=false : le GET non plus ne montre pas la solution");
+    // Case cochée : le champ épuisé montre sa solution (comportement conservé).
+    const visible = await nouveau({ feedback: true, reponseVisible: true });
+    const rv = await visible.poster("coefficients", COEF_FAUX);
+    verifier(rv.corps.verrouille === true && rv.corps.revele === true && typeof rv.corps.solution_attendue === "string" && rv.corps.statut === "not_equivalent", `immédiat, 1 essai, reponse_visible=true : échec => verrouillé, révélé, solution montrée (${JSON.stringify(rv.corps).slice(0, 200)})`);
     const ok = await nouveau({ feedback: true, reponseVisible: false });
     const r2 = await ok.poster("coefficients", reponseBruteCorrecteAnalyseFonction(ok.ex, "coefficients"));
-    verifier(r2.corps.statut === "correct" && r2.corps.solution_attendue === undefined && r2.corps.revele === false, "immédiat, reponse_visible=false : une RÉUSSITE ne montre pas la solution (le réglage agit là)");
+    verifier(r2.corps.statut === "correct" && r2.corps.solution_attendue === undefined && r2.corps.revele === false, "immédiat, reponse_visible=false : une RÉUSSITE ne montre pas la solution");
     // Deux essais : le premier échec n'est ni terminé ni révélé ; le second (épuisement) révèle. Un parse_error compte comme un essai raté.
-    const deux = await nouveau({ feedback: true, tentatives: 1, reponseVisible: false });
+    const deux = await nouveau({ feedback: true, tentatives: 1, reponseVisible: true });
     const a1 = await deux.poster("coefficients", COEF_FAUX);
     verifier(a1.corps.verrouille === false && a1.corps.revele === false && a1.corps.solution_attendue === undefined && a1.corps.tentatives_restantes === 1, `2 essais : le 1er échec ne révèle rien (${JSON.stringify(a1.corps).slice(0, 160)})`);
     const a2 = await deux.poster("coefficients", JSON.stringify({ a: "6", b: "4", c: "-4" }));
-    verifier(a2.corps.verrouille === true && a2.corps.revele === true && typeof a2.corps.solution_attendue === "string", "2 essais : l'épuisement révèle la solution");
+    verifier(a2.corps.verrouille === true && a2.corps.revele === true && typeof a2.corps.solution_attendue === "string", "2 essais, case cochée : l'épuisement révèle la solution");
+    const deuxCache = await nouveau({ feedback: true, tentatives: 1, reponseVisible: false });
+    await deuxCache.poster("coefficients", COEF_FAUX);
+    const b2 = await deuxCache.poster("coefficients", JSON.stringify({ a: "6", b: "4", c: "-4" }));
+    verifier(b2.corps.verrouille === true && b2.corps.revele === false && b2.corps.solution_attendue === undefined, "2 essais, case décochée : l'épuisement verrouille sans montrer la solution");
     const gd = await deux.lire();
     verifier(consigne(gd, "allure").includes("$f(x) = 6x^2 + 4x - 4$"), `la valeur confirmée est celle de la DERNIÈRE tentative (a = 6) : ${consigne(gd, "allure").slice(0, 100)}`);
-    const pe = await nouveau({ feedback: true, tentatives: 1 });
+    const pe = await nouveau({ feedback: true, tentatives: 1, reponseVisible: true });
     await pe.poster("coefficients", COEF_FAUX);
     const p2 = await pe.poster("coefficients", JSON.stringify({ a: "x", b: "1", c: "1" }));
-    verifier(p2.corps.statut === "parse_error" && p2.corps.revele === true && typeof p2.corps.solution_attendue === "string", "un parse_error qui épuise les essais révèle aussi");
+    verifier(p2.corps.statut === "parse_error" && p2.corps.revele === true && typeof p2.corps.solution_attendue === "string", "un parse_error qui épuise les essais révèle aussi (case cochée)");
     verifier(!consigne(await pe.lire(), "allure").includes("d'après les coefficients"), "… et sa valeur, inexploitable, laisse la vraie fonction");
     // Correction coupée : rien, ni à l'épuisement, ni dans le GET, avant la fin de la tâche.
     const coupe = await nouveau({ feedback: false, reponseVisible: true });

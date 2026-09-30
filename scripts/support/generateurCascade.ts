@@ -72,9 +72,9 @@ export const generateurCascade: Generateur<ExerciceCascade> = {
   },
 
   projeter(ex, reponsesConfirmees, contexte): ExerciceCascade {
-    const d1 = donneeEffective(reponsesConfirmees, CHAMP_ETAPE1, ex.a + ex.b, contexte.correctionImmediate);
+    const d1 = donneeEffective(reponsesConfirmees, CHAMP_ETAPE1, ex.a + ex.b, contexte.solutionMontree);
     // Pour l'écran 3, la « vraie valeur » de l'écran 2 est celle que la solution projetée lui donne : 2·d1.
-    const d2 = donneeEffective(reponsesConfirmees, CHAMP_ETAPE2, 2 * d1, contexte.correctionImmediate);
+    const d2 = donneeEffective(reponsesConfirmees, CHAMP_ETAPE2, 2 * d1, contexte.solutionMontree);
     return { a: ex.a, b: ex.b, d1, d2 };
   },
 

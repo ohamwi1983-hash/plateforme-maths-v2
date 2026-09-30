@@ -1,5 +1,5 @@
 import type { StatutVerification } from "../src/moteur/statutVerification";
-import { construireReponseHttpReponses, type ReglagesCorrection } from "./reglagesCorrection";
+import { construireReponseHttpReponses, solutionMontreeEnCours, type ReglagesCorrection } from "./reglagesCorrection";
 import type { EtatChampTentatives } from "./moteurTentatives";
 
 export type CategorieTableauDeBord = "en_cours" | "effectuees" | "anterieures";
@@ -148,12 +148,14 @@ export function construireChampVue(
   etatTentatives: EtatChampTentatives,
 ): ChampVue {
   // Révélation d'un champ (essais épuisés ou chrono écoulé) : n'existe QUE si la correction immédiate est
-  // active — ou si l'appelant force la révélation (`revelerSansReponse` : tâche antérieure, ou tâche
-  // entièrement terminée sous correction immédiate coupée). Sous correction immédiate coupée, la
+  // active ET « Afficher la réponse attendue » cochée (`solutionMontreeEnCours`, RAPPORT §42) — ou si
+  // l'appelant force la révélation (`revelerSansReponse` : tâche antérieure, ou tâche entièrement terminée
+  // sous correction immédiate coupée). Case décochée : le champ s'épuise et se verrouille comme avant, avec
+  // son verdict, mais SANS solution ni `revele`. Sous correction immédiate coupée, la
   // révélation n'a lieu qu'à la fin de la TÂCHE entière, jamais à l'épuisement d'un seul champ : un
   // échec ne doit pas être plus visible qu'une réussite (ni `revele`, ni statut, ni solution) tant que
   // la tâche n'est pas terminée. Le verrouillage du champ, lui, est le même que l'on ait réussi ou non.
-  const revele = etatTentatives.revelee && (reglagesEffectifs.feedback_immediat || revelerSansReponse);
+  const revele = etatTentatives.revelee && (solutionMontreeEnCours(reglagesEffectifs) || revelerSansReponse);
   if (!derniereReponse) {
     // Phase 2 : un champ RÉVÉLÉ sans aucune réponse (chrono écoulé avant toute soumission,
     // `calculerEtatChampTentatives(…, chronoExpire=true)`) est verrouillé exactement comme un champ aux

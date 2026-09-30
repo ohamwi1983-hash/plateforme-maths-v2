@@ -157,7 +157,7 @@ for (const categorie of CATEGORIES) {
     // Tout réussi en correction immédiate : le panneau « Ce que tu sais déjà » est présent sur tous les écrans qui suivent.
     const reussis = champsAnalyseFonction(categorie).map((champ) => ({ champ, reponseBrute: reponseBruteCorrecteAnalyseFonction(brut, champ), statut: "correct" as const }));
     for (const [correctionImmediate, confirmees] of [[true, []], [false, []], [true, reussis]] as const) {
-      const ex = projeterAnalyseFonction(brut, confirmees, { correctionImmediate });
+      const ex = projeterAnalyseFonction(brut, confirmees, { correctionImmediate, solutionMontree: correctionImmediate });
       for (const e of ecransAnalyseFonction(ex) as EcranDeclare[]) {
         for (const t of textesAuteurDe(e)) verifierCompile(t, `${categorie}/${e.champ}`);
         if (typeof e.aide === "object") {
@@ -173,7 +173,7 @@ for (const categorie of CATEGORIES) {
     // Cascade : consigne de racinesChamp2 bâtie sur une réponse confirmée (ré-écriture LaTeX, jamais la chaîne brute).
     if (categorie !== "irreductible") {
       for (const reponse of ["(4x)(x+2)", "3x(x-2)", "x^2-4", "0.5x(x-0.5)", "-x(x+2)", "2(x-3)^2", "x(x-1)(x-2)"]) {
-        const ex = projeterAnalyseFonction(brut, [{ champ: "racinesChamp1", reponseBrute: reponse, statut: "not_equivalent" }], { correctionImmediate: false });
+        const ex = projeterAnalyseFonction(brut, [{ champ: "racinesChamp1", reponseBrute: reponse, statut: "not_equivalent" }], { correctionImmediate: false, solutionMontree: false });
         for (const e of ecransAnalyseFonction(ex)) if (e.champ === "racinesChamp2") verifierCompile(e.consigne, `${categorie}/racinesChamp2 (réponse « ${reponse} »)`);
       }
     }

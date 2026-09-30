@@ -25,7 +25,7 @@ function verifier(condition: boolean, message: string): void {
   if (!condition) echecs.push(message);
 }
 
-const REGIMES: { nom: string; feedback: boolean }[] = [{ nom: "correction immédiate", feedback: true }, { nom: "correction coupée", feedback: false }];
+const REGIMES: { nom: string; feedback: boolean }[] = [{ nom: "correction immédiate (réponse visible)", feedback: true }, { nom: "correction coupée", feedback: false }];
 const COEF = (a: string, b: string, c: string) => JSON.stringify({ a, b, c });
 
 async function main(): Promise<void> {
@@ -37,7 +37,7 @@ async function main(): Promise<void> {
   /** Assigne UN exercice (mise_en_evidence, f = 4x² + 8x pour la graine 12345), répond à coefficients puis aux écrans intermédiaires, et renvoie l'exercice prêt au tableau. */
   const jusquAuTableau = async (feedback: boolean, coefficients: string) => {
     compteur++;
-    const tache = creerTache(s, { nom: `tableau ${compteur}`, variantes: [{ variante_id: "af_mise_en_evidence", nombre_exercices: 1 }], feedback_immediat: feedback });
+    const tache = creerTache(s, { nom: `tableau ${compteur}`, variantes: [{ variante_id: "af_mise_en_evidence", nombre_exercices: 1 }], feedback_immediat: feedback, reponse_visible: feedback }); // « immédiate » = case « Afficher la réponse attendue » cochée (RAPPORT §42) : seule elle montre les valeurs vraies
     const o = Math.random;
     Math.random = () => 12345 / 2 ** 32;
     try {
@@ -64,7 +64,7 @@ async function main(): Promise<void> {
   const tableauServi = (g: { ecrans: EcranDeclare[] }) => g.ecrans.find((e) => e.champ === "tableauSignes") as any;
   /** Fonction effective attendue pour des coefficients confirmés donnés. */
   const effectiveDe = (brut: ExerciceAnalyseFonction, coefficients: string, feedback: boolean) =>
-    fonctionEffective(projeterAnalyseFonction(brut, [{ champ: "coefficients", reponseBrute: coefficients, statut: "not_equivalent" }], { correctionImmediate: feedback }));
+    fonctionEffective(projeterAnalyseFonction(brut, [{ champ: "coefficients", reponseBrute: coefficients, statut: "not_equivalent" }], { correctionImmediate: feedback, solutionMontree: feedback }));
 
   // ── 1. Signe de a opposé : le tableau change (2 racines, a < 0) ──
   for (const r of REGIMES) {
@@ -113,7 +113,7 @@ async function main(): Promise<void> {
   for (const r of REGIMES) {
     const x0 = await jusquAuTableau(r.feedback, "{}"); // illisible : repli
     const { ecransAnalyseFonction } = await import("../src/generateurs/analyseFonction");
-    const attendu = ecransAnalyseFonction(projeterAnalyseFonction(x0.brut, [], { correctionImmediate: r.feedback })).find((e) => e.champ === "tableauSignes") as any;
+    const attendu = ecransAnalyseFonction(projeterAnalyseFonction(x0.brut, [], { correctionImmediate: r.feedback, solutionMontree: r.feedback })).find((e) => e.champ === "tableauSignes") as any;
     verifier(JSON.stringify(tableauServi(await x0.lire()).colonnes) === JSON.stringify(attendu.colonnes), `${r.nom} / illisibles : colonnes de la vraie fonction`);
     await x0.poster("tableauSignes", JSON.stringify(solutionTableau(x0.brut.fonction)));
     verifier(x0.statuts("tableauSignes")[0] === "correct", `${r.nom} / illisibles : la vraie fonction sert`);

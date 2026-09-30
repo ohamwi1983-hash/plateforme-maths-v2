@@ -5,6 +5,17 @@ export interface ReglagesCorrection {
   reponse_visible: boolean;
 }
 
+/**
+ * SEULE définition de « la solution d'un champ peut être montrée à l'élève PENDANT la résolution » (RAPPORT §42) : correction immédiate
+ * ET « Afficher la réponse attendue » cochée. Avec 1 essai (défaut) un premier échec épuise le champ ; sans cette case, l'élève voit alors
+ * son verdict et le champ se verrouille, mais jamais la solution. Tout site qui suppose « la vraie valeur a été montrée » (repli de la
+ * cascade, tableau aux valeurs vraies) doit suivre CETTE règle, pas `feedback_immediat` seul. Les révélations forcées (tâche antérieure,
+ * fin d'une tâche sous correction coupée) sont un autre mécanisme (`REGLAGES_FORCEES_ANTERIEURES`) et ne passent pas par ici.
+ */
+export function solutionMontreeEnCours(reglages: ReglagesCorrection): boolean {
+  return reglages.feedback_immediat && reglages.reponse_visible;
+}
+
 export interface ReponseHttpReponses {
   statut?: StatutVerification;
   solution_attendue?: string;

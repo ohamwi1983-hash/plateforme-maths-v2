@@ -38,7 +38,7 @@ function regenere(seed: number): ExerciceRegenere {
 
 async function projeter(seed: number, confirmees: ReponseConfirmee[], correctionImmediate: boolean) {
   const { projeterExercice } = require("../lib/etatExercice") as typeof import("../lib/etatExercice");
-  return projeterExercice(regenere(seed), confirmees, { reglages: { feedback_immediat: correctionImmediate } });
+  return projeterExercice(regenere(seed), confirmees, { reglages: { feedback_immediat: correctionImmediate, reponse_visible: correctionImmediate } });
 }
 
 async function blocContrat(): Promise<void> {
@@ -112,13 +112,13 @@ async function blocSansProjeter(): Promise<void> {
   const { projeterExercice } = require("../lib/etatExercice") as typeof import("../lib/etatExercice");
   const exercice = temoin.generer(0);
   const reg: ExerciceRegenere = { ligne: null as never, generateur: temoin, exercice, ecrans: temoin.ecrans(exercice) };
-  const p = projeterExercice(reg, [{ champ: CHAMP_SOMME, reponseBrute: "1", statut: "not_equivalent" }], { reglages: { feedback_immediat: false } });
+  const p = projeterExercice(reg, [{ champ: CHAMP_SOMME, reponseBrute: "1", statut: "not_equivalent" }], { reglages: { feedback_immediat: false, reponse_visible: false } });
   verifier(p.exercice === exercice && p.ecrans === reg.ecrans, "générateur sans projeter : exercice ET écrans strictement inchangés (même référence)");
   // dependDe sans projeter = bug de générateur (échec bruyant) ; projection qui change la liste des champs = idem
   const sansProjeter = { ...g, projeter: undefined } as typeof g;
   let leve = false;
   try {
-    projeterExercice({ ...regenere(1), generateur: sansProjeter }, [], { reglages: { feedback_immediat: true } });
+    projeterExercice({ ...regenere(1), generateur: sansProjeter }, [], { reglages: { feedback_immediat: true, reponse_visible: true } });
   } catch {
     leve = true;
   }
@@ -127,7 +127,7 @@ async function blocSansProjeter(): Promise<void> {
   const mauvaise = { ...qui_change, projeter: (ex: ExerciceCascade) => ({ ...ex, d1: -1 }) } as typeof g;
   leve = false;
   try {
-    projeterExercice({ ...regenere(1), generateur: mauvaise }, [], { reglages: { feedback_immediat: true } });
+    projeterExercice({ ...regenere(1), generateur: mauvaise }, [], { reglages: { feedback_immediat: true, reponse_visible: true } });
   } catch {
     leve = true;
   }
@@ -202,19 +202,30 @@ async function blocRoute(): Promise<void> {
 
     // ── R2 : correction ACTIVE — la chaîne « officielle » est REJETÉE quand la donnée confirmée est fausse ──
     {
-      const x = await nouveau(true);
+      const x = await nouveau(true, true); // case « Afficher la réponse attendue » cochée : le champ épuisé montre sa solution (RAPPORT §42)
       await x.poster(CHAMP_ETAPE1, String(fausse(x.vrai)));
       const r = await x.poster(CHAMP_ETAPE2, String(2 * x.vrai));
       verifier(r.statut === 200 && r.corps.statut === "not_equivalent" && r.corps.solution_attendue === String(2 * fausse(x.vrai)), `R2 chaîne officielle rejetée, solution projetée révélée : ${JSON.stringify(r.corps)}`);
     }
 
-    // ── R3 : correction ACTIVE — prédécesseur non analysable : repli sur la vraie valeur (déjà révélée) ──
+    // ── R3 : correction ACTIVE + réponse visible — prédécesseur non analysable : repli sur la vraie valeur (déjà révélée) ──
     {
-      const x = await nouveau(true);
+      const x = await nouveau(true, true);
       const r = await x.poster(CHAMP_ETAPE1, "abc");
       verifier(r.corps.revele === true && r.corps.solution_attendue === String(x.vrai), `R3 la vraie valeur vient d'être révélée : ${JSON.stringify(r.corps)}`);
       const g1 = await x.lire();
       verifier(x.consigneServie(g1, CHAMP_ETAPE2) === CONSIGNE2(x.vrai), `R3 repli régime 1 : énoncé sur la vraie valeur ${x.vrai}, reçu ${x.consigneServie(g1, CHAMP_ETAPE2)}`);
+    }
+
+    // ── R3b : correction ACTIVE SANS « Afficher la réponse attendue » (RAPPORT §42) — la vraie valeur n'a PAS été montrée : repli sur la donnée déclarée ──
+    {
+      const x = await nouveau(true, false);
+      const r = await x.poster(CHAMP_ETAPE1, "abc");
+      verifier(r.corps.statut === "parse_error" && r.corps.verrouille === true && r.corps.revele === false && r.corps.solution_attendue === undefined, `R3b verdict et verrouillage, mais ni solution ni revele : ${JSON.stringify(r.corps)}`);
+      const g1 = await x.lire();
+      const decoy = x.vrai + DECALAGE_REPLI;
+      verifier(x.consigneServie(g1, CHAMP_ETAPE2) === CONSIGNE2(decoy), `R3b repli déclaré ${decoy} (la vraie valeur n'a pas été montrée), reçu ${x.consigneServie(g1, CHAMP_ETAPE2)}`);
+      verifier(!contientVrai(g1.corps, x.vrai) && g1.corps.champs.find((c: any) => c.champ === CHAMP_ETAPE1).solution_attendue === null, "R3b aucune charge utile ne contient la vraie valeur");
     }
 
     // ── R4 : correction COUPÉE — repli sur la donnée déclarée, la vraie valeur ne fuit JAMAIS avant la fin ──
