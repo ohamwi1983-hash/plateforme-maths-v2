@@ -15,6 +15,7 @@ export interface SegmentTexteMath {
 interface ModuleTexteMath {
   decouperTexteMath(texte: string): { valide: boolean; segments: SegmentTexteMath[] };
   versTexteBrut(texte: string): string;
+  assemblerFormuleColoree(segments: { latex: string; role?: string }[]): string;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -22,6 +23,7 @@ const module_: ModuleTexteMath = require("../../public/moteur/texteMath.js");
 
 export const decouperTexteMath = module_.decouperTexteMath;
 export const versTexteBrut = module_.versTexteBrut;
+export const assemblerFormuleColoree = module_.assemblerFormuleColoree;
 
 /**
  * Problèmes de balisage d'un texte d'auteur (vide = sain) : `$` non fermé, `$$`, contenu vide, et

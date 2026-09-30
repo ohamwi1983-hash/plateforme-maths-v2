@@ -650,9 +650,14 @@
    Balisage mathématique, champs multiples, intervalle, tableau étendu, aides typées, croquis. Mêmes
    règles : uniquement des tokens (aucune couleur, épaisseur ou espacement en dur). ═══════════════ */
 
-/* Segment mathématique d'un texte d'auteur (repli de la phase 3b-1 ; la 3c y branchera KaTeX). */
+/* Segment mathématique d'un texte d'auteur (rendu par KaTeX, repli en source : rendreTexte.js). */
 .moteur-math {
   font-family: var(--font-corps);
+}
+
+/* Formule + ponctuation qui la suit : jamais séparées par un retour à la ligne (rendreTexte.js). */
+.moteur-insecable {
+  white-space: nowrap;
 }
 
 /* ── Champs multiples ── */
@@ -671,7 +676,9 @@
 
 .moteur-sous-champ-libelle {
   flex: none;
-  min-width: var(--espace-4); /* 24px : « a = », « b = », « c = » alignent leurs champs (référence) */
+  /* 36px : la référence fixe 24px pour un libellé en texte brut ; rendu par KaTeX, « a = » fait 28 à 31px (a, b, c de largeurs
+     différentes) : à 24px les champs ne s'alignaient plus (RAPPORT §33). 36px les aligne et laisse de la marge à « x_S = ». */
+  min-width: calc(var(--espace-4) * 1.5);
   margin: 0; /* neutralise `label { margin-bottom }` (style.css) */
   font-family: var(--font-corps); /* `legend` (style.css) prend la police de marque */
   font-size: inherit;

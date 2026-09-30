@@ -803,6 +803,45 @@ async function scenarioEtendu(navigateur: any, base: string, largeur: number) {
     verifier(couleurs.roles[role].contraste >= 4.5, `${l} étendu : contraste réel du coefficient ${role} (${couleurs.roles[role].contraste.toFixed(2)}:1) sous 4,5:1`);
   }
   verifier(Object.keys(couleurs.roles).length >= 2 && couleurs.aria.startsWith("Formule : f(x) = "), `${l} étendu : formule colorée : rôles présents et alternative textuelle (${JSON.stringify(Object.keys(couleurs.roles))})`);
+  // KaTeX 0.18.9 (RAPPORT §33) : rendu RÉEL, une seule formule assemblée, aucune couleur venue d'un texte, repli en source jamais rouge.
+  await page.evaluate("document.fonts.ready");
+  verifier((await courant.locator(".moteur-formule .katex").count()) === 1 && (await courant.locator(".moteur-formule .moteur-math-source").count()) === 0, `${l} étendu : formule_coloree = UNE formule KaTeX assemblée (jamais un fragment par segment)`);
+  verifier((await courant.locator(".moteur-consigne .katex").count()) >= 4 && (await page.locator(".moteur-math-source").count()) === 0, `${l} étendu : la consigne est rendue par KaTeX, aucun repli en source sur la page`);
+  verifier((await page.locator(".moteur-consigne .katex [style*='color']").count()) === 0 && (await page.locator(".moteur-formule .katex [style*='color']").count()) === 0, `${l} étendu : aucune couleur en ligne dans le rendu (la couleur d'un coefficient vient de la classe, donc du token)`);
+  verifier(await page.evaluate(`document.fonts.check("1em KaTeX_Main") && document.fonts.check("1em KaTeX_Math")`) as boolean, `${l} étendu : les polices KaTeX vendorées (woff2) sont chargées`);
+  // La ponctuation qui suit une formule lui est collée (jamais renvoyée seule à la ligne) et le texte reste inchangé.
+  {
+    const groupes = (await page.evaluate(`[...document.querySelectorAll(".moteur-consigne .moteur-insecable")].map((g) => ({ signe: g.lastChild.textContent, math: g.firstChild.classList.contains("moteur-math"), nowrap: getComputedStyle(g).whiteSpace }))`)) as { signe: string; math: boolean; nowrap: string }[];
+    verifier(groupes.length >= 1 && groupes.every((g) => g.math && g.nowrap === "nowrap" && /^[,.;:!?)]$/.test(g.signe)), `${l} étendu : la ponctuation suivant une formule est collée à elle (${JSON.stringify(groupes)})`);
+    const consigne = (await courant.locator(".moteur-consigne").first().innerText()).replace(/\s+/g, " ");
+    verifier(!/\s[,;.:!?]/.test(consigne), `${l} étendu : aucune ponctuation isolée par une espace dans la consigne rendue (« ${consigne.slice(0, 120)} »)`);
+  }
+  const CAS_MATH = { ordinaire: "x^2 + 1", href: "\\href{http://exemple.test}{x}", classeEtrangere: "\\htmlClass{moteur-coef-a}{3}", rolesOk: "\\htmlClass{moteur-coef-a}{3}", rolesEtranger: "\\htmlClass{evil}{3}", invalide: "\\frac{1" };
+  const repli = (await page.evaluate(`((cas) => (async () => {
+    const { rendreMath, rendreTexte } = await import("/moteur/rendreTexte.js");
+    const rendu = (latex, options) => { const el = document.createElement("span"); document.body.appendChild(el); rendreMath(el, latex, options); const r = { source: el.classList.contains("moteur-math-source"), texte: el.textContent, katex: el.querySelector(".katex") !== null, rouge: el.innerHTML.includes("cc0000") || el.innerHTML.includes("rgb(204, 0, 0)") }; el.remove(); return r; };
+    const sortie = {
+      ordinaire: rendu(cas.ordinaire),
+      href: rendu(cas.href),
+      classeEtrangere: rendu(cas.classeEtrangere),
+      rolesOk: rendu(cas.rolesOk, { roles: true }),
+      rolesEtranger: rendu(cas.rolesEtranger, { roles: true }),
+      invalide: rendu(cas.invalide),
+    };
+    const sauve = globalThis.katex;
+    delete globalThis.katex;
+    sortie.sansKatex = rendu(cas.ordinaire);
+    globalThis.katex = sauve;
+    const eleve = document.createElement("p");
+    rendreTexte(eleve, "$x^2$ tapé par un élève");
+    sortie.eleve = { texte: eleve.textContent, katex: eleve.querySelector(".katex") !== null };
+    return sortie;
+  })())(${JSON.stringify(CAS_MATH)})`)) as Record<string, { source?: boolean; texte: string; katex: boolean; rouge?: boolean }>;
+  verifier(repli.ordinaire.katex && !repli.ordinaire.source, `${l} étendu : rendreMath ordinaire = KaTeX`);
+  verifier(["href", "classeEtrangere", "rolesEtranger", "invalide", "sansKatex"].every((k) => repli[k].source !== false && !repli[k].katex && repli[k].rouge !== true), `${l} étendu : commande refusée, classe étrangère, LaTeX invalide ou KaTeX absent -> source en texte brut, jamais de rendu rouge (${JSON.stringify(repli)})`);
+  verifier(repli.sansKatex.texte === CAS_MATH.ordinaire && repli.href.texte === CAS_MATH.href, `${l} étendu : le repli montre la source LaTeX telle quelle`);
+  verifier(repli.rolesOk.katex && !repli.rolesOk.source && !repli.rolesOk.rouge, `${l} étendu : roles -> \\htmlClass{moteur-coef-a} accepté`);
+  verifier(repli.eleve.texte === "$x^2$ tapé par un élève" && !repli.eleve.katex, `${l} étendu : un texte d'élève (sans option math) n'est jamais interprété`);
   await page.screenshot({ path: cap("02-aide-formule-coloree"), fullPage: true });
   // Trois déficiences visuelles émulées (les teintes doivent rester distinguables ; ordre a, b, c = indice non chromatique).
   const cdp = await contexte.newCDPSession(page);

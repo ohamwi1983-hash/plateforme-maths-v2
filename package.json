@@ -20,6 +20,7 @@
     "test-verification-gen7": "tsx scripts/test-verification-gen7.ts",
     "test-generation-gen7": "tsx scripts/test-generation-gen7.ts",
     "test-route-gen7": "tsx scripts/test-route-gen7.ts",
+    "test-katex": "tsx scripts/test-katex.ts",
     "chromium-temoin": "tsx scripts/chromium-temoin-technique.ts",
     "chromium-design": "tsx scripts/chromium-fidelite-design.ts"
   },
@@ -29,6 +30,7 @@
   "devDependencies": {
     "@types/node": "^24.13.2",
     "@vercel/node": "^3.2.0",
+    "katex": "0.18.9",
     "playwright": "1.56.1",
     "tsx": "^4.19.2",
     "typescript": "~6.0.2"

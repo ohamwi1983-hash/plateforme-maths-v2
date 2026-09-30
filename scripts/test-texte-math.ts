@@ -5,7 +5,7 @@
 
 export {}; // module
 
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { COMMANDES_MATH_INTERDITES, commandesInterditesDans } from "../lib/balisageMath";
 import { decoderChampsMultiples, decoderIntervalle, decoderListeValeurs, decoderListeValeursOuAucune, lireNombreOuFraction } from "../lib/reponsesEcran";
@@ -74,8 +74,27 @@ verifier(verifierBalisageMath("$x").length === 1 && verifierBalisageMath("a $$ b
 // La liste n'existe qu'à UN endroit : le module client n'en contient aucune copie.
 const clientTexteMath = readFileSync(join(__dirname, "../public/moteur/texteMath.js"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
 const clientRendre = readFileSync(join(__dirname, "../public/moteur/rendreTexte.js"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+// Seule exception : `htmlClass`, que le client EMPLOIE (il ne la copie pas d'une liste) pour la surbrillance a/b/c de `formule_coloree` —
+// assemblage (`assemblerFormuleColoree`, texteMath.js) et confiance restreinte (`reglagesKatex`, rendreTexte.js) — et nulle part ailleurs.
 for (const c of COMMANDES_MATH_INTERDITES) {
+  if (c === "htmlClass") continue;
   verifier(!clientTexteMath.includes(c) && !clientRendre.includes(c), `la commande interdite « ${c} » ne doit pas être recopiée dans public/moteur/`);
+}
+{
+  const occurrences = (t: string) => (t.match(/htmlClass/g) ?? []).length;
+  verifier(occurrences(clientTexteMath) === 1 && clientTexteMath.includes("\\\\htmlClass{moteur-coef-${segment.role}}"), "htmlClass : UNE occurrence dans texteMath.js, l'assemblage moteur-coef-<rôle>");
+  verifier(occurrences(clientRendre) === 1 && clientRendre.includes('contexte.command === "\\\\htmlClass"') && clientRendre.includes("/^moteur-coef-[abc]$/"), "htmlClass : UNE occurrence dans rendreTexte.js, la confiance restreinte à moteur-coef-a|b|c");
+  const dossier = join(__dirname, "../public/moteur");
+  const autres: string[] = [];
+  const parcourir = (d: string): void => {
+    for (const nom of readdirSync(d)) {
+      const chemin = join(d, nom);
+      if (statSync(chemin).isDirectory()) parcourir(chemin);
+      else if (/\.(js|css|html)$/.test(nom) && !["texteMath.js", "rendreTexte.js"].includes(nom) && readFileSync(chemin, "utf8").includes("htmlClass")) autres.push(chemin);
+    }
+  };
+  parcourir(dossier);
+  verifier(autres.length === 0, `htmlClass ne figure dans aucun autre fichier de public/moteur/ (${autres.join(", ")})`);
 }
 
 // ── 5. lireNombreOuFraction : LE lecteur de nombre (jamais 0 par défaut) ──
