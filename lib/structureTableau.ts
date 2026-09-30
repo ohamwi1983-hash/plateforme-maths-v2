@@ -146,7 +146,8 @@ export function resoudreRangees(ecran: EcranTableauSignes): RangeeResolue[] {
   return ecran.lignes.map((l) => rangeeStructuree(ecran, l));
 }
 
-export type ComparaisonTableau = { ok: true; tousJustes: boolean } | { ok: false; message: string };
+/** `lignesJustes` : une entrée par ligne déclarée (`Map`, jamais un objet à clés dynamiques) — un générateur qui distingue « signe juste, variation fausse » en a besoin. */
+export type ComparaisonTableau = { ok: true; tousJustes: boolean; lignesJustes: ReadonlyMap<string, boolean> } | { ok: false; message: string };
 
 /**
  * Compare la réponse décodée d'un élève à la solution `attendu` (mêmes clés : `{[ligne]:{[ancre]:valeur}}`).
@@ -158,19 +159,21 @@ export type ComparaisonTableau = { ok: true; tousJustes: boolean } | { ok: false
 export function comparerCasesTableau(rangees: readonly RangeeResolue[], saisi: CasesTableauSignes, attendu: Readonly<Record<string, Readonly<Record<string, string>>>>): ComparaisonTableau {
   const lignesConnues = new Set(rangees.map((r) => r.ligne));
   for (const cle of Object.keys(saisi)) if (!lignesConnues.has(cle)) return { ok: false, message: "Le tableau contient une ligne inconnue." };
-  let tousJustes = true;
+  const lignesJustes = new Map<string, boolean>();
   for (const rangee of rangees) {
     const ligneSaisie = lirePropre(saisi, rangee.ligne);
     if (ligneSaisie === undefined) return { ok: false, message: "Complète toutes les cases du tableau avant de valider." };
     const ancres = new Set(rangee.cellules.map((c) => c.ancre));
     for (const cle of Object.keys(ligneSaisie)) if (!ancres.has(cle)) return { ok: false, message: "Le tableau contient une case inconnue." };
     const ligneAttendue = lirePropre(attendu, rangee.ligne);
+    let ligneJuste = true;
     for (const cellule of rangee.cellules) {
       const valeur = lirePropre(ligneSaisie, cellule.ancre);
       if (typeof valeur !== "string") return { ok: false, message: "Complète toutes les cases du tableau avant de valider." };
       if (!cellule.alphabet.includes(valeur)) return { ok: false, message: "Une case du tableau contient une valeur qui ne fait pas partie de ses choix." };
-      if (!ligneAttendue || lirePropre(ligneAttendue, cellule.ancre) !== valeur) tousJustes = false;
+      if (!ligneAttendue || lirePropre(ligneAttendue, cellule.ancre) !== valeur) ligneJuste = false;
     }
+    lignesJustes.set(rangee.ligne, ligneJuste);
   }
-  return { ok: true, tousJustes };
+  return { ok: true, tousJustes: [...lignesJustes.values()].every(Boolean), lignesJustes };
 }

@@ -126,10 +126,12 @@ const decoder = (o: unknown) => {
 };
 const cmp = (o: unknown) => comparerCasesTableau(rangeesDeux, decoder(o), attendu);
 const juste = () => JSON.parse(JSON.stringify(attendu)) as typeof attendu;
-verifier(JSON.stringify(cmp(juste())) === '{"ok":true,"tousJustes":true}', "réponse juste");
+const cJuste = cmp(juste());
+verifier(cJuste.ok && cJuste.tousJustes && cJuste.lignesJustes.get("signe") === true && cJuste.lignesJustes.get("variation") === true && cJuste.lignesJustes.size === 2, "réponse juste (chaque ligne juste)");
 const fausse = juste();
 fausse.variation.c3 = "⌢";
-verifier(JSON.stringify(cmp(fausse)) === '{"ok":true,"tousJustes":false}', "réponse fausse mais bien formée : tousJustes=false (un essai raté, pas une erreur de forme)");
+const cFausse = cmp(fausse);
+verifier(cFausse.ok && !cFausse.tousJustes && cFausse.lignesJustes.get("signe") === true && cFausse.lignesJustes.get("variation") === false, "réponse fausse mais bien formée : tousJustes=false, ligne des variations fausse et ligne des signes juste (un essai raté, pas une erreur de forme)");
 const manquante = juste() as any;
 delete manquante.variation.c3;
 verifier(cmp(manquante).ok === false, "case manquante : refus");
