@@ -89,6 +89,7 @@
              (`initModeApercu`) — le professeur ne doit jamais confondre cet onglet avec un vrai compte élève. `hidden` par défaut. -->
         <div class="bandeau-mode-apercu" id="bandeau-mode-apercu" hidden>
           <span>🔎 Mode aperçu — vos réponses ici ne sont pas analysées comme celles d'un élève.</span>
+          <span id="bandeau-reglages-apercu" role="status"></span>
           <button type="button" id="btn-quitter-apercu">Fermer cet onglet</button>
         </div>
         <p class="salutation" id="salutation-eleve">Espace élève</p>
@@ -1065,7 +1066,17 @@
       document.getElementById("salutation-eleve").textContent = "Aperçu professeur";
       afficherOnglet("mes-taches");
       const donnees = await chargerTableauDeBord();
-      if (donnees && (donnees.en_cours ?? []).length > 0) demarrerFluxPasAPas(donnees.en_cours[0]);
+      if (donnees && (donnees.en_cours ?? []).length > 0) {
+        // Réglages EFFECTIFS de la tâche d'aperçu (RAPPORT §40) : le professeur voit tout de suite pourquoi le retour en arrière est, ou non, offert.
+        const t = donnees.en_cours[0];
+        const retour = t.retour_arriere === true
+          ? "retour en arrière activé"
+          : t.correction_immediate === true
+            ? "retour en arrière désactivé (sans effet sous correction immédiate : décochez-la puis cochez « Autoriser le retour en arrière »)"
+            : "retour en arrière désactivé (case « Autoriser le retour en arrière » non cochée)";
+        document.getElementById("bandeau-reglages-apercu").textContent = `Réglages : correction immédiate ${t.correction_immediate === true ? "activée" : "coupée"} · ${retour}.`;
+        demarrerFluxPasAPas(t);
+      }
       return true;
     }
 
