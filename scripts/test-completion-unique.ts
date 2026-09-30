@@ -43,6 +43,7 @@ async function main(): Promise<void> {
       aidePenalitePourcent: 0,
       chronoMode: mode,
       chronoDureeSecondes: mode === "aucun" ? null : prng.choisir([30, 60, 300]),
+      retourArriere: false,
     };
     const reponsesParChamp = new Map<string, LigneReponse[]>();
     const debuts: LigneDebutEcran[] = [];
@@ -53,7 +54,7 @@ async function main(): Promise<void> {
       if (rows.length > 0) reponsesParChamp.set(champ, rows);
       if (prng.entierEntre(0, 2) > 0) debuts.push({ champ, horodatage_debut: ilYa(prng.choisir([1, 20, 45, 100, 1000])) });
     }
-    const donnees: DonneesExercice = { reponsesParChamp, debuts, champsAvecAide: new Set() };
+    const donnees: DonneesExercice = { lignesChronologiques: [...reponsesParChamp.values()].flat(), reponsesParChamp, debuts, champsAvecAide: new Set() };
     const attendu = new Set(calculerEtatExercice(regenere, donnees, contexte, maintenant).champs.filter((c) => c.verrouille).map((c) => c.champ));
     const historique = new Map([...reponsesParChamp].map(([champ, rows]) => [champ, rows.map((r) => ({ statut: r.statut, fraction_correcte: r.fraction_correcte }))]));
     const obtenu = champsTermines(CHAMPS_BASE, historique, debuts, contexte, maintenant);
@@ -62,6 +63,39 @@ async function main(): Promise<void> {
     verifier(attendu.size === obtenu.size && [...attendu].every((c) => obtenu.has(c)), `cas ${i} (${mode}, tentativesMax ${contexte.tentativesMax}) : calculerEtatExercice {${[...attendu]}} ≠ champsTermines {${[...obtenu]}}`);
   }
   verifier(comparaisons === 4000 && nbExpires > 200, `la couverture inclut des chronos actifs (${nbExpires} cas avec chrono et champ terminé)`);
+
+  // ── 1 bis. Retour en arrière (RAPPORT §37) : « l'exercice est terminé » == calculerEtatExercice(...).termine, sur des historiques tirés ──
+  {
+    const { exerciceEstComplet } = require("../lib/tableauDeBord") as typeof import("../lib/tableauDeBord");
+    let nbTermines = 0;
+    for (let i = 0; i < 2000; i++) {
+      const mode = prng.choisir<ChronoMode>(["aucun", "global"]); // « par_ecran » est interdit avec le retour (D6)
+      const contexte: ContexteTache = {
+        nom: "t",
+        reglages: { feedback_immediat: false, reponse_visible: false },
+        tentativesMax: 1,
+        aideActivee: false,
+        aidePenalitePourcent: 0,
+        chronoMode: mode,
+        chronoDureeSecondes: mode === "aucun" ? null : prng.choisir([30, 60, 300]),
+        retourArriere: true,
+      };
+      const rows: LigneReponse[] = [];
+      for (const champ of CHAMPS_BASE) for (let k = prng.entierEntre(0, 2); k > 0; k--) rows.push({ exercice_assigne_id: "ex-1", champ, valeur_saisie: "x", statut: prng.choisir(STATUTS), indice_utilise: false, fraction_correcte: null });
+      const debuts: LigneDebutEcran[] = prng.entierEntre(0, 1) === 1 ? [{ champ: CHAMPS_BASE[0]!, horodatage_debut: ilYa(prng.choisir([1, 45, 1000])) }] : [];
+      // Une remise n'existe que si tous les écrans ont une réponse (`POST /api/exercices/:id/remise` l'exige) : seuls états atteignables.
+      const remis = prng.entierEntre(0, 3) === 0 && CHAMPS_BASE.every((c) => rows.some((r) => r.champ === c));
+      const parChamp = new Map<string, LigneReponse[]>();
+      for (const r of rows) parChamp.set(r.champ, [...(parChamp.get(r.champ) ?? []), r]);
+      const ligneRemise = { ...regenere, ligne: { ...regenere.ligne, remis_le: remis ? maintenant.toISOString() : null } };
+      const etat = calculerEtatExercice(ligneRemise, { lignesChronologiques: rows, reponsesParChamp: parChamp, debuts, champsAvecAide: new Set() }, contexte, maintenant);
+      const historique = new Map([...parChamp].map(([champ, l]) => [champ, l.map((r) => ({ statut: r.statut, fraction_correcte: r.fraction_correcte }))]));
+      const complet = exerciceEstComplet(CHAMPS_BASE, champsTermines(CHAMPS_BASE, historique, debuts, contexte, maintenant, remis));
+      if (etat.termine) nbTermines++;
+      verifier(etat.termine === complet, `retour ${i} (${mode}, remis ${remis}) : calculerEtatExercice.termine=${etat.termine} ≠ complétion des lecteurs=${complet}`);
+    }
+    verifier(nbTermines > 200 && nbTermines < 1800, `retour : la couverture contient des exercices terminés ET non terminés (${nbTermines}/2000)`);
+  }
 
   // ── 2. Accord de bout en bout : verrouillageTache == tableau de bord ──
   imposerProfilAssignation("base");

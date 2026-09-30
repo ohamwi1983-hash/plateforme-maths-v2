@@ -25,6 +25,7 @@
     "test-apercu-tache": "tsx scripts/test-apercu-tache.ts",
     "test-completion-unique": "tsx scripts/test-completion-unique.ts",
     "test-reglage-retour-arriere": "tsx scripts/test-reglage-retour-arriere.ts",
+    "test-retour-arriere": "tsx scripts/test-retour-arriere.ts",
     "chromium-temoin": "tsx scripts/chromium-temoin-technique.ts",
     "chromium-design": "tsx scripts/chromium-fidelite-design.ts"
   },

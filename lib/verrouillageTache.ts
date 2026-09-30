@@ -41,7 +41,7 @@ export async function categorieTachePourEleve(admin: AdminClient, tacheId: strin
   // une tâche dont les champs avaient tous expiré restait « en cours » ici alors que le tableau de bord la disait terminée.
   const { data: exercices, error: erreurExercices } = await admin
     .from("exercices_assignes")
-    .select("id, champs_attendus, variante_id")
+    .select("id, champs_attendus, variante_id, remis_le")
     .eq("tache_id", tacheId)
     .eq("eleve_id", eleveId);
   if (erreurExercices) throw new Error(erreurExercices.message);
@@ -68,7 +68,7 @@ export async function categorieTachePourEleve(admin: AdminClient, tacheId: strin
   }
 
   // Contexte (tentatives, chrono) par variante ; tâche introuvable : réglages par défaut du schéma (comportement d'origine).
-  const contextes = new Map<string, Pick<ContexteTache, "tentativesMax" | "aidePenalitePourcent" | "chronoMode" | "chronoDureeSecondes">>();
+  const contextes = new Map<string, Pick<ContexteTache, "tentativesMax" | "aidePenalitePourcent" | "chronoMode" | "chronoDureeSecondes" | "retourArriere">>();
   const maintenant = new Date();
   const completions: boolean[] = [];
   for (const ex of exercicesDeLaTache) {
@@ -80,9 +80,9 @@ export async function categorieTachePourEleve(admin: AdminClient, tacheId: strin
     const varianteId = ex.variante_id as string;
     if (!contextes.has(varianteId)) {
       const contexte = await chargerContexteTache(admin, tacheId, varianteId);
-      contextes.set(varianteId, contexte ?? { tentativesMax: tentativesMaxEffectif(true, 0), aidePenalitePourcent: 0, chronoMode: "aucun", chronoDureeSecondes: null });
+      contextes.set(varianteId, contexte ?? { tentativesMax: tentativesMaxEffectif(true, 0), aidePenalitePourcent: 0, chronoMode: "aucun", chronoDureeSecondes: null, retourArriere: false });
     }
-    const termines = champsTermines(champsAttendus, historiqueParExercice.get(ex.id as string) ?? new Map(), debutsParExercice.get(ex.id as string) ?? [], contextes.get(varianteId)!, maintenant);
+    const termines = champsTermines(champsAttendus, historiqueParExercice.get(ex.id as string) ?? new Map(), debutsParExercice.get(ex.id as string) ?? [], contextes.get(varianteId)!, maintenant, ex.remis_le != null);
     completions.push(exerciceEstComplet(champsAttendus, termines));
   }
   const complete = tacheEstComplete(completions);

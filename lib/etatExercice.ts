@@ -1,12 +1,14 @@
 import type { supabaseAdmin } from "./supabaseAdmin";
 import type { EcranDeclare, Generateur, ReponseConfirmee } from "./contratGenerateur";
 import { validerDependances } from "./cascadeEcrans";
+import { amontsTransitifs, dernieresReponsesValides } from "./reponsesValides";
 import { chercherGenerateur } from "./registreGenerateurs";
 import { estGraineValide } from "./prng";
 import {
   calculerChronoExpire,
   calculerEtatChampTentatives,
   horodatageDebutPertinent,
+  retourArriereEffectif,
   tentativesMaxEffectif,
   type ChronoMode,
   type EtatChampTentatives,
@@ -28,9 +30,11 @@ export interface LigneExerciceAssigne {
   variante_id: string;
   graine: number | null;
   champs_attendus: string[] | null;
+  /** Retour en arrière (RAPPORT §37) : instant de remise de l'exercice ; nul/absent = pas rendu. */
+  remis_le?: string | null;
 }
 
-export const COLONNES_EXERCICE_ASSIGNE = "id, tache_id, eleve_id, generateur_id, variante_id, graine, champs_attendus";
+export const COLONNES_EXERCICE_ASSIGNE = "id, tache_id, eleve_id, generateur_id, variante_id, graine, champs_attendus, remis_le";
 
 export interface ExerciceRegenere {
   ligne: LigneExerciceAssigne;
@@ -51,6 +55,17 @@ export function regenererExercice(ligne: LigneExerciceAssigne): ExerciceRegenere
   if (!generateur || graine === null || !estGraineValide(graine)) return null;
   const exercice = generateur.generer(graine);
   return { ligne, generateur, exercice, ecrans: generateur.ecrans(exercice) };
+}
+
+/**
+ * Écrans déclarés d'une ligne `exercices_assignes` (`variante_id` + `graine`), pour les lecteurs qui n'ont besoin que de leur
+ * STRUCTURE (`dependDe`) sans exécuter l'exercice — même repli que `poidsDesChampsDeLigne` : ligne non exécutable -> `null`.
+ */
+export function ecransDeLigne(ligne: { variante_id: string; graine?: number | string | null }): EcranDeclare[] | null {
+  const generateur = chercherGenerateur(ligne.variante_id);
+  const graine = ligne.graine === null || ligne.graine === undefined ? null : Number(ligne.graine);
+  if (!generateur || graine === null || !estGraineValide(graine)) return null;
+  return generateur.ecrans(generateur.generer(graine));
 }
 
 /** Exercice tel que l'ÉLÈVE le voit (RAPPORT §18) : les données dérivées d'un écran précédent viennent de ses réponses confirmées. */
@@ -90,12 +105,14 @@ export interface ContexteTache {
   aidePenalitePourcent: number;
   chronoMode: ChronoMode;
   chronoDureeSecondes: number | null;
+  /** Retour en arrière EFFECTIF (`retourArriereEffectif`, RAPPORT §37) : réglage de la tâche ET correction immédiate coupée. */
+  retourArriere: boolean;
 }
 
 export async function chargerContexteTache(admin: AdminClient, tacheId: string, varianteId: string): Promise<ContexteTache | null> {
   const { data: tache, error } = await admin
     .from("taches")
-    .select("nom, feedback_immediat, reponse_visible, tentatives_supplementaires, aide_activee, aide_penalite_pourcent, chrono_mode, chrono_duree_secondes")
+    .select("nom, feedback_immediat, reponse_visible, tentatives_supplementaires, aide_activee, aide_penalite_pourcent, chrono_mode, chrono_duree_secondes, autoriser_retour_arriere")
     .eq("id", tacheId)
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -110,6 +127,7 @@ export async function chargerContexteTache(admin: AdminClient, tacheId: string, 
     aidePenalitePourcent: tache.aide_penalite_pourcent as number,
     chronoMode,
     chronoDureeSecondes,
+    retourArriere: retourArriereEffectif(tache.feedback_immediat as boolean, tache.autoriser_retour_arriere === true),
   };
 }
 
@@ -124,6 +142,8 @@ export interface LigneReponse {
 }
 
 export interface DonneesExercice {
+  /** TOUTES les lignes de l'exercice, chronologique croissant, tous champs confondus (ordre d'insertion : base de la validité, `lib/reponsesValides.ts`). */
+  lignesChronologiques: LigneReponse[];
   /** Historique chronologique croissant, par champ. */
   reponsesParChamp: Map<string, LigneReponse[]>;
   debuts: LigneDebutEcran[];
@@ -143,15 +163,25 @@ export async function chargerDonneesExercice(admin: AdminClient, exerciceId: str
   const { data: aides, error: erreurAides } = await admin.from("aides_utilisees").select("champ").eq("exercice_assigne_id", exerciceId);
   if (erreurAides) throw new Error(erreurAides.message);
 
+  return donneesDepuisLignes(
+    (reponses ?? []) as LigneReponse[],
+    (debuts ?? []) as LigneDebutEcran[],
+    new Set((aides ?? []).map((a) => a.champ as string)),
+  );
+}
+
+/** Construit `DonneesExercice` depuis les lignes brutes (chronologique croissant) — point unique du regroupement par champ. */
+export function donneesDepuisLignes(lignesChronologiques: LigneReponse[], debuts: LigneDebutEcran[], champsAvecAide: Set<string>): DonneesExercice {
   const reponsesParChamp = new Map<string, LigneReponse[]>();
-  for (const r of (reponses ?? []) as LigneReponse[]) {
+  for (const r of lignesChronologiques) {
     if (!reponsesParChamp.has(r.champ)) reponsesParChamp.set(r.champ, []);
     reponsesParChamp.get(r.champ)!.push(r);
   }
   return {
+    lignesChronologiques,
     reponsesParChamp,
-    debuts: (debuts ?? []) as LigneDebutEcran[],
-    champsAvecAide: new Set((aides ?? []).map((a) => a.champ as string)),
+    debuts,
+    champsAvecAide,
   };
 }
 
@@ -201,9 +231,14 @@ export function champsTermines(
   champsAttendus: readonly string[],
   historiqueParChamp: ReadonlyMap<string, readonly { statut: StatutVerification; fraction_correcte?: number | null }[]>,
   debuts: readonly LigneDebutEcran[],
-  contexte: Pick<ContexteTache, "tentativesMax" | "aidePenalitePourcent" | "chronoMode" | "chronoDureeSecondes">,
+  contexte: Pick<ContexteTache, "tentativesMax" | "aidePenalitePourcent" | "chronoMode" | "chronoDureeSecondes"> & { retourArriere?: boolean },
   maintenant: Date,
+  /** `exercices_assignes.remis_le` non nul (retour en arrière, RAPPORT §37). */
+  remis = false,
 ): Set<string> {
+  // Retour en arrière : répondre ne TERMINE pas un champ (il reste modifiable) ; l'exercice est terminé — tous ses champs à la
+  // fois — quand il est rendu ou que le chrono global est écoulé, jamais avant (D1/D3). L'historique n'intervient plus ici.
+  if (contexte.retourArriere) return exerciceVerrouille(remis, contexte, debuts, maintenant) ? new Set(champsAttendus) : new Set();
   const termines = new Set<string>();
   for (const champ of champsAttendus) {
     const historique = historiqueParChamp.get(champ) ?? [];
@@ -211,6 +246,31 @@ export function champsTermines(
     if (etat.terminee) termines.add(champ);
   }
   return termines;
+}
+
+/** Vrai si le chrono GLOBAL de la tâche est écoulé pour cet exercice (`false` pour tout autre mode ou si le chrono n'a pas démarré). */
+export function chronoGlobalExpire(contexte: Pick<ContexteTache, "chronoMode" | "chronoDureeSecondes">, debuts: readonly LigneDebutEcran[], maintenant: Date): boolean {
+  return contexte.chronoMode === "global" && calculerChronoExpire("global", contexte.chronoDureeSecondes, horodatageDebutPertinent("global", "", debuts), maintenant);
+}
+
+/**
+ * Sous retour en arrière, l'exercice n'accepte plus aucune modification (D1) quand il est RENDU ou que son chrono global est
+ * écoulé (l'échéance de la tâche est traitée à part, par `categorieTachePourEleve`). Point unique de cette règle.
+ */
+export function exerciceVerrouille(remis: boolean, contexte: Pick<ContexteTache, "chronoMode" | "chronoDureeSecondes">, debuts: readonly LigneDebutEcran[], maintenant: Date): boolean {
+  return remis || chronoGlobalExpire(contexte, debuts, maintenant);
+}
+
+/**
+ * Données EFFECTIVES sous retour en arrière : pour chaque écran, seulement sa dernière ligne si elle est valide
+ * (`lib/reponsesValides.ts`). Les lignes périmées ne comptent plus pour l'état ; elles restent en base (statistiques, D8).
+ */
+export function donneesEffectives(ecrans: readonly EcranDeclare[], donnees: DonneesExercice): DonneesExercice {
+  const valides = dernieresReponsesValides(amontsTransitifs(ecrans), donnees.lignesChronologiques);
+  const lignesChronologiques = donnees.lignesChronologiques.filter((l) => valides.get(l.champ) === l);
+  const reponsesParChamp = new Map<string, LigneReponse[]>();
+  for (const [champ, ligne] of valides) reponsesParChamp.set(champ, [ligne]);
+  return { lignesChronologiques, reponsesParChamp, debuts: donnees.debuts, champsAvecAide: donnees.champsAvecAide };
 }
 
 export function calculerEtatChamp(champ: string, donnees: DonneesExercice, contexte: ContexteTache, maintenant: Date): EtatChamp {
@@ -228,7 +288,17 @@ export function calculerEtatChamp(champ: string, donnees: DonneesExercice, conte
 }
 
 export interface EtatExerciceComplet {
-  champs: (EtatChamp & { verrouille: boolean })[];
+  /**
+   * `verrouille` = champ TERMINÉ pour le moteur (réussi, révélé, ou — sous retour en arrière — répondu). `modifiable` : sous retour
+   * en arrière, champ répondu que l'élève peut encore modifier (jamais vrai sans retour, ni une fois l'exercice rendu / expiré).
+   */
+  champs: (EtatChamp & { verrouille: boolean; modifiable: boolean })[];
+  /** Retour en arrière effectif pour cette tâche. */
+  retourArriere: boolean;
+  /** Retour en arrière : exercice rendu ou chrono global écoulé (plus aucune modification). Toujours `false` sans retour. */
+  exerciceVerrouille: boolean;
+  /** Retour en arrière : tous les écrans ont une réponse valide et l'exercice n'est pas encore rendu (« Rendre cet exercice » proposé). */
+  pretARendre: boolean;
   /** Champs terminés/verrouillés, dernière soumission — seule entrée passée à `Generateur.etatActuel`. */
   reponsesConfirmees: ReponseConfirmeeInterne[];
   champCourant: string | null;
@@ -248,15 +318,24 @@ type ReponseConfirmeeInterne = { champ: string; reponseBrute: string; statut: St
  * cas particulier ici — client, tableau de bord et résultats voient la même chose.
  */
 export function calculerEtatExercice(regenere: ExerciceRegenere, donnees: DonneesExercice, contexte: ContexteTache, maintenant: Date): EtatExerciceComplet {
+  const retour = contexte.retourArriere;
+  // Retour en arrière (RAPPORT §37) : l'état se calcule sur la dernière réponse VALIDE de chaque écran (un seul essai effectif) ;
+  // sans retour, exactement l'historique complet comme avant.
+  const verrou = retour && exerciceVerrouille(regenere.ligne.remis_le != null, contexte, donnees.debuts, maintenant);
+  const effectives = retour ? donneesEffectives(regenere.ecrans, donnees) : donnees;
   const champs = regenere.ecrans.map((ecran) => {
-    const etat = calculerEtatChamp(ecran.champ, donnees, contexte, maintenant);
-    return { ...etat, verrouille: etat.etat.terminee };
+    const etat = calculerEtatChamp(ecran.champ, effectives, contexte, maintenant);
+    const repondu = (effectives.reponsesParChamp.get(ecran.champ)?.length ?? 0) > 0;
+    return { ...etat, verrouille: etat.etat.terminee, modifiable: retour && !verrou && repondu };
   });
   const reponsesConfirmees: ReponseConfirmeeInterne[] = champs
     .filter((c) => c.verrouille)
     .map((c) => ({ champ: c.champ, reponseBrute: c.derniere?.valeur_saisie ?? "", statut: c.derniere?.statut ?? "not_equivalent" }));
   const { champCourant } = regenere.generateur.etatActuel(regenere.exercice, reponsesConfirmees);
-  return { champs, reponsesConfirmees, champCourant, termine: champs.every((c) => c.verrouille) };
+  // Sous retour en arrière, avoir répondu à tout ne termine PAS l'exercice : il faut le rendre (sinon la dernière réponse ferait
+  // tout révéler d'un coup, sans que l'élève ait pu relire) — ou que le chrono global l'ait clos.
+  const pretARendre = retour && !verrou && champs.every((c) => c.modifiable);
+  return { champs, retourArriere: retour, exerciceVerrouille: verrou, pretARendre, reponsesConfirmees, champCourant, termine: champs.every((c) => c.verrouille) && (!retour || verrou) };
 }
 
 /**

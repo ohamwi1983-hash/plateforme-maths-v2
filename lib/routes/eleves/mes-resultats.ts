@@ -2,7 +2,8 @@ import type { RequeteHttp, ReponseHttp } from "../../httpTypes";
 import { avecGestionErreurs } from "../../avecGestionErreurs";
 import { eleveAuthentifie, supabaseAdmin } from "../../supabaseAdmin";
 import { classifierTache, tacheEstComplete, exerciceEstComplet, type CategorieOuNonCommencee } from "../../tableauDeBord";
-import { champsTermines, chargerContexteTache, type ContexteTache } from "../../etatExercice";
+import { champsTermines, chargerContexteTache, ecransDeLigne, type ContexteTache } from "../../etatExercice";
+import { amontsTransitifs, dernieresReponsesValides } from "../../reponsesValides";
 import { recupererToutesLesLignes } from "../../supabasePagination";
 import { poidsDansMap, poidsDesChampsDeLigne, sommePonderee } from "../../poidsEcran";
 import type { LigneDebutEcran } from "../../moteurTentatives";
@@ -21,6 +22,8 @@ interface ExerciceBrut {
   date_creation: string;
   /** Pour retrouver le poids de chaque écran (RAPPORT §17) ; `null` = ligne historique, poids 1. */
   graine: number | null;
+  /** Retour en arrière (RAPPORT §37) : exercice rendu ; nul = pas rendu. */
+  remis_le: string | null;
 }
 
 interface ReponseBrute {
@@ -70,7 +73,7 @@ export const gererElevesMesResultats = avecGestionErreurs(async function handler
 
   const { data: exercicesBruts, error: erreurExercices } = await admin
     .from("exercices_assignes")
-    .select("id, tache_id, champs_attendus, variante_id, date_creation, graine")
+    .select("id, tache_id, champs_attendus, variante_id, date_creation, graine, remis_le")
     .eq("eleve_id", eleve.id)
     .returns<ExerciceBrut[]>();
   if (erreurExercices) {
@@ -163,7 +166,11 @@ export const gererElevesMesResultats = avecGestionErreurs(async function handler
   // quelle) — même dédoublonnage par champ que côté prof (§188), nécessaire ici aussi puisque les
   // tentatives multiples sur un même champ partagent le même `debuts_ecran`.
   const reponsesTempsParExercice = new Map<string, LigneReponseTemps[]>();
+  // Lignes par exercice dans l'ordre d'insertion : la validité sous retour en arrière en dépend (`lib/reponsesValides.ts`).
+  const lignesParExercice = new Map<string, { champ: string; statut: StatutVerification }[]>();
   for (const r of reponsesBrutes ?? []) {
+    if (!lignesParExercice.has(r.exercice_assigne_id)) lignesParExercice.set(r.exercice_assigne_id, []);
+    lignesParExercice.get(r.exercice_assigne_id)!.push({ champ: r.champ, statut: r.statut });
     derniereStatutParCle.set(`${r.exercice_assigne_id}:${r.champ}`, r.statut);
     const cleHistorique = `${r.exercice_assigne_id}:${r.champ}`;
     if (!historiqueStatutsParCle.has(cleHistorique)) historiqueStatutsParCle.set(cleHistorique, []);
@@ -229,7 +236,7 @@ export const gererElevesMesResultats = avecGestionErreurs(async function handler
         const fractions = historiqueFractionsParCle.get(`${ex.id}:${champ}`) ?? [];
         historiqueParChamp.set(champ, statuts.map((statut, i) => ({ statut, fraction_correcte: fractions[i] })));
       }
-      champsTermineParExercice.set(ex.id, champsTermines(ex.champs_attendus ?? [], historiqueParChamp, debutsParExercice.get(ex.id) ?? [], contexte, maintenant));
+      champsTermineParExercice.set(ex.id, champsTermines(ex.champs_attendus ?? [], historiqueParChamp, debutsParExercice.get(ex.id) ?? [], contexte, maintenant, ex.remis_le != null));
     }
     const completions = exercicesDeLaTache.map((ex) => (ex.champs_attendus === null ? false : exerciceEstComplet(ex.champs_attendus, champsTermineParExercice.get(ex.id) ?? new Set())));
     const complete = tacheEstComplete(completions);
@@ -238,6 +245,14 @@ export const gererElevesMesResultats = avecGestionErreurs(async function handler
     if (feedbackCoupe && !complete && categorie !== "anterieures") tachesMasquees.add(tacheId);
     if (categorie !== "effectuees" && categorie !== "anterieures") continue; // ni "en_cours" (pas encore noté) ni "pas_commencee"
 
+    // Statut retenu d'un champ : sa dernière réponse ; sous retour en arrière, sa dernière réponse VALIDE (une réponse amont modifiée
+    // depuis a périmé les réponses aval — `lib/reponsesValides.ts`), et « sans réponse » si aucune ne l'est.
+    const statutRetenu = (ex: ExerciceBrut, champ: string): StatutVerification | undefined => {
+      if (contextesParTacheVariante.get(`${tacheId}:${ex.variante_id}`)?.retourArriere !== true) return derniereStatutParCle.get(`${ex.id}:${champ}`);
+      const ecrans = ecransDeLigne(ex);
+      if (ecrans === null) return derniereStatutParCle.get(`${ex.id}:${champ}`);
+      return dernieresReponsesValides(amontsTransitifs(ecrans), lignesParExercice.get(ex.id) ?? []).get(champ)?.statut;
+    };
     // Somme PONDÉRÉE par le poids de chaque écran (RAPPORT §17, `lib/poidsEcran.ts`) ; tous poids à 1 =
     // le comptage d'origine. Dénominateur inchangé : tous les `champs_attendus`.
     const compte: { correct: boolean; poids: number }[] = [];
@@ -246,7 +261,7 @@ export const gererElevesMesResultats = avecGestionErreurs(async function handler
       for (const champ of ex.champs_attendus ?? []) {
         // Tâche notée = tous ses champs terminés : un champ sans aucune réponse est alors un champ
         // révélé par le chrono — il compte comme raté (score 0), jamais ignoré du total.
-        const statut = derniereStatutParCle.get(`${ex.id}:${champ}`);
+        const statut = statutRetenu(ex, champ);
         compte.push({ correct: statut === "correct", poids: poidsDansMap(poidsParChamp, champ) });
       }
     }
