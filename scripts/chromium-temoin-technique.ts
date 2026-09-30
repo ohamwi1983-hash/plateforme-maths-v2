@@ -2046,7 +2046,11 @@ async function scenarioApercu(navigateur: any, base: string, largeur: number) {
   await popup2.waitForSelector(".moteur-ecran-courant");
   verifier(s.base.table("taches").length === 1 && s.base.table("reponses").length === 0 && s.base.table("eleves").length === 3, `${l} : 2e aperçu -> même fantôme, ancien aperçu et ses réponses supprimés`);
   const fermeture = popup2.waitForEvent("close");
-  await popup2.locator("#btn-quitter-apercu").click();
+  // Le clic FERME l'onglet (`window.close()`) : Playwright peut signaler cette fermeture pendant le clic lui-même (« Target page … has been closed »),
+  // ce qui n'est pas un échec — seule une autre erreur l'est ; la fermeture est vérifiée juste après.
+  await popup2.locator("#btn-quitter-apercu").click().catch((e: Error) => {
+    if (!/has been closed/i.test(e.message)) throw e;
+  });
   await fermeture;
   verifier(popup2.isClosed(), `${l} : « Fermer cet onglet » ferme l'onglet d'aperçu`);
   await popup.close();
