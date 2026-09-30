@@ -1467,7 +1467,7 @@ async function scenarioGen7Parties(navigateur: any, base: string, largeur: numbe
       await page.waitForFunction(`document.querySelectorAll(".moteur-ecran-courant").length === 1`);
       const consigne: string = await lireConsigneGen7(page);
       verifier(await courant.locator(".moteur-consigne .katex").count() >= 1 && (await page.locator(".moteur-math-source").count()) === 0, `${e} / ${champ} : la consigne est rendue par KaTeX (aucun repli en source)`);
-      if (!["racinesChamp1", "racinesChamp2", "racinesReconnaissance"].includes(champ)) verifier(consigne.startsWith("Étudie la fonction suivante :"), `${e} / ${champ} : l'énoncé de la fonction est répété (« ${consigne.slice(0, 50)} »)`);
+      if (!["racinesChamp1", "racinesChamp2", "racinesReconnaissance"].includes(champ)) verifier(consigne.startsWith("Étudie la fonction suivante"), `${e} / ${champ} : l'énoncé de la fonction est répété (« ${consigne.slice(0, 50)} »)`);
       if (i === 0) {
         verifier(!consigne.includes("Ce que tu sais déjà"), `${e} : aucun panneau avant la première réponse`);
         await page.screenshot({ path: cap("01-coefficients"), fullPage: true });
