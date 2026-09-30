@@ -32,10 +32,10 @@ async function main(): Promise<void> {
   const jetonEleve = "eleve:eleve-1";
   let compteur = 0;
 
-  const nouveau = async (options: { feedback: boolean; tentatives?: number; reponseVisible?: boolean; categorie?: "mise_en_evidence" | "irreductible" }) => {
+  const nouveau = async (options: { feedback: boolean; aide?: boolean; tentatives?: number; reponseVisible?: boolean; categorie?: "mise_en_evidence" | "irreductible" }) => {
     compteur++;
     const categorie = options.categorie ?? "mise_en_evidence";
-    const tache = creerTache(s, { nom: `cascade ${compteur}`, variantes: [{ variante_id: `af_${categorie}`, nombre_exercices: 1 }], feedback_immediat: options.feedback, tentatives_supplementaires: options.tentatives ?? 0, reponse_visible: options.reponseVisible ?? false });
+    const tache = creerTache(s, { nom: `cascade ${compteur}`, variantes: [{ variante_id: `af_${categorie}`, nombre_exercices: 1 }], feedback_immediat: options.feedback, tentatives_supplementaires: options.tentatives ?? 0, reponse_visible: options.reponseVisible ?? false, aide_activee: options.aide ?? false });
     const origine = Math.random;
     Math.random = () => 12345 / 2 ** 32; // f(x) = 4x² + 8x pour mise_en_evidence
     try {
@@ -135,14 +135,28 @@ async function main(): Promise<void> {
     const x = await nouveau({ feedback: false });
     await x.poster("coefficients", reponseBruteCorrecteAnalyseFonction(x.ex, "coefficients"));
     const g = await x.lire();
-    const brut = ecransAnalyseFonction(x.ex);
-    for (const champ of ["allure", "axeSommet"]) verifier(consigne(g, champ) === brut.find((e) => e.champ === champ)!.consigne, `coefficients justes : consigne de ${champ} identique à l'exercice brut`);
+    // Même libellé que pour des coefficients faux (aucun verdict visible sous correction coupée) ; la fonction affichée est la vraie, en ordre canonique.
+    for (const champ of ["allure", "axeSommet"]) verifier(consigne(g, champ) === `Étudie la fonction suivante, d'après les coefficients que tu as donnés : $f(x) = 4x^2 + 8x$. ${champ === "allure" ? "Quelle est l'allure de sa parabole ?" : "Donne l'axe de symétrie et les coordonnées du sommet (arrondi au centième accepté si besoin)."}`, `coefficients justes : consigne de ${champ} = libellé commun + vraie fonction (« ${consigne(g, champ).slice(0, 110)} »)`);
     for (const champ of ["allure", "axeSommet", "domaineImage"]) {
       await x.poster(champ, reponseBruteCorrecteAnalyseFonction(x.ex, champ));
       verifier(x.statuts(champ)[0] === "correct", `coefficients justes : ${champ} correct`);
     }
     const aide = await x.aide("axeSommet").catch(() => null);
     verifier(aide === null || aide.statut === 403 || aide.statut === 200, "aide : pas d'exception");
+  }
+
+  // ── 5 bis. Correction coupée : aucun verdict visible dans le libellé ni dans les aides (juste, faux entier, faux non entier) ──
+  {
+    const forme = async (coefs: string) => {
+      const x = await nouveau({ feedback: false, aide: true });
+      await x.poster("coefficients", coefs);
+      const g = await x.lire();
+      const ecran = (champ: string) => g.ecrans.find((e) => e.champ === champ)!;
+      return { consigne: consigne(g, "axeSommet").replace(/\$f\(x\) = [^$]*\$/, "$f$"), aide: ecran("axeSommet").aide_disponible, aideAllure: ecran("allure").aide_disponible };
+    };
+    const [juste, fauxEntier, fauxDecimal] = [await forme(JSON.stringify({ a: "4", b: "8", c: "0" })), await forme(COEF_FAUX), await forme(JSON.stringify({ a: "1.5", b: "2", c: "0" }))];
+    verifier(juste.consigne === fauxEntier.consigne && juste.consigne === fauxDecimal.consigne, `libellé identique pour coefficients justes, faux entiers, faux décimaux (« ${juste.consigne.slice(0, 90)} » / « ${fauxDecimal.consigne.slice(0, 90)} »)`);
+    verifier(juste.aide === fauxEntier.aide && juste.aide === fauxDecimal.aide && juste.aide === true, `l'aide de axeSommet reste disponible dans les trois cas (${juste.aide}, ${fauxEntier.aide}, ${fauxDecimal.aide})`);
   }
 
   // ── 6. Les écrans dépendants ne sont servis qu'une fois leurs prédécesseurs confirmés (filtrage serveur) ──

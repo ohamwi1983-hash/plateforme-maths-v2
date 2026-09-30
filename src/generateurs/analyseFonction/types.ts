@@ -72,13 +72,20 @@ export interface DonneesEffectives {
   xS: number;
   yS: number;
   yImage: number;
-  /** `a, b, c` viennent de l'élève ET diffèrent des vrais : l'énoncé des écrans suivants affiche SA fonction. */
+  /** `a, b, c` viennent de l'élève ET diffèrent des vrais (sert au panneau de faits : une donnée fausse n'établit aucun fait). */
   coefficientsEleve: boolean;
-  /** `yImage` diffère de la vraie ordonnée du sommet : la consigne de `domaineImage` la rappelle. */
+  /** `yImage` diffère de la vraie ordonnée du sommet (idem). */
   ordonneeEleve: boolean;
+  /**
+   * Les coefficients CONFIRMÉS sont exploitables (justes OU faux) : l'énoncé des écrans suivants affiche SA fonction, avec le même libellé dans
+   * les deux cas. Un libellé qui n'apparaîtrait qu'en cas d'erreur serait un verdict visible sous correction coupée (règle de révélation).
+   */
+  coefficientsAffiches: boolean;
+  /** L'ordonnée du sommet confirmée à `axeSommet` est exploitable (juste ou fausse) : la consigne de `domaineImage` la rappelle dans les deux cas. */
+  ordonneeAffichee: boolean;
 }
 
 /** Données effectives d'un exercice non projeté : les vraies. */
 export function effectifVrai(f: FonctionSecondDegre): DonneesEffectives {
-  return { a: f.a, b: f.b, c: f.c, xS: f.xS, yS: f.yS, yImage: f.yS, coefficientsEleve: false, ordonneeEleve: false };
+  return { a: f.a, b: f.b, c: f.c, xS: f.xS, yS: f.yS, yImage: f.yS, coefficientsEleve: false, ordonneeEleve: false, coefficientsAffiches: false, ordonneeAffichee: false };
 }

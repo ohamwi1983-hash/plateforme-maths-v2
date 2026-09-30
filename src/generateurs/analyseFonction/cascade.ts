@@ -201,16 +201,18 @@ export function effectifDepuisReponses(f: FonctionSecondDegre, reponsesConfirmee
   const coef = reponsesConfirmees.find((r) => r.champ === CHAMP_COEFFICIENTS);
   const lus = coef !== undefined && coef.statut === "not_equivalent" ? lireCoefficients(coef.reponseBrute) : null;
   const differe = lus !== null && (lus.a !== f.a || lus.b !== f.b || lus.c !== f.c);
-  let base = vrai;
+  // Affichage (libellé identique juste ou faux) : réponse juste, ou fausse mais exploitable.
+  let base: DonneesEffectives = { ...vrai, coefficientsAffiches: coef !== undefined && (coef.statut === "correct" || lus !== null) };
   if (lus !== null && differe) {
     const xS = -lus.b / (2 * lus.a);
     const yS = lus.a * xS * xS + lus.b * xS + lus.c;
-    base = { ...vrai, a: lus.a, b: lus.b, c: lus.c, xS: xS === 0 ? 0 : xS, yS: yS === 0 ? 0 : yS, yImage: yS === 0 ? 0 : yS, coefficientsEleve: true };
+    base = { ...base, a: lus.a, b: lus.b, c: lus.c, xS: xS === 0 ? 0 : xS, yS: yS === 0 ? 0 : yS, yImage: yS === 0 ? 0 : yS, coefficientsEleve: true };
   }
   const axe = reponsesConfirmees.find((r) => r.champ === CHAMP_AXE_SOMMET);
   const y = axe !== undefined && axe.statut === "not_equivalent" ? lireOrdonneeSommet(axe.reponseBrute) : null;
   const yImage = y !== null && Math.abs(y - base.yS) > TOLERANCE_SAISIE ? y : base.yS;
-  return { ...base, yImage, ordonneeEleve: Math.abs(yImage - f.yS) > 1e-9 };
+  const ordonneeAffichee = axe !== undefined && (axe.statut === "correct" || y !== null);
+  return { ...base, yImage, ordonneeEleve: Math.abs(yImage - f.yS) > 1e-9, ordonneeAffichee };
 }
 
 /**

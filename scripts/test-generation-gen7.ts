@@ -293,7 +293,8 @@ verifier(ecransAnalyseFonction(me).map((e) => e.champ).join() === ecransAnalyseF
           verifier(ligne.includes("\\mathrm{im}") === attendu("domaineImage"), `${categorie}/${graine} k=${k} ${champ} : ensemble-image rappelé ssi réussi avant`);
           verifier((/\$x_[12]\s*=/.test(ligne)) === (attendu("racinesChamp1") && attendu("racinesChamp2") && categorie !== "irreductible"), `${categorie}/${graine} k=${k} ${champ} : racines rappelées ssi les deux écrans racines sont réussis avant (${ligne})`);
           verifier(verifierBalisageMath(c).length === 0, `${categorie}/${graine} k=${k} ${champ} : consigne avec panneau saine`);
-          if (champ !== "racinesChamp1" && champ !== "racinesChamp2" && champ !== "racinesReconnaissance") verifier(c.startsWith("Étudie la fonction suivante : $f(x) = ") && (!aPanneau || c.split("\n")[0]!.endsWith("$.")), `${categorie}/${graine} ${champ} : la première ligne reste l'énoncé de la fonction`);
+          if (champ !== "racinesChamp1" && champ !== "racinesChamp2" && champ !== "racinesReconnaissance") // RAPPORT §38 : après « coefficients » confirmés (justes ou faux, même libellé), allure/axeSommet/domaineImage disent « d'après les coefficients que tu as donnés ».
+            verifier(c.startsWith("Étudie la fonction suivante") && c.split("\n")[0]!.includes(" : $f(x) = ") && (!aPanneau || c.split("\n")[0]!.endsWith("$.")), `${categorie}/${graine} ${champ} : la première ligne reste l'énoncé de la fonction`);
         });
       }
       // un écran RATÉ (même révélé par la correction immédiate) n'est jamais rappelé

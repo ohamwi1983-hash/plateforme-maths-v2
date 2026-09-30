@@ -112,16 +112,17 @@ async function main(): Promise<void> {
     verifier(x.lignes().filter((l) => l.champ === "coefficients").length === 2, "l'ancienne ligne est CONSERVÉE (aucune suppression)");
     g = await x.lire();
     verifier(champDe(g, "coefficients").valeur_saisie === nouvelle, "GET : l'écran affiche la DERNIÈRE réponse");
-    verifier(g.champ_courant === "axeSommet", "modifier un écran sans aval ne déplace pas l'écran courant");
+    // RAPPORT §38 : allure dépend de coefficients (dependDe) : la modifier le périme, l'écran courant redevient allure.
+    verifier(JSON.stringify(r.corps.champs_invalides) === JSON.stringify(["allure"]) && g.champ_courant === "allure", `modifier coefficients périme allure (dépendance déclarée) : ${JSON.stringify(r.corps.champs_invalides)}, courant ${g.champ_courant}`);
     // écran pas encore atteint : refusé
     const futur = await x.poster("domaineImage", x.bonne("domaineImage"));
     verifier(futur.statut === 409, `un écran pas encore atteint reste refusé (${futur.statut})`);
     // rendre trop tôt
     const tot = await x.rendre();
-    verifier(tot.statut === 409 && tot.corps.champ_courant === "axeSommet", `rendre avant d'avoir tout répondu : 409 (${tot.statut})`);
+    verifier(tot.statut === 409 && tot.corps.champ_courant === "allure", `rendre avant d'avoir tout répondu : 409 (${tot.statut})`);
     // finir
     await (async () => {
-      for (const champ of ORDRE.slice(2)) {
+      for (const champ of ORDRE.slice(1)) {
         const p = await x.poster(champ, x.bonne(champ));
         verifier(p.statut === 200, `réponse ${champ} : ${p.statut} ${JSON.stringify(p.corps)}`);
         if (champ === "tableauSignes") verifier(p.corps.pret_a_rendre === true && p.corps.exercice_termine === false && p.corps.tache_terminee === false, "tout répondu : prêt à rendre, MAIS exercice et tâche pas terminés (D3)");
@@ -201,8 +202,15 @@ async function main(): Promise<void> {
     verifier(JSON.stringify(rj.corps) === JSON.stringify(rf.corps), `réponse HTTP identique pour une réussite et un échec : ${JSON.stringify(rj.corps)} / ${JSON.stringify(rf.corps)}`);
     const gj = await juste.lire();
     const gf = await faux.lire();
-    const sansSaisie = (g: any) => JSON.stringify({ ...g, id: undefined, tache: { ...g.tache, nom: undefined }, champs: g.champs.map((c: any) => ({ ...c, valeur_saisie: undefined })) });
-    verifier(sansSaisie(gj) === sansSaisie(gf), "GET identique (hors texte saisi) pour une réussite et un échec");
+    // Les consignes des écrans suivants rappellent la fonction CONFIRMÉE (RAPPORT §38) : c'est l'écho de ce que l'élève a tapé, comme `valeur_saisie` ;
+    // le LIBELLÉ, lui, doit être identique pour une réussite et un échec (sinon l'échec serait visible avant la remise).
+    const sansSaisie = (g: any) => JSON.stringify({ ...g, id: undefined, tache: { ...g.tache, nom: undefined }, champs: g.champs.map((c: any) => ({ ...c, valeur_saisie: undefined })) }).replace(/\$f\(x\) = [^$]*\$/g, "$f$").replace(/"croquis_allure","c":-?[\d.]+/g, '"croquis_allure","c":0');
+    {
+      const [aj, af] = [sansSaisie(gj), sansSaisie(gf)];
+      let i = 0;
+      while (i < aj.length && aj[i] === af[i]) i++;
+      verifier(aj === af, `GET identique (hors texte saisi) pour une réussite et un échec — premier écart : « ${aj.slice(Math.max(0, i - 40), i + 60)} » / « ${af.slice(Math.max(0, i - 40), i + 60)} »`);
+    }
     verifier(champDe(gf, "coefficients").modifiable === true && champDe(gf, "coefficients").verrouille === false, "un échec ne verrouille pas l'écran (même état qu'une réussite)");
     // corriger l'échec
     const corr = await faux.poster("coefficients", faux.bonne("coefficients"));

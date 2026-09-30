@@ -67,18 +67,25 @@ export function ecransAnalyseFonction(ex: ExerciceAnalyseFonction): EcranDeclare
   const f = ex.fonction;
   const e = ex.effectif;
   const enonce = enonceFonction(ex);
-  // Cascade des coefficients (RAPPORT §38) : quand les coefficients CONFIRMÉS diffèrent des vrais, les écrans qui en dépendent affichent
-  // SA fonction (jamais celle de l'énoncé, que l'élève ne jugerait pas) et le disent.
+  // Cascade des coefficients (RAPPORT §38) : dès que les coefficients CONFIRMÉS sont exploitables, les écrans qui en dépendent affichent SA
+  // fonction (jamais celle de l'énoncé, que l'élève ne jugerait pas) et le disent — avec le MÊME libellé qu'ils soient justes ou faux : un libellé
+  // propre à l'erreur serait un verdict visible sous correction coupée.
   const effAffiche = { a: arrondi6(e.a), b: arrondi6(e.b), c: arrondi6(e.c) };
-  const enonceEffectif = e.coefficientsEleve ? `Étudie la fonction suivante, d'après les coefficients que tu as donnés : $f(x) = ${latexPolynome(effAffiche, termesNonNuls(effAffiche))}$.` : enonce;
+  const enonceEffectif = e.coefficientsAffiches ? `Étudie la fonction suivante, d'après les coefficients que tu as donnés : $f(x) = ${latexPolynome(effAffiche, termesNonNuls(effAffiche))}$.` : enonce;
   /** Énoncé + panneau de faits (une ligne, si des écrans précédents sont réussis) + question, chacun sur sa ligne. */
   const composer = (champ: string, question: string, enonceUtilise: string = enonce): string => {
     const faits = ligneFaits(ex, champ);
     return faits === null ? `${enonceUtilise} ${question}` : `${enonceUtilise}\n${faits}\n${question}`;
   };
-  /** Aide `croquis_parabole` sur la parabole EFFECTIVE (celle dont l'écran est jugé), absente si ses coefficients ne s'y prêtent pas. */
-  const aideParabole = (options: { surlignageImf?: boolean }): Pick<EcranDeclare, "aide"> | Record<string, never> =>
-    aideParaboleAdmissible(e) ? { aide: { type: "croquis_parabole", a: e.a, b: e.b, c: e.c, marqueS: true, ...options } } : {};
+  /**
+   * Aide `croquis_parabole` sur la parabole EFFECTIVE (celle dont l'écran est jugé). Si ses coefficients ne s'y prêtent pas (non entiers, démesurés :
+   * l'aide exige des entiers), repli sur la vraie parabole — publique dans l'énoncé — plutôt que de retirer l'aide : `aide_disponible` ne doit jamais
+   * dépendre de la justesse d'une réponse (une saisie non entière est forcément fausse : le bouton d'aide qui disparaît serait un verdict visible).
+   */
+  const aideParabole = (options: { surlignageImf?: boolean }): Pick<EcranDeclare, "aide"> => {
+    const p = aideParaboleAdmissible(e) ? e : f;
+    return { aide: { type: "croquis_parabole", a: p.a, b: p.b, c: p.c, marqueS: true, ...options } };
+  };
   /** Écrans « équation » (sans énoncé de fonction) : le panneau, s'il existe, précède le texte. */
   const avecFaits = (champ: string, texte: string): string => {
     const faits = ligneFaits(ex, champ);
@@ -120,7 +127,7 @@ export function ecransAnalyseFonction(ex: ExerciceAnalyseFonction): EcranDeclare
       dependDe: [...DEPENDANCES_FONCTION[CHAMP_DOMAINE_IMAGE]!],
       consigne: composer(
         CHAMP_DOMAINE_IMAGE,
-        e.ordonneeEleve
+        e.ordonneeAffichee
           ? `On rappelle que $\\mathrm{dom}\\,f = \\mathbb{R}$. Avec $y_S = ${latexRacine(e.yImage)}$ pour ordonnée du sommet, quel est l'ensemble-image $\\mathrm{im}\\,f$ de cette fonction ?`
           : "On rappelle que $\\mathrm{dom}\\,f = \\mathbb{R}$. Quel est l'ensemble-image $\\mathrm{im}\\,f$ de cette fonction ?",
         enonceEffectif,
