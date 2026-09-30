@@ -167,7 +167,10 @@ export function racinesDeFactorisation(texte: string): [number, number] | null {
  */
 export function projeterAnalyseFonction(ex: ExerciceAnalyseFonction, reponsesConfirmees: readonly ReponseConfirmee[], contexte: ContexteProjection): ExerciceAnalyseFonction {
   const affichageTableau = contexte.correctionImmediate ? "vraies" : "symboliques";
-  if (ex.fonction.racines === null || ex.formeFactorisee === null) return { ...ex, affichageTableau };
+  // Panneau « Ce que tu sais déjà » (RAPPORT §33) : seuls les écrans RÉUSSIS y figurent, et jamais sous correction coupée (un fait est
+  // la bonne valeur : le montrer avant la fin de la tâche révélerait la réponse). Un écran raté n'y figure jamais, même révélé.
+  const corrects = contexte.correctionImmediate ? reponsesConfirmees.filter((r) => r.statut === "correct").map((r) => r.champ) : [];
+  if (ex.fonction.racines === null || ex.formeFactorisee === null) return { ...ex, affichageTableau, corrects };
   const vraiesRacines = ex.fonction.racines;
   const vraieLatex = factorisationVersLatex(ex.formeFactorisee) as string;
   const confirmee = reponsesConfirmees.find((r) => r.champ === CHAMP_RACINES_FACTORISATION);
@@ -176,12 +179,13 @@ export function projeterAnalyseFonction(ex: ExerciceAnalyseFonction, reponsesCon
     const latex = factorisationVersLatex(confirmee.reponseBrute);
     const racines = racinesDeFactorisation(confirmee.reponseBrute);
     if (latex !== null && racines !== null) {
-      return { ...ex, affichageTableau, zeros: { racines: confirmee.statut === "correct" ? vraiesRacines : racines, factorisationLatex: latex, origine: "eleve" } };
+      return { ...ex, affichageTableau, corrects, zeros: { racines: confirmee.statut === "correct" ? vraiesRacines : racines, factorisationLatex: latex, origine: "eleve" } };
     }
   }
   return {
     ...ex,
     affichageTableau,
+    corrects,
     zeros: contexte.correctionImmediate
       ? { racines: vraiesRacines, factorisationLatex: vraieLatex, origine: "solution" }
       : { racines: vraiesRacines, factorisationLatex: equationCanonique(ex.fonction), origine: "enonce" },

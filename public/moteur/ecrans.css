@@ -75,6 +75,7 @@
 
 .moteur-consigne {
   margin: 0;
+  white-space: pre-line; /* une consigne d'auteur peut porter des retours à la ligne (énoncé / « Ce que tu sais déjà » / question) */
   font-weight: 600;
   color: var(--text);
   line-height: 1.4;

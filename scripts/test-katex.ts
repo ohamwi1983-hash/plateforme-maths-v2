@@ -23,6 +23,7 @@ import {
   ecransAnalyseFonction,
   genererExercice,
   projeterAnalyseFonction,
+  reponseBruteCorrecteAnalyseFonction,
   solutionAttendueAnalyseFonction,
   verifierAnalyseFonction,
   type CategorieAnalyseFonction,
@@ -153,8 +154,10 @@ function verifierCompile(texte: string, contexte: string): void {
 for (const categorie of CATEGORIES) {
   for (const graine of GRAINES) {
     const brut = genererExercice(categorie, graine);
-    for (const correctionImmediate of [true, false]) {
-      const ex = projeterAnalyseFonction(brut, [], { correctionImmediate });
+    // Tout réussi en correction immédiate : le panneau « Ce que tu sais déjà » est présent sur tous les écrans qui suivent.
+    const reussis = champsAnalyseFonction(categorie).map((champ) => ({ champ, reponseBrute: reponseBruteCorrecteAnalyseFonction(brut, champ), statut: "correct" as const }));
+    for (const [correctionImmediate, confirmees] of [[true, []], [false, []], [true, reussis]] as const) {
+      const ex = projeterAnalyseFonction(brut, confirmees, { correctionImmediate });
       for (const e of ecransAnalyseFonction(ex) as EcranDeclare[]) {
         for (const t of textesAuteurDe(e)) verifierCompile(t, `${categorie}/${e.champ}`);
         if (typeof e.aide === "object") {

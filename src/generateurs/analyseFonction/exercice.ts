@@ -43,6 +43,8 @@ export interface ExerciceAnalyseFonction {
   zeros: DonneesZeros | null;
   /** Ce que le tableau montre de ses valeurs de x : vraies (correction immédiate) ou symboliques (correction coupée). */
   affichageTableau: AffichageColonnes;
+  /** Écrans RÉUSSIS que le panneau « Ce que tu sais déjà » peut rappeler : toujours vide dans l'exercice brut et sous correction coupée. */
+  corrects: readonly string[];
 }
 
 function melanger<T>(valeurs: readonly T[], prng: Prng): T[] {
@@ -87,5 +89,6 @@ export function genererExercice(categorie: CategorieAnalyseFonction, graine: num
     formeFactorisee,
     zeros: fonction.racines === null || latex === null ? null : { racines: fonction.racines, factorisationLatex: latex, origine: "solution" },
     affichageTableau: "vraies",
+    corrects: [],
   };
 }

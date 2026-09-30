@@ -115,6 +115,24 @@ async function main(): Promise<void> {
     verifier(champs(g2.ecrans).includes("tableauSignes"), "A : le tableau est servi une fois axeSommet ET racinesChamp2 terminés");
   }
 
+  // ── 3 bis. Panneau « Ce que tu sais déjà » dans la route : présent (écrans réussis) en correction immédiate, jamais en correction coupée ──
+  {
+    const x = await nouveau("produit_remarquable", 12345, { feedback: true, tentatives: 0 }); // f = 4x² + 16x + 16
+    const y = await nouveau("produit_remarquable", 12345, { feedback: false });
+    const panneau = (ecrans: EcranDeclare[]) => ecrans.map((e) => e.consigne).filter((c) => c.includes("Ce que tu sais déjà")).join(" | ");
+    verifier(panneau((await x.lire()).ecrans) === "", "panneau : absent avant toute réponse");
+    await x.poster("coefficients", reponseBruteCorrecteAnalyseFonction(x.ex, "coefficients"));
+    await y.poster("coefficients", reponseBruteCorrecteAnalyseFonction(y.ex, "coefficients"));
+    const cx = consigneDe((await x.lire()).ecrans, "allure");
+    verifier(cx.includes("Ce que tu sais déjà : $a = 4$, $b = 16$, $c = 16$.") && cx.startsWith("Étudie la fonction suivante"), `panneau : coefficients rappelés à l'écran suivant (« ${cx.replace(/\n/g, " / ")} »)`);
+    verifier(panneau((await y.lire()).ecrans) === "", "panneau : JAMAIS sous correction coupée (les coefficients seraient révélés avant la fin)");
+    verifier(!JSON.stringify(await y.lire()).includes("$a = 4$"), "panneau : la charge utile coupée ne contient pas les coefficients");
+    // un écran raté n'est pas rappelé
+    const z = await nouveau("produit_remarquable", 12345, { feedback: true, tentatives: 0 });
+    await z.poster("coefficients", JSON.stringify({ a: "1", b: "1", c: "1" }));
+    verifier(!panneau((await z.lire()).ecrans).includes("$a ="), "panneau : un écran raté n'est pas rappelé (même en correction immédiate)");
+  }
+
   // ── 4. Cascade A sous correction COUPÉE : une méthode juste sur une donnée fausse RÉUSSIT, rien n'est révélé ──
   {
     const x = await nouveau("mise_en_evidence", 12345, { feedback: false });

@@ -189,6 +189,10 @@ du typage — ne jamais lui donner un écran « toujours correct ». L'**ordre d
 figé (toute modification impose un nouveau `variante_id`). Toute divergence avec l'ancien pilote doit être
 délibérée, listée dans le test et dans `RAPPORT.md` (quatre à ce jour). `C07_ou_C08` n'est jamais émis ni déclaré pour gen7.
 
+## gen7 assemblé : `af_*` au registre (RAPPORT §33)
+
+Les quatre `Generateur` de gen7 (`src/generateurs/analyseFonction/generateurs.ts`, une fabrique, aucune branche par variante) sont au registre avec l'identifiant du catalogue tel quel. **`genererExercice` est désormais soumis à la règle `_v2`** : l'ordre des tirages (catégorie, puis mélange des termes) est épinglé par `scripts/test-generation-gen7.ts` (graine → exercice) ; toute modification de ce que `generer` produit pour une graine impose `af_*_v2`. `af_irreductible` a 6 écrans (jamais 8) et ne déclare que 3 codes de compétence ; `C07_ou_C08` n'est déclaré nulle part. La cascade (`projeterAnalyseFonction`) ne lit que les réponses confirmées et le réglage statique de la tâche : `racinesChamp2` est bâti sur la factorisation CONFIRMÉE (ré-écrite en LaTeX par `factorisationVersLatex`, qui refuse toute division par une constante nulle), le tableau montre ses valeurs de x vraies (correction immédiate) ou symboliques `x₁, x_S, x₂` (correction coupée). Le panneau « Ce que tu sais déjà » est une ligne de TEXTE de consigne (`ligneFaits`, `ecrans.ts`), jamais un canal client : il ne rappelle que les écrans RÉUSSIS qui précèdent, et jamais sous correction coupée (un fait est la bonne valeur). `.moteur-consigne` porte `white-space: pre-line` pour les retours à la ligne d'une consigne d'auteur.
+
 ## Tables d'objets littéraux : jamais `cle in table` ni `table[cle]` avec une clé dynamique (RAPPORT §20)
 
 Tout objet littéral hérite de `Object.prototype` : `"constructor" in table` est vrai et `table["constructor"]` est
