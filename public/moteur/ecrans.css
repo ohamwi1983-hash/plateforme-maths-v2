@@ -281,9 +281,21 @@
     margin-top: calc(-1*var(--marge-haute-page,0px));
   }
 
-  /* Tout ce qui n'est pas bord à bord garde la gouttière de la page. */
-  .moteur-exercice > :not(.moteur-suivi):not(.moteur-rappel):not(.moteur-ecran-courant) {
-    margin-inline: calc(1*var(--gouttiere-page,0px));
+  /* Relecture (exercice terminé, tâche antérieure, remise à venir : RAPPORT §46) : chaque bloc — carte d'écran, panneau de fin / de remise, message —
+     fait AUSSI la largeur de l'écran, sans arrondi ni bord latéral, comme la carte courante. Rien n'est plus décalé par la gouttière de la page. */
+  .moteur-exercice > .moteur-ecran-termine,
+  .moteur-exercice > .moteur-fin,
+  .moteur-exercice > .moteur-message {
+    border-width: 1px 0;
+    border-radius: 0;
+    padding-inline: var(--espace-3);
+  }
+
+  .moteur-exercice > .moteur-fin {
+    padding-block: var(--espace-3);
+    background: var(--surface);
+    border-style: solid;
+    border-color: var(--border);
   }
 
   .moteur-suivi {

@@ -1604,3 +1604,14 @@ tranche : la cible prime sur mobile. Cela rend caduque cette décision et change
 - **HYPOTHÈSE assumée** : « solution montrée » = réglage statique de la tâche, pas l'état d'un champ. Une réponse fausse avec essais restants ne déclenche rien (l'écran dépendant n'est de toute façon servi qu'une fois le champ terminé, `dependDe`).
 - **Conséquence pédagogique** : sous la case cochée, un élève qui se trompe aux coefficients ne peut plus « gagner » les écrans suivants par cohérence interne ; il repart de la vraie fonction. C'est le comportement demandé ; il rend ce régime plus exigeant que les deux autres.
 - `ContexteProjection.correctionImmediate` n'est plus lu par aucun générateur (conservé dans le contrat).
+
+## §46 : la relecture / le récapitulatif aussi bord à bord sur mobile (retour du propriétaire sur §44)
+
+**Demande.** « Même dans l'écran récapitulatif, les blocs doivent avoir une largeur égale à la largeur de l'écran. » En §44, seuls le bandeau, le panneau gris et la carte COURANTE étaient bord à bord ; les cartes de relecture (`.moteur-ecran-termine`), le panneau de remise, « Exercice terminé » et les messages gardaient la gouttière de la page (capture : 390 px → blocs de ~358 px).
+
+**Livré.**
+- `public/moteur/ecrans.css:284` (dans `@media (max-width: 600px)`) : la règle qui rendait la gouttière aux enfants hors bord à bord est SUPPRIMÉE ; `.moteur-ecran-termine`, `.moteur-fin` (dont `.moteur-remise`) et `.moteur-message` sont sans arrondi, sans bord latéral, `padding-inline: var(--espace-3)`. Uniquement des tokens (`test-design-system` : 646 vérifications).
+- **Test** : `verifierBlocsRelecturePleineLargeur` (`scripts/chromium-temoin-technique.ts:712`), appelé dans l'état « avant la remise » (cartes de relecture + panneau de remise) et « après la remise » (récapitulatif + « Exercice terminé ») : à 390 px chaque bloc touche les deux bords de l'ÉCRAN, rayon 0, bords latéraux 0 ; à 1280 px tous ont la largeur de la colonne. **Contrôle de mutation** : avec l'ancien CSS, 34 vérifications échouent ; avec le nouveau, 2313 passent.
+- `chromium-design` : 573 vérifications inchangées (la référence `enveloppe-exercice.html` décrit l'écran courant, pas la relecture).
+
+**À savoir.** Le récapitulatif n'a PAS de référence dans le design cible du propriétaire (l'écran de fin / récapitulatif de session de l'ancien pilote n'est pas porté) : ce choix (cartes de relecture « en creux » bord à bord, séparées par le fond de page) est une décision de ma part, à confirmer visuellement sur `390 retour-01-panneau-remise.png` et `390 retour-04-apres-remise.png`.

@@ -155,7 +155,7 @@ courant (`.moteur-ecran-courant`, qui seule porte la couleur vert / rouge / jaun
 - **`EcranDeclare.nom`** (optionnel, texte d'auteur, court, unique dans l'exercice, identique pour tous les élèves) est le libellé d'une ligne ; absent, « Question n ».
   Posé sur gen7 (`NOMS_ECRANS`, `ecrans.ts`) et le témoin. Le rappel **remplace** l'ancienne ligne de consigne « Ce que tu sais déjà » de gen7 (`ligneFaits`, supprimée) : ne
   jamais remettre un rappel dans un texte de consigne.
-- **Sans écran courant** (exercice terminé, tâche antérieure, remise à venir du retour en arrière), la RELECTURE reste celle d'avant : une carte par écran (énoncé, « Ta
+- **Sans écran courant** (exercice terminé, tâche antérieure, remise à venir du retour en arrière), la RELECTURE reste celle d'avant : une carte par écran (énoncé, « Ta **Sous 600 px, ces blocs de relecture sont AUSSI bord à bord** (RAPPORT §46) : chaque enfant direct de `.moteur-exercice` (`.moteur-ecran-termine`, `.moteur-fin` / `.moteur-remise`, `.moteur-message`) fait la largeur de l'écran, sans arrondi ni bord latéral ; il n'existe plus de « gouttière » rendue aux enfants. Mesuré par `verifierBlocsRelecturePleineLargeur` (Chromium).
   réponse », verdict, solution, « Modifier ma réponse »). Le rappel compact ne porte pas l'énoncé.
 - La carte des composants n'est plus celle de `composants-ecran.html` par son enveloppe (bord haut, rayons, largeur, padding latéral : `enveloppe-exercice.html`) ; cette
   référence reste celle de ce que la carte CONTIENT. `--retrait-plein-bord` (`style.css`) vaut 16 px sur mobile (carte bord à bord) : la modifier sans relancer

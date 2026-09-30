@@ -708,6 +708,18 @@ async function verifierPleinBord(page: any, etiquette: string, largeur: number) 
   verifier(m.consG - m.carteG >= paddingCarte && m.carteD - m.consD >= paddingCarte, `${etiquette} (${largeur}px) : le reste de la carte GARDE son padding (consigne à ${m.consG - m.carteG}px du bord gauche, ${m.carteD - m.consD}px du droit)`);
 }
 
+/** RAPPORT §46 : dans l'état de relecture / récapitulatif (cartes d'écran terminées, panneau de remise, « Exercice terminé »), chaque bloc enfant de `.moteur-exercice` fait la largeur de l'ÉCRAN sous 600 px (sur bureau : celle de la colonne). */
+async function verifierBlocsRelecturePleineLargeur(page: any, etiquette: string, largeur: number) {
+  const blocs = (await page.evaluate(`[...document.querySelectorAll(".moteur-exercice > .moteur-ecran-termine, .moteur-exercice > .moteur-fin, .moteur-exercice > .moteur-message")].map((el) => { const r = el.getBoundingClientRect(); const st = getComputedStyle(el); return { classe: el.className, g: r.left, d: r.right, fenetre: window.innerWidth, rayon: st.borderTopLeftRadius, bordG: st.borderLeftWidth, bordD: st.borderRightWidth }; })`)) as { classe: string; g: number; d: number; fenetre: number; rayon: string; bordG: string; bordD: string }[];
+  verifier(blocs.length > 0, `${etiquette} (${largeur}px) : des blocs de relecture sont présents`);
+  for (const b of blocs) {
+    if (largeur <= 600) {
+      verifier(b.g <= 1 && b.d >= b.fenetre - 1, `${etiquette} (${largeur}px) : « ${b.classe} » fait la largeur de l'ÉCRAN (${b.g}→${b.d} sur ${b.fenetre})`);
+      verifier(b.rayon === "0px" && b.bordG === "0px" && b.bordD === "0px", `${etiquette} (${largeur}px) : « ${b.classe} » est sans arrondi ni bord latéral (rayon ${b.rayon}, bords ${b.bordG}/${b.bordD})`);
+    } else verifier(Math.abs(b.d - b.g - (blocs[0]!.d - blocs[0]!.g)) <= 1, `${etiquette} (${largeur}px) : « ${b.classe} » a la largeur de la colonne (${b.d - b.g})`);
+  }
+}
+
 /** Valeur courante lue dans l'`aria-label` d'une case (« … : + . Toucher pour changer. ») ; « vide » = `?`. */
 const valeurDeCase = async (bouton: any) => ((await bouton.getAttribute("aria-label")) ?? "").replace(/^.*: ([^:]*)\. Toucher pour changer\.$/, "$1");
 
@@ -1755,6 +1767,7 @@ async function scenarioRetourArriere(navigateur: any, base: string, largeur: num
   await repondreGen7(page, ex, "tableauSignes");
   await validerRetour(/Revoir mes réponses/);
   await page.waitForSelector(".moteur-remise");
+  await verifierBlocsRelecturePleineLargeur(page, `${l} relecture avant la remise`, largeur);
   verifier(await sansVerdict(), `${l} : toujours rien de corrigé avant la remise`);
   verifier(s.base.table("exercices_assignes")[0]!.remis_le === null, `${l} : pas encore rendu`);
 
@@ -1763,6 +1776,7 @@ async function scenarioRetourArriere(navigateur: any, base: string, largeur: num
   verifier(s.base.table("exercices_assignes")[0]!.remis_le === null, `${l} : le premier clic ne rend pas (confirmation demandée)`);
   await page.getByRole("button", { name: /Confirmer : après avoir rendu/ }).click();
   await page.waitForSelector(".moteur-fin:has-text('Exercice terminé')");
+  await verifierBlocsRelecturePleineLargeur(page, `${l} récapitulatif après la remise`, largeur);
   verifier(s.base.table("exercices_assignes")[0]!.remis_le !== null, `${l} : remis_le écrit`);
   verifier((await page.getByRole("button", { name: "Modifier ma réponse" }).count()) === 0, `${l} : plus aucun « Modifier » après la remise`);
   {
