@@ -1423,3 +1423,7 @@ Section construite commit par commit (3b-4). Décisions D1–D9 validées avant 
 2. `serieActuelle` (tableau de bord) compte toutes les lignes, y compris les réponses remplacées par une modification (D8) : une série peut inclure un essai remplacé.
 3. Un élève qui n'ouvre jamais « Rendre » laisse l'exercice « en cours » jusqu'à l'échéance de la tâche ; à l'échéance, la tâche passe en « antérieure » et les DERNIÈRES réponses valides sont notées/révélées sans remise (comportement voulu de l'échéance, non spécifié par D1–D9 : à confirmer).
 4. Deux onglets ouverts sur le même exercice : le second reçoit un 409 (état relu), jamais une corruption ; pas de verrou optimiste sur `remis_le`.
+
+### §37-F : confirmations du propriétaire
+
+Point ouvert 3 de §37-E **confirmé comme comportement voulu** : à l'échéance sans remise explicite, les dernières réponses valides sont notées et révélées automatiquement. Points 1 (réglage modifié après assignation) et 2 (série qui compte les réponses remplacées) : acceptés tels quels, non urgents.
