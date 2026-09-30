@@ -1,6 +1,8 @@
 import { supabaseAdmin } from "./supabaseAdmin";
 import { exerciceEstComplet, tacheEstComplete, classifierTache, type CategorieOuNonCommencee } from "./tableauDeBord";
-import { calculerEtatChampTentatives, tentativesMaxEffectif } from "./moteurTentatives";
+import { tentativesMaxEffectif, type LigneDebutEcran } from "./moteurTentatives";
+import { chargerContexteTache, champsTermines, type ContexteTache } from "./etatExercice";
+import { recupererToutesLesLignes } from "./supabasePagination";
 import type { StatutVerification } from "../src/moteur/statutVerification";
 
 type AdminClient = ReturnType<typeof supabaseAdmin>;
@@ -32,75 +34,58 @@ export async function categorieTachePourEleve(admin: AdminClient, tacheId: strin
   const dateEcheance = (derniereAssignation?.date_echeance as string | null | undefined) ?? null;
   const dateDebut = (derniereAssignation?.date_debut as string | undefined) ?? new Date(0).toISOString();
 
-  // Prompt "Tentatives, aide, récapitulatif" (3/3) — bug trouvé en testant ce prompt (voir
-  // RAPPORT.md) : "un champ a reçu au moins une soumission" (ce que cette fonction vérifiait avant
-  // ce correctif, via `champsRepondus` construit sur la seule présence d'une ligne `reponses`)
-  // suffisait tant qu'aucune tentative multiple n'était permise — une réponse fausse verrouillait
-  // déjà le champ côté client. Ce n'est plus vrai depuis les tentatives multiples : un champ ayant
-  // reçu UNE tentative ratée (tentatives restantes) compte alors, à tort, comme "répondu", ce qui
-  // rendait la tâche entière "complète" dès la 1re tentative sur son dernier champ non répondu — et
-  // `POST /api/reponses` rejetait ensuite toute nouvelle tentative légitime avec "Tâche déjà
-  // entièrement complétée". Il faut donc désormais l'état TERMINÉ du moteur de tentatives (réussi ou
-  // révélé, voir lib/moteurTentatives.ts), pas la simple présence d'une ligne — même correctif que
-  // lib/routes/eleves/tableau-de-bord.ts.
-  const { data: tache, error: erreurTache } = await admin
-    .from("taches")
-    .select("feedback_immediat, tentatives_supplementaires, aide_penalite_pourcent")
-    .eq("id", tacheId)
-    .maybeSingle();
-  if (erreurTache) throw new Error(erreurTache.message);
-  const tentativesMax = tentativesMaxEffectif((tache?.feedback_immediat as boolean | undefined) ?? true, (tache?.tentatives_supplementaires as number | undefined) ?? 0);
-  const aidePenalitePourcent = (tache?.aide_penalite_pourcent as number | undefined) ?? 0;
-
+  // Prompt "Tentatives, aide, récapitulatif" (3/3) — bug trouvé en testant ce prompt (voir RAPPORT.md) : « un champ a reçu au
+  // moins une soumission » ne suffit plus depuis les tentatives multiples ; il faut l'état TERMINÉ du moteur de tentatives.
+  // RAPPORT §37 : cet état est désormais calculé par `champsTermines` (lib/etatExercice.ts), DÉFINITION UNIQUE partagée avec
+  // `calculerEtatExercice` et `mes-resultats`. Avant, ce fichier avait sa propre boucle et IGNORAIT l'expiration du chrono :
+  // une tâche dont les champs avaient tous expiré restait « en cours » ici alors que le tableau de bord la disait terminée.
   const { data: exercices, error: erreurExercices } = await admin
     .from("exercices_assignes")
-    .select("id, champs_attendus")
+    .select("id, champs_attendus, variante_id")
     .eq("tache_id", tacheId)
     .eq("eleve_id", eleveId);
   if (erreurExercices) throw new Error(erreurExercices.message);
   const exercicesDeLaTache = exercices ?? [];
   const exerciceIds = exercicesDeLaTache.map((e) => e.id as string);
 
-  let reponses: { exercice_assigne_id: string; champ: string; statut: StatutVerification; indice_utilise: boolean; fraction_correcte: number | null }[] = [];
+  const historiqueParExercice = new Map<string, Map<string, { statut: StatutVerification; fraction_correcte: number | null }[]>>();
+  const debutsParExercice = new Map<string, LigneDebutEcran[]>();
   if (exerciceIds.length > 0) {
-    const { data, error: erreurReponses } = await admin
-      .from("reponses")
-      .select("exercice_assigne_id, champ, statut, indice_utilise, fraction_correcte")
-      .in("exercice_assigne_id", exerciceIds)
-      .order("horodatage", { ascending: true });
-    if (erreurReponses) throw new Error(erreurReponses.message);
-    reponses = data ?? [];
-  }
-
-  // Historique chronologique croissant par (exercice_assigne_id, champ) — même construction que
-  // `historiqueParCle` dans lib/routes/eleves/tableau-de-bord.ts, nécessaire à
-  // `calculerEtatChampTentatives` (compte les tentatives ratées dans l'ordre où elles ont eu lieu).
-  const historiqueParCle = new Map<string, { statut: StatutVerification; indice_utilise: boolean; fraction_correcte: number | null }[]>();
-  for (const r of reponses) {
-    const cle = `${r.exercice_assigne_id}:${r.champ}`;
-    if (!historiqueParCle.has(cle)) historiqueParCle.set(cle, []);
-    historiqueParCle.get(cle)!.push({ statut: r.statut, indice_utilise: r.indice_utilise, fraction_correcte: r.fraction_correcte });
-  }
-
-  const champsTermineParExercice = new Map<string, Set<string>>();
-  for (const ex of exercicesDeLaTache) {
-    const champsAttendus = (ex.champs_attendus as string[] | null) ?? [];
-    for (const champ of champsAttendus) {
-      const historique = historiqueParCle.get(`${ex.id}:${champ}`) ?? [];
-      const aideUtilisee = historique.some((h) => h.indice_utilise);
-      const etat = calculerEtatChampTentatives(historique.map((h) => h.statut), tentativesMax, aideUtilisee, aidePenalitePourcent, false, historique.map((h) => h.fraction_correcte));
-      if (etat.terminee) {
-        if (!champsTermineParExercice.has(ex.id as string)) champsTermineParExercice.set(ex.id as string, new Set());
-        champsTermineParExercice.get(ex.id as string)!.add(champ);
-      }
+    const reponses = await recupererToutesLesLignes<{ exercice_assigne_id: string; champ: string; statut: StatutVerification; fraction_correcte: number | null }>(() =>
+      admin.from("reponses").select("exercice_assigne_id, champ, statut, fraction_correcte").in("exercice_assigne_id", exerciceIds).order("horodatage", { ascending: true }),
+    );
+    for (const r of reponses) {
+      if (!historiqueParExercice.has(r.exercice_assigne_id)) historiqueParExercice.set(r.exercice_assigne_id, new Map());
+      const parChamp = historiqueParExercice.get(r.exercice_assigne_id)!;
+      if (!parChamp.has(r.champ)) parChamp.set(r.champ, []);
+      parChamp.get(r.champ)!.push({ statut: r.statut, fraction_correcte: r.fraction_correcte });
+    }
+    const debuts = await recupererToutesLesLignes<LigneDebutEcran & { exercice_assigne_id: string }>(() => admin.from("debuts_ecran").select("exercice_assigne_id, champ, horodatage_debut").in("exercice_assigne_id", exerciceIds));
+    for (const d of debuts) {
+      if (!debutsParExercice.has(d.exercice_assigne_id)) debutsParExercice.set(d.exercice_assigne_id, []);
+      debutsParExercice.get(d.exercice_assigne_id)!.push({ champ: d.champ, horodatage_debut: d.horodatage_debut });
     }
   }
 
-  const completions = exercicesDeLaTache.map((ex) => {
+  // Contexte (tentatives, chrono) par variante ; tâche introuvable : réglages par défaut du schéma (comportement d'origine).
+  const contextes = new Map<string, Pick<ContexteTache, "tentativesMax" | "aidePenalitePourcent" | "chronoMode" | "chronoDureeSecondes">>();
+  const maintenant = new Date();
+  const completions: boolean[] = [];
+  for (const ex of exercicesDeLaTache) {
     const champsAttendus = ex.champs_attendus as string[] | null;
-    return champsAttendus === null ? false : exerciceEstComplet(champsAttendus, champsTermineParExercice.get(ex.id as string) ?? new Set());
-  });
+    if (champsAttendus === null) {
+      completions.push(false);
+      continue;
+    }
+    const varianteId = ex.variante_id as string;
+    if (!contextes.has(varianteId)) {
+      const contexte = await chargerContexteTache(admin, tacheId, varianteId);
+      contextes.set(varianteId, contexte ?? { tentativesMax: tentativesMaxEffectif(true, 0), aidePenalitePourcent: 0, chronoMode: "aucun", chronoDureeSecondes: null });
+    }
+    const termines = champsTermines(champsAttendus, historiqueParExercice.get(ex.id as string) ?? new Map(), debutsParExercice.get(ex.id as string) ?? [], contextes.get(varianteId)!, maintenant);
+    completions.push(exerciceEstComplet(champsAttendus, termines));
+  }
   const complete = tacheEstComplete(completions);
 
-  return classifierTache(dateDebut, dateEcheance, complete, new Date());
+  return classifierTache(dateDebut, dateEcheance, complete, maintenant);
 }

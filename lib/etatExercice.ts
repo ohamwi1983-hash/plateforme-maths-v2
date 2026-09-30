@@ -190,6 +190,29 @@ export function etatTentativesAvecChrono(
   return expire ? calculerEtatChampTentatives(statutsChronologiques, contexte.tentativesMax, aideUtilisee, contexte.aidePenalitePourcent, true, fractionsChronologiques) : normal;
 }
 
+/**
+ * DÉFINITION UNIQUE de « ce champ est terminé » pour tout appelant qui ne dispose que de l'historique brut d'un exercice
+ * (`verrouillageTache.ts`, `GET /api/eleves/mes-resultats`, `GET /api/profs/resultats`) : réussi, révélé par épuisement des
+ * tentatives, OU révélé par l'expiration du chrono (`etatTentativesAvecChrono`, MÊME dérivation que `calculerEtatChamp`).
+ * L'usage d'aide n'intervient que dans le score, jamais dans `terminee` : il n'est donc pas un paramètre ici.
+ * `historiqueParChamp` : statuts (et fractions) dans l'ordre chronologique croissant, par champ.
+ */
+export function champsTermines(
+  champsAttendus: readonly string[],
+  historiqueParChamp: ReadonlyMap<string, readonly { statut: StatutVerification; fraction_correcte?: number | null }[]>,
+  debuts: readonly LigneDebutEcran[],
+  contexte: Pick<ContexteTache, "tentativesMax" | "aidePenalitePourcent" | "chronoMode" | "chronoDureeSecondes">,
+  maintenant: Date,
+): Set<string> {
+  const termines = new Set<string>();
+  for (const champ of champsAttendus) {
+    const historique = historiqueParChamp.get(champ) ?? [];
+    const etat = etatTentativesAvecChrono(champ, historique.map((h) => h.statut), false, debuts, contexte, maintenant, historique.map((h) => h.fraction_correcte));
+    if (etat.terminee) termines.add(champ);
+  }
+  return termines;
+}
+
 export function calculerEtatChamp(champ: string, donnees: DonneesExercice, contexte: ContexteTache, maintenant: Date): EtatChamp {
   const historique = donnees.reponsesParChamp.get(champ) ?? [];
   const aideUtilisee = donnees.champsAvecAide.has(champ) || historique.some((h) => h.indice_utilise);

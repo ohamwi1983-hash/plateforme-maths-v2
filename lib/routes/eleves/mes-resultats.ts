@@ -2,7 +2,7 @@ import type { RequeteHttp, ReponseHttp } from "../../httpTypes";
 import { avecGestionErreurs } from "../../avecGestionErreurs";
 import { eleveAuthentifie, supabaseAdmin } from "../../supabaseAdmin";
 import { classifierTache, tacheEstComplete, exerciceEstComplet, type CategorieOuNonCommencee } from "../../tableauDeBord";
-import { chargerContexteTache, etatTentativesAvecChrono, type ContexteTache } from "../../etatExercice";
+import { champsTermines, chargerContexteTache, type ContexteTache } from "../../etatExercice";
 import { recupererToutesLesLignes } from "../../supabasePagination";
 import { poidsDansMap, poidsDesChampsDeLigne, sommePonderee } from "../../poidsEcran";
 import type { LigneDebutEcran } from "../../moteurTentatives";
@@ -222,14 +222,14 @@ export const gererElevesMesResultats = avecGestionErreurs(async function handler
       if (!contextesParTacheVariante.has(cleContexte)) contextesParTacheVariante.set(cleContexte, await chargerContexteTache(admin, tacheId, ex.variante_id));
       const contexte = contextesParTacheVariante.get(cleContexte);
       if (!contexte) continue; // tâche introuvable : déjà écartée plus haut, défensif
+      // Définition UNIQUE (lib/etatExercice.ts, RAPPORT §37) : mêmes historiques (statuts + fractions), même chrono.
+      const historiqueParChamp = new Map<string, { statut: StatutVerification; fraction_correcte?: number | null }[]>();
       for (const champ of ex.champs_attendus ?? []) {
         const statuts = historiqueStatutsParCle.get(`${ex.id}:${champ}`) ?? [];
-        const etat = etatTentativesAvecChrono(champ, statuts, false, debutsParExercice.get(ex.id) ?? [], contexte, maintenant, historiqueFractionsParCle.get(`${ex.id}:${champ}`));
-        if (etat.terminee) {
-          if (!champsTermineParExercice.has(ex.id)) champsTermineParExercice.set(ex.id, new Set());
-          champsTermineParExercice.get(ex.id)!.add(champ);
-        }
+        const fractions = historiqueFractionsParCle.get(`${ex.id}:${champ}`) ?? [];
+        historiqueParChamp.set(champ, statuts.map((statut, i) => ({ statut, fraction_correcte: fractions[i] })));
       }
+      champsTermineParExercice.set(ex.id, champsTermines(ex.champs_attendus ?? [], historiqueParChamp, debutsParExercice.get(ex.id) ?? [], contexte, maintenant));
     }
     const completions = exercicesDeLaTache.map((ex) => (ex.champs_attendus === null ? false : exerciceEstComplet(ex.champs_attendus, champsTermineParExercice.get(ex.id) ?? new Set())));
     const complete = tacheEstComplete(completions);
