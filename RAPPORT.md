@@ -1584,3 +1584,7 @@ tranche : la cible prime sur mobile. Cela rend caduque cette décision et change
 **À confirmer (décision mienne sur un point non tranché).** **Sur bureau**, la cible de l'ancien pilote montrait le panneau gris DANS la carte ; j'ai appliqué la règle énoncée (« au-dessus, bord haut = bord bas ») à toutes les largeurs : un bloc gris en haut / blanc en bas, même largeur. Dis-moi si tu préfères l'ancien rendu bureau.
 
 **Validation** : voir la section ci-dessous (export propre du commit final).
+
+**Validation de §44 (export propre `git archive` du commit `13cc018`, `npm ci`).** `tsc -b` OK ; 40 scripts `test-*` / `smoke*` : 0 échec ; `npm run chromium-temoin` : 2247 vérifications ; `npm run chromium-design` : 573 vérifications.
+- **Échec intermédiaire, cause établie** : sur l'export du commit `ee7482d`, `scenarioApercu` a échoué au clic « Fermer cet onglet » (« Target page … has been closed »). Ce bouton appelle `window.close()` : Playwright peut signaler la fermeture pendant le clic. Scénario inchangé par §43-§44 et passé 4 fois avant ; le clic ne tolère plus que cette erreur précise, la fermeture reste vérifiée par l'événement `close`. Aucun code de production touché.
+- Captures : `captures-chromium/fidelite-app-enveloppe-{390,1280}.png`, `fidelite-app-enveloppe-coupe-{390,1280}.png`, `{390,1280}-gen7-*`.
