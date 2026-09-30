@@ -19,6 +19,7 @@
     "test-structure-tableau": "tsx scripts/test-structure-tableau.ts",
     "test-verification-gen7": "tsx scripts/test-verification-gen7.ts",
     "test-generation-gen7": "tsx scripts/test-generation-gen7.ts",
+    "test-route-gen7": "tsx scripts/test-route-gen7.ts",
     "chromium-temoin": "tsx scripts/chromium-temoin-technique.ts",
     "chromium-design": "tsx scripts/chromium-fidelite-design.ts"
   },

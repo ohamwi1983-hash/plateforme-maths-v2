@@ -15,3 +15,4 @@ export { factorisationVersLatex, noeudVersLatex, projeterAnalyseFonction, racine
 export { aideFormuleColoree, champsAnalyseFonction, ecransAnalyseFonction } from "./ecrans";
 export { verifierAnalyseFonction } from "./verification";
 export { reponseBruteCorrecteAnalyseFonction, solutionAttendueAnalyseFonction } from "./solutions";
+export * from "./generateurs";
