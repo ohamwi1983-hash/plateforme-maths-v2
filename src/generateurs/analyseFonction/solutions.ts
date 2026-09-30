@@ -1,7 +1,6 @@
 import { factorisationVersLatex } from "./cascade";
 import type { ExerciceAnalyseFonction } from "./exercice";
-import { latexNombre, texteNombre } from "./formatage";
-import { latexRacine } from "./formatage";
+import { latexRacine, texteRacine } from "./formatage";
 import { reponseBruteZerosCorrecte } from "./racines";
 import { CHAMP_RACINES_FACTORISATION, CHAMP_RACINES_ZEROS } from "./racines/types";
 import { CHOIX_RECONNAISSANCE } from "./reconnaissance";
@@ -12,15 +11,16 @@ import { signeDe } from "./allure";
 /** Solution lisible d'un champ (texte d'auteur, balisage `$…$`) : `axeSommet` écrit `x = …` (l'ancien pilote l'omettait, D8). */
 export function solutionAttendueAnalyseFonction(ex: ExerciceAnalyseFonction, champ: string): string {
   const f = ex.fonction;
+  const e = ex.effectif; // allure / axeSommet / domaineImage : données effectives de la cascade des coefficients (RAPPORT §38)
   switch (champ) {
     case CHAMP_COEFFICIENTS:
       return `$a = ${f.a}$ ; $b = ${f.b}$ ; $c = ${f.c}$`;
     case CHAMP_ALLURE:
-      return `$a ${f.a > 0 ? ">" : "<"} 0$ ; $ab ${signeDe(f.a * f.b) === "0" ? "=" : signeDe(f.a * f.b) === "+" ? ">" : "<"} 0$`;
+      return `$a ${e.a > 0 ? ">" : "<"} 0$ ; $ab ${signeDe(e.a * e.b) === "0" ? "=" : signeDe(e.a * e.b) === "+" ? ">" : "<"} 0$`;
     case CHAMP_AXE_SOMMET:
-      return `$x = ${latexNombre(f.xS)}$ ; $x_S = ${latexNombre(f.xS)}$ ; $y_S = ${latexNombre(f.yS)}$`;
+      return `$x = ${latexRacine(e.xS)}$ ; $x_S = ${latexRacine(e.xS)}$ ; $y_S = ${latexRacine(e.yS)}$`;
     case CHAMP_DOMAINE_IMAGE:
-      return f.a > 0 ? `$[${latexNombre(f.yS)}\\,;\\,+\\infty[$` : `$]-\\infty\\,;\\,${latexNombre(f.yS)}]$`;
+      return e.a > 0 ? `$[${latexRacine(e.yImage)}\\,;\\,+\\infty[$` : `$]-\\infty\\,;\\,${latexRacine(e.yImage)}]$`;
     case CHAMP_RECONNAISSANCE:
       return (CHOIX_RECONNAISSANCE.find((c) => c.id === f.categorie) as { libelle: string }).libelle;
     case CHAMP_RACINES_FACTORISATION: {
@@ -47,15 +47,16 @@ export function solutionAttendueAnalyseFonction(ex: ExerciceAnalyseFonction, cha
 /** Réponse brute qui VALIDE le champ (tests, Chromium). Les entrées sont celles de l'exercice EFFECTIF passé en argument. */
 export function reponseBruteCorrecteAnalyseFonction(ex: ExerciceAnalyseFonction, champ: string): string {
   const f = ex.fonction;
+  const e = ex.effectif;
   switch (champ) {
     case CHAMP_COEFFICIENTS:
       return JSON.stringify({ a: String(f.a), b: String(f.b), c: String(f.c) });
     case CHAMP_ALLURE:
-      return JSON.stringify({ signeA: signeDe(f.a), signeAB: signeDe(f.a * f.b) });
+      return JSON.stringify({ signeA: signeDe(e.a), signeAB: signeDe(e.a * e.b) });
     case CHAMP_AXE_SOMMET:
-      return JSON.stringify({ axeTexte: `x = ${texteNombre(f.xS)}`, xS: texteNombre(f.xS), yS: texteNombre(f.yS) });
+      return JSON.stringify({ axeTexte: `x = ${texteRacine(e.xS)}`, xS: texteRacine(e.xS), yS: texteRacine(e.yS) });
     case CHAMP_DOMAINE_IMAGE:
-      return JSON.stringify(f.a > 0 ? { crochetGauche: "[", borneGauche: texteNombre(f.yS), crochetDroit: "[", borneDroite: "+inf" } : { crochetGauche: "]", borneGauche: "-inf", crochetDroit: "]", borneDroite: texteNombre(f.yS) });
+      return JSON.stringify(e.a > 0 ? { crochetGauche: "[", borneGauche: texteRacine(e.yImage), crochetDroit: "[", borneDroite: "+inf" } : { crochetGauche: "]", borneGauche: "-inf", crochetDroit: "]", borneDroite: texteRacine(e.yImage) });
     case CHAMP_RECONNAISSANCE:
       return f.categorie;
     case CHAMP_RACINES_FACTORISATION:

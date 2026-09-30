@@ -1,11 +1,22 @@
 import type { ContexteProjection, ReponseConfirmee } from "../../../lib/contratGenerateur";
+import { COEFFICIENT_MAX } from "../../../lib/aideTypee";
+import { decoderChampsMultiples, lireNombreOuFraction } from "../../../lib/reponsesEcran";
+import { SOUS_CHAMPS_AXE_SOMMET } from "./axeSommet";
+import { SOUS_CHAMPS_COEFFICIENTS } from "./coefficients";
 import { analyserExpression, extraireRacinesDuProduit, extraireTrinome, type Noeud } from "./racines/expressionAlgebrique";
 import type { ExerciceAnalyseFonction } from "./exercice";
 import { equationCanonique } from "./formatage";
 import { CHAMP_RACINES_FACTORISATION } from "./racines/types";
+import { CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, TOLERANCE_SAISIE, effectifVrai, type DonneesEffectives, type FonctionSecondDegre } from "./types";
 
 /**
- * CASCADE de gen7 (RAPPORT §18, §33) : deux écrans affichent une donnée qui dépend d'un écran précédent.
+ * CASCADE de gen7 (RAPPORT §18, §33, §38). Depuis §38, la règle est UNIFORME dans les deux régimes de correction : une donnée confirmée
+ * par l'élève, fausse mais exploitable, sert de point de départ à l'écran suivant, qu'on ait révélé ou non la vraie valeur (§33-D
+ * limitait cette règle à la correction coupée ; décision du propriétaire, D-A). Trois écrans dépendent des coefficients confirmés
+ * (`allure`, `axeSommet`, `domaineImage`, ce dernier aussi de l'ordonnée du sommet confirmée) ; `racinesChamp2` de la factorisation.
+ * Un écran ne lit JAMAIS que des réponses CONFIRMÉES et le réglage statique de la tâche.
+ *
+ * Deux écrans affichent une donnée qui dépend d'un écran précédent (§33, inchangés) :
  *  - A. `racinesChamp2` affiche l'équation « … = 0 » issue de la factorisation CONFIRMÉE de `racinesChamp1` et vérifie les racines
  *    de CETTE équation (« une méthode juste appliquée à une donnée de départ fausse doit réussir »).
  *  - B. `tableauSignes` montre, dans sa ligne des x, les valeurs `x₁`, `xS`, `x₂` : vraies si la correction est immédiate, SYMBOLIQUES
@@ -154,15 +165,64 @@ export function racinesDeFactorisation(texte: string): [number, number] | null {
   return Number.isFinite(r1) && Number.isFinite(r2) ? (r1 <= r2 ? [r1, r2] : [r2, r1]) : null;
 }
 
+/** Bornes d'un coefficient EXPLOITABLE (même plafond que l'aide `croquis_parabole`) ; `a` ne peut pas être quasi nul (xS = −b/2a explose). */
+const COEFFICIENT_ABS_MIN = 1e-6;
+const ORDONNEE_ABS_MAX = 1e6;
+
+/** Coefficients d'une réponse `coefficients` confirmée ; `null` si illisible, `a` quasi nul ou démesuré (inexploitable -> repli sur les vrais). */
+function lireCoefficients(reponseBrute: string): { a: number; b: number; c: number } | null {
+  const d = decoderChampsMultiples(reponseBrute, { champs: SOUS_CHAMPS_COEFFICIENTS });
+  if (!d.ok) return null;
+  const [a, b, c] = (["a", "b", "c"] as const).map((k) => lireNombreOuFraction(d.valeur[k] as string));
+  if (a === null || b === null || c === null || a === undefined || b === undefined || c === undefined) return null;
+  if (![a, b, c].every((v) => Number.isFinite(v) && Math.abs(v) <= COEFFICIENT_MAX) || Math.abs(a) < COEFFICIENT_ABS_MIN) return null;
+  return { a, b, c };
+}
+
+/** Ordonnée du sommet d'une réponse `axeSommet` confirmée ; `null` si illisible ou démesurée. */
+function lireOrdonneeSommet(reponseBrute: string): number | null {
+  const d = decoderChampsMultiples(reponseBrute, { champs: SOUS_CHAMPS_AXE_SOMMET });
+  if (!d.ok) return null;
+  const y = lireNombreOuFraction(d.valeur.yS as string);
+  return y !== null && Number.isFinite(y) && Math.abs(y) <= ORDONNEE_ABS_MAX ? y : null;
+}
+
 /**
- * `Generateur.projeter` de gen7 : l'exercice EFFECTIF vu par l'élève. Ne dépend que des confirmations de `racinesChamp1` et du réglage
- * statique `correctionImmediate`.
- *  - Réponse confirmée « utilisable » = elle se lit (`analyserExpression`), donne 1 ou 2 racines réelles, et (`statut === "correct"` OU
- *    correction coupée). Sous correction immédiate une réponse fausse a été RÉVÉLÉE : on utilise alors la vraie factorisation.
+ * Données effectives de `allure`, `axeSommet` et `domaineImage` (RAPPORT §38) à partir des réponses CONFIRMÉES, dans les deux régimes.
+ *  - Coefficients : ceux de la réponse confirmée à `coefficients` (même fausse) s'ils sont exploitables ; réponse `correct` -> les vrais
+ *    (jamais un flottant issu de « 4/2 ») ; illisible, `a` nul, démesuré ou champ terminé sans réponse (chrono) -> les vrais. Repli sans
+ *    fuite sous correction coupée : la fonction est publique dans l'énoncé.
+ *  - Sommet : celui de la parabole de ces coefficients (le vrai s'ils sont vrais).
+ *  - `yImage` : l'ordonnée confirmée à `axeSommet` si elle est lisible et s'écarte du sommet effectif de plus que la tolérance de saisie
+ *    (un arrondi accepté n'est pas une autre donnée) ; sinon le sommet effectif. Réponse `parse_error` : inexploitable -> sommet effectif.
+ */
+export function effectifDepuisReponses(f: FonctionSecondDegre, reponsesConfirmees: readonly ReponseConfirmee[]): DonneesEffectives {
+  const vrai = effectifVrai(f);
+  const coef = reponsesConfirmees.find((r) => r.champ === CHAMP_COEFFICIENTS);
+  const lus = coef !== undefined && coef.statut === "not_equivalent" ? lireCoefficients(coef.reponseBrute) : null;
+  const differe = lus !== null && (lus.a !== f.a || lus.b !== f.b || lus.c !== f.c);
+  let base = vrai;
+  if (lus !== null && differe) {
+    const xS = -lus.b / (2 * lus.a);
+    const yS = lus.a * xS * xS + lus.b * xS + lus.c;
+    base = { ...vrai, a: lus.a, b: lus.b, c: lus.c, xS: xS === 0 ? 0 : xS, yS: yS === 0 ? 0 : yS, yImage: yS === 0 ? 0 : yS, coefficientsEleve: true };
+  }
+  const axe = reponsesConfirmees.find((r) => r.champ === CHAMP_AXE_SOMMET);
+  const y = axe !== undefined && axe.statut === "not_equivalent" ? lireOrdonneeSommet(axe.reponseBrute) : null;
+  const yImage = y !== null && Math.abs(y - base.yS) > TOLERANCE_SAISIE ? y : base.yS;
+  return { ...base, yImage, ordonneeEleve: Math.abs(yImage - f.yS) > 1e-9 };
+}
+
+/**
+ * `Generateur.projeter` de gen7 : l'exercice EFFECTIF vu par l'élève. Ne dépend que des réponses CONFIRMÉES et du réglage statique
+ * `correctionImmediate`, qui ne choisit plus que l'AFFICHAGE du tableau et le panneau de faits, jamais quelle donnée sert de départ.
+ *  - Coefficients, sommet, ordonnée : `effectifDepuisReponses` (RAPPORT §38).
+ *  - `racinesChamp2` : réponse confirmée à `racinesChamp1` « utilisable » = elle se lit (`analyserExpression`) et donne 1 ou 2 racines
+ *    réelles. **Dans les deux régimes** (§33-D la réservait à la correction coupée, D-A du propriétaire l'étend : une méthode juste sur
+ *    une donnée fausse réussit, qu'on ait ou non montré la vraie).
  *  - `statut === "correct"` : la factorisation de l'élève est celle de l'énoncé (à 1e-6 près) — les racines attendues restent les VRAIES
  *    (jamais celles d'une factorisation « presque » juste), seul l'affichage est celui de l'élève.
- *  - Correction coupée et factorisation fausse mais exploitable : équation et racines sont celles de la réponse de l'élève.
- *  - Inexploitable : correction immédiate → vraie factorisation ; correction coupée → équation DÉVELOPPÉE de l'énoncé (publique), racines
+ *  - Inexploitable : correction immédiate -> vraie factorisation ; correction coupée -> équation DÉVELOPPÉE de l'énoncé (publique), racines
  *    vraies. Jamais un texte qui ne suivrait pas le réglage STATIQUE de la tâche (jamais `revele`).
  */
 export function projeterAnalyseFonction(ex: ExerciceAnalyseFonction, reponsesConfirmees: readonly ReponseConfirmee[], contexte: ContexteProjection): ExerciceAnalyseFonction {
@@ -170,20 +230,22 @@ export function projeterAnalyseFonction(ex: ExerciceAnalyseFonction, reponsesCon
   // Panneau « Ce que tu sais déjà » (RAPPORT §33) : seuls les écrans RÉUSSIS y figurent, et jamais sous correction coupée (un fait est
   // la bonne valeur : le montrer avant la fin de la tâche révélerait la réponse). Un écran raté n'y figure jamais, même révélé.
   const corrects = contexte.correctionImmediate ? reponsesConfirmees.filter((r) => r.statut === "correct").map((r) => r.champ) : [];
-  if (ex.fonction.racines === null || ex.formeFactorisee === null) return { ...ex, affichageTableau, corrects };
+  const effectif = effectifDepuisReponses(ex.fonction, reponsesConfirmees);
+  if (ex.fonction.racines === null || ex.formeFactorisee === null) return { ...ex, effectif, affichageTableau, corrects };
   const vraiesRacines = ex.fonction.racines;
   const vraieLatex = factorisationVersLatex(ex.formeFactorisee) as string;
   const confirmee = reponsesConfirmees.find((r) => r.champ === CHAMP_RACINES_FACTORISATION);
-  const utilisable = confirmee !== undefined && confirmee.statut !== "parse_error" && (confirmee.statut === "correct" || !contexte.correctionImmediate);
+  const utilisable = confirmee !== undefined && confirmee.statut !== "parse_error";
   if (utilisable) {
     const latex = factorisationVersLatex(confirmee.reponseBrute);
     const racines = racinesDeFactorisation(confirmee.reponseBrute);
     if (latex !== null && racines !== null) {
-      return { ...ex, affichageTableau, corrects, zeros: { racines: confirmee.statut === "correct" ? vraiesRacines : racines, factorisationLatex: latex, origine: "eleve" } };
+      return { ...ex, effectif, affichageTableau, corrects, zeros: { racines: confirmee.statut === "correct" ? vraiesRacines : racines, factorisationLatex: latex, origine: "eleve" } };
     }
   }
   return {
     ...ex,
+    effectif,
     affichageTableau,
     corrects,
     zeros: contexte.correctionImmediate

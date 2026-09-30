@@ -181,10 +181,12 @@ const jugerZeros = (e: ExerciceAnalyseFonction, valeurs: string[]) => verifierAn
   verifier(jugerZeros(p, ["0", "2"]) === "correct" && jugerZeros(p, ["-2", "0"]) === "not_equivalent", "A2 : une méthode juste sur une donnée fausse RÉUSSIT ; les vraies racines ne réussissent plus (§18)");
   verifier(zerosDe(genererExercice("mise_en_evidence", 12345)).racines.join() === vraies, "A2 : l'exercice brut n'est jamais modifié (projection pure)");
 }
-// A3. Correction immédiate, réponse fausse RÉVÉLÉE : vraie factorisation.
+// A3. Correction immédiate, réponse fausse RÉVÉLÉE. §33-D : vraie factorisation. RAPPORT §38 (D-A du propriétaire, cascade uniforme dans les deux
+// régimes) : la factorisation de l'élève, fausse mais exploitable, reste la donnée de départ — comme en correction coupée (A2).
 {
   const p = projeterAnalyseFonction(me, [conf(CHAMP_RACINES_FACTORISATION, "3x(x-2)", "not_equivalent")], { correctionImmediate: true });
-  verifier(zerosDe(p).origine === "solution" && zerosDe(p).racines.join() === vraies && zerosDe(p).factorisationLatex === "4x(x + 2)", `A3 : correction immédiate, réponse révélée → vraie factorisation (${JSON.stringify(zerosDe(p))})`);
+  verifier(zerosDe(p).origine === "eleve" && zerosDe(p).racines.join() === "0,2" && zerosDe(p).factorisationLatex === "3x(x - 2)", `A3 : correction immédiate, réponse révélée mais exploitable → SA factorisation (${JSON.stringify(zerosDe(p))})`);
+  verifier(jugerZeros(p, ["0", "2"]) === "correct" && jugerZeros(p, ["-2", "0"]) === "not_equivalent", "A3 : une méthode juste sur SA donnée réussit aussi sous correction immédiate");
 }
 // A4. Inexploitable : repli à deux régimes.
 const INEXPLOITABLES: [string, string, ReponseConfirmee["statut"]][] = [

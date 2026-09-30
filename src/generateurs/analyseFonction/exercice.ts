@@ -5,7 +5,7 @@ import { factorisationVersLatex } from "./cascade";
 import { genererRacines } from "./racines";
 import { CATEGORIES_AVEC_RACINES, type CategorieRacines } from "./racines/types";
 import type { AffichageColonnes } from "./tableauSignes";
-import { fonctionDe, type CategorieAnalyseFonction, type FonctionSecondDegre } from "./types";
+import { effectifVrai, fonctionDe, type CategorieAnalyseFonction, type DonneesEffectives, type FonctionSecondDegre } from "./types";
 
 /**
  * Exercice de gen7 (JSON-sérialisable, sans `undefined`), régénéré à chaque appel depuis `exercices_assignes.graine`.
@@ -36,6 +36,8 @@ export interface DonneesZeros {
 
 export interface ExerciceAnalyseFonction {
   fonction: FonctionSecondDegre;
+  /** Données effectives de `allure`, `axeSommet`, `domaineImage` (cascade des coefficients) : vraies dans l'exercice brut. */
+  effectif: DonneesEffectives;
   ordreTermes: Terme[];
   /** Solution de `racinesChamp1` (texte d'auteur), `null` pour `af_irreductible`. */
   formeFactorisee: string | null;
@@ -85,6 +87,7 @@ export function genererExercice(categorie: CategorieAnalyseFonction, graine: num
   const latex = formeFactorisee === null ? null : factorisationVersLatex(formeFactorisee);
   return {
     fonction,
+    effectif: effectifVrai(fonction),
     ordreTermes,
     formeFactorisee,
     zeros: fonction.racines === null || latex === null ? null : { racines: fonction.racines, factorisationLatex: latex, origine: "solution" },

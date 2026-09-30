@@ -1527,6 +1527,64 @@ async function scenarioGen7Coupe(navigateur: any, base: string, largeur: number)
   await contexte.close();
 }
 
+/**
+ * Cascade des coefficients (RAPPORT §38), jouée dans le navigateur dans les DEUX régimes : le scénario signalé par le propriétaire
+ * (f = 4x² + 8x ; a = 5, b = 4, c = −4 confirmés ; xS = −2/5, yS = 0 ; image [0 ; +∞[). Les écrans suivants affichent SA fonction et
+ * SON ordonnée du sommet, et [0 ; +∞[ est accepté (verdict « Bonne réponse » sous correction immédiate, rien de visible sous correction coupée).
+ */
+async function scenarioGen7Cascade(navigateur: any, base: string, largeur: number) {
+  for (const feedback of [true, false]) {
+    const l = `${largeur} gen7 cascade ${feedback ? "immédiat" : "coupé"}`;
+    const s: Scenario = creerScenario();
+    installerBase(s.base);
+    const { ex } = await assignerGen7(s, "mise_en_evidence", 12345, { feedback });
+    const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+    const courant = page.locator(".moteur-ecran-courant");
+    /** « Valider », attend le retour serveur, puis renvoie le geste « suite » (à appeler pour passer à l'écran suivant). */
+    const valider = async () => {
+      const avant = (await page.evaluate(`document.querySelector(".moteur-ecran-courant .moteur-consigne").textContent`)) as string;
+      await courant.getByRole("button", { name: "Valider", exact: true }).click();
+      await page.waitForSelector(".moteur-ecran-courant .moteur-retour .moteur-statut");
+      return async () => {
+        await page.getByRole("button", { name: /Question suivante|Voir la fin/ }).click();
+        await page.waitForFunction(`(() => { const c = document.querySelector(".moteur-ecran-courant .moteur-consigne"); return document.querySelector(".moteur-fin") !== null || (c !== null && c.textContent !== ${JSON.stringify(avant)}); })()`);
+      };
+    };
+    // 1. coefficients FAUX
+    for (const [k, v] of [["a", "5"], ["b", "4"], ["c", "-4"]]) await courant.locator(`#mc-coefficients-${k}`).fill(v);
+    await (await valider())();
+    // 2. allure (a = 5 > 0, ab = 20 > 0) : la consigne annonce SA fonction
+    const consigneAllure = await lireConsigneGen7(page);
+    verifier(consigneAllure.includes("d'après les coefficients que tu as donnés") && consigneAllure.includes("$f(x) = 5x^2 + 4x - 4$"), `${l} : l'écran allure affiche SA fonction (« ${consigneAllure.slice(0, 110)} »)`);
+    await repondreGen7(page, ex, "allure");
+    await (await valider())();
+    // 3. axeSommet : xS = −2/5 cohérent, yS = 0 faux même pour ses coefficients
+    await courant.locator("#mc-axeSommet-axeTexte").fill("x = -2/5");
+    await courant.locator("#mc-axeSommet-xS").fill("-2/5");
+    await courant.locator("#mc-axeSommet-yS").fill("0");
+    await (await valider())();
+    // 4. domaineImage : [0 ; +∞[
+    const consigneImage = await lireConsigneGen7(page);
+    verifier(consigneImage.includes("$f(x) = 5x^2 + 4x - 4$") && consigneImage.includes("$y_S = 0$"), `${l} : domaineImage rappelle SA fonction et SON ordonnée du sommet (« ${consigneImage.slice(0, 200).replace(/\n/g, " / ")} »)`);
+    const ligne = courant.locator(".moteur-intervalle-ligne");
+    for (const [cote, crochet] of [["gauche", "["], ["droite", "["]]) {
+      const bouton = ligne.getByRole("button", { name: new RegExp(`Crochet de ${cote}`) });
+      for (let k = 0; k < 2 && (await bouton.textContent()) !== crochet; k++) await bouton.click();
+    }
+    await ligne.getByLabel("Borne de gauche", { exact: true }).fill("0");
+    await ligne.getByRole("button", { name: "Borne de droite : plus l'infini" }).click();
+    await valider();
+    if (feedback) verifier((await courant.locator(".moteur-statut-correct").count()) === 1, `${l} : [0 ; +∞[ est accepté (« Bonne réponse »)`);
+    else verifier((await courant.locator(".moteur-statut-correct, .moteur-statut-not_equivalent, .moteur-solution").count()) === 0, `${l} : aucun verdict visible avant la fin de la tâche`);
+    await page.screenshot({ path: join(CAPTURES, `${largeur}-gen7-cascade-${feedback ? "immediat" : "coupe"}-image.png`), fullPage: true });
+    const rep = s.base.table("reponses");
+    const statut = (champ: string) => rep.find((r) => r.champ === champ)?.statut;
+    verifier(statut("coefficients") === "not_equivalent" && statut("allure") === "correct" && statut("axeSommet") === "not_equivalent" && statut("domaineImage") === "correct", `${l} : statuts enregistrés (${["coefficients", "allure", "axeSommet", "domaineImage"].map((c) => `${c}=${statut(c)}`).join(", ")})`);
+    verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+    await contexte.close();
+  }
+}
+
 /** Le professeur COMPOSE une tâche gen7 dans prof.html (champs actifs, création réelle), puis l'assigne ; l'élève la reçoit. */
 async function scenarioGen7Prof(navigateur: any, base: string, largeur: number) {
   const l = `${largeur}`;
@@ -1602,6 +1660,8 @@ async function main() {
       controlerReponsesHttp(`${largeur} gen7 coupé`);
       await scenarioGen7Prof(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} gen7 prof`);
+      await scenarioGen7Cascade(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} gen7 cascade`);
     }
   } catch (e) {
     // Un scénario qui plante (timeout d'attente d'un élément) ne passe jamais par `controlerReponsesHttp` :

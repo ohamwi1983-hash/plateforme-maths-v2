@@ -54,3 +54,31 @@ export function fonctionDe(categorie: CategorieAnalyseFonction, a: number, b: nu
   // `-0` (b = 0) est un vrai zéro pour les comparaisons mais s'écrit « 0 » : jamais « -0 » dans un texte.
   return { categorie, a, b, c, xS: xS === 0 ? 0 : xS, yS: yS === 0 ? 0 : yS, racines };
 }
+
+/**
+ * Données EFFECTIVES des écrans `allure`, `axeSommet` et `domaineImage` (RAPPORT §38, cascade des coefficients) : ce que la méthode juste
+ * donne à partir de ce que l'élève a CONFIRMÉ (« une méthode juste appliquée à une donnée de départ fausse doit réussir »), dans les deux
+ * régimes de correction. Dans l'exercice brut : les vraies valeurs.
+ *  - `a`, `b`, `c` : coefficients confirmés à `coefficients` s'ils sont exploitables (lisibles, `a ≠ 0`, bornés), sinon les vrais — la
+ *    fonction est PUBLIQUE dans l'énoncé, ce repli ne révèle rien ;
+ *  - `xS`, `yS` : sommet de la parabole de ces coefficients ;
+ *  - `yImage` : borne de `im f`, l'ordonnée du sommet CONFIRMÉE à `axeSommet` si elle est lisible et s'écarte de `yS` de plus que la
+ *    tolérance de saisie, sinon `yS`.
+ */
+export interface DonneesEffectives {
+  a: number;
+  b: number;
+  c: number;
+  xS: number;
+  yS: number;
+  yImage: number;
+  /** `a, b, c` viennent de l'élève ET diffèrent des vrais : l'énoncé des écrans suivants affiche SA fonction. */
+  coefficientsEleve: boolean;
+  /** `yImage` diffère de la vraie ordonnée du sommet : la consigne de `domaineImage` la rappelle. */
+  ordonneeEleve: boolean;
+}
+
+/** Données effectives d'un exercice non projeté : les vraies. */
+export function effectifVrai(f: FonctionSecondDegre): DonneesEffectives {
+  return { a: f.a, b: f.b, c: f.c, xS: f.xS, yS: f.yS, yImage: f.yS, coefficientsEleve: false, ordonneeEleve: false };
+}
