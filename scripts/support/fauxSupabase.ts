@@ -38,7 +38,8 @@ export class BaseMemoire {
     /** Connexion e-mail / mot de passe simulée (ni jeton réel, ni bannissement : ce n'est PAS le comportement de GoTrue). */
     signInWithPassword: async (a: { email: string; password: string }) => {
       const u = [...this.utilisateursAuth.values()].find((x) => x.email.toLowerCase() === a.email.toLowerCase() && x.password === a.password);
-      return u ? { data: { session: { access_token: `prof:${u.id}`, refresh_token: "refresh" } }, error: null } : { data: { session: null }, error: { message: "Invalid login credentials" } };
+      // Jeton du harnais : `eleve:<id>` pour un compte qui a une ligne `eleves` (élève fantôme de l'aperçu), sinon `prof:<id>`.
+      return u ? { data: { session: { access_token: `${this.table("eleves").some((e) => e.id === u.id) ? "eleve" : "prof"}:${u.id}`, refresh_token: "refresh" } }, error: null } : { data: { session: null }, error: { message: "Invalid login credentials" } };
     },
     admin: {
       createUser: async (a: { email: string; password: string; email_confirm?: boolean }) => {
@@ -65,7 +66,7 @@ export class BaseMemoire {
         if (!u) return { data: { user: null }, error: { message: "User not found" } };
         if (attributs.password !== undefined) u.password = attributs.password;
         if (attributs.ban_duration !== undefined) u.banni = attributs.ban_duration === "none" ? null : attributs.ban_duration;
-        return { data: { user: { id: u.id } }, error: null };
+        return { data: { user: { id: u.id, email: u.email } }, error: null };
       },
       deleteUser: async (id: string) => {
         this.appelsAuth.push({ appel: "deleteUser", id });
@@ -83,6 +84,8 @@ export class BaseMemoire {
   inserer(nom: string, ligne: Ligne): Ligne {
     const complete: Ligne = { ...ligne };
     if (TABLES_AVEC_ID.has(nom) && complete.id === undefined) complete.id = randomUUID();
+    // Défaut du schéma (`est_apercu boolean not null default false`) : sans lui, `.eq("est_apercu", false)` ne verrait aucune vraie tâche.
+    if (nom === "taches" && complete.est_apercu === undefined) complete.est_apercu = false;
     for (const c of COLONNES_HORODATAGE) {
       if (complete[c] === undefined && (nom !== "taches_assignations" || c !== "horodatage") && this.colonneAttendue(nom, c)) complete[c] = this.maintenant();
     }

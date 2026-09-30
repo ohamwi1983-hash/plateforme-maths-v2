@@ -34,6 +34,7 @@ import { gererReponses } from "../lib/routes/reponses";
 import { gererReponsesAide } from "../lib/routes/reponses-aide";
 import { gererReponsesDebutEcran } from "../lib/routes/reponses-debut-ecran";
 import { gererTaches } from "../lib/routes/taches";
+import { gererTachesApercu } from "../lib/routes/taches-apercu";
 import { gererTachesId } from "../lib/routes/taches/[id]";
 
 type Gestionnaire = (req: RequeteHttp, res: ReponseHttp, params: Record<string, string>) => Promise<void>;
@@ -45,7 +46,7 @@ type Gestionnaire = (req: RequeteHttp, res: ReponseHttp, params: Record<string, 
  * adossés au registre unique de générateurs (`lib/registreGenerateurs.ts`). Toujours absents (jamais
  * copiés, décision actée 4 du prompt Phase 1) : `GET /api/profs/exercices/:id` (gen1 seulement) et
  * `GET /api/reponses/grille-info` (gen5/gen6). Restent différés, dépendants d'un générateur
- * curriculaire (phase 3) : `POST /api/taches/apercu`, `GET /api/taches/:id/impression`.
+ * curriculaire (phase 3) : `GET /api/taches/:id/impression`. `POST /api/taches/apercu` est routé depuis le RAPPORT §36.
  *
  * `methodes` documente ce que le fichier déplacé gère réellement lui-même (chaque handler continue
  * de faire son propre `req.method !== "X" -> 405`) — la correspondance ne filtre donc QUE sur le
@@ -303,6 +304,14 @@ const TABLE_ROUTAGE: EntreeRoutage[] = [
     correspond: (s) => s.length === 1 && s[0] === "taches",
     extraireParams: AUCUN_PARAM,
     gestionnaire: gererTaches,
+  },
+  {
+    // AVANT `/api/taches/:id` : sinon « apercu » serait lu comme un identifiant de tâche.
+    methodes: ["POST"],
+    chemin: "/api/taches/apercu",
+    correspond: (s) => s.length === 2 && s[0] === "taches" && s[1] === "apercu",
+    extraireParams: AUCUN_PARAM,
+    gestionnaire: gererTachesApercu,
   },
   {
     methodes: ["PATCH", "DELETE"],

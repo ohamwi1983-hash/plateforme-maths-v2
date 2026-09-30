@@ -85,6 +85,12 @@
     </div>
     <div class="barre-app-contenu">
       <div>
+        <!-- Mode aperçu (RAPPORT §36) : bandeau persistant tant que l'onglet est ouvert par « Aperçu » de prof.html
+             (`initModeApercu`) — le professeur ne doit jamais confondre cet onglet avec un vrai compte élève. `hidden` par défaut. -->
+        <div class="bandeau-mode-apercu" id="bandeau-mode-apercu" hidden>
+          <span>🔎 Mode aperçu — vos réponses ici ne sont pas analysées comme celles d'un élève.</span>
+          <button type="button" id="btn-quitter-apercu">Fermer cet onglet</button>
+        </div>
         <p class="salutation" id="salutation-eleve">Espace élève</p>
         <p class="salutation-ligne" id="salutation-ligne" hidden></p>
         <p class="badge-serie" id="badge-serie" hidden></p>
@@ -525,11 +531,15 @@
       }
     }
 
+    // Sortie du moteur (« Retour », fin de tâche) : retour à la liste de l'élève ; en mode aperçu, fermeture de l'onglet (l'élève fantôme
+    // n'a pas de liste de tâches à laquelle revenir). Remplacée par `initModeApercu`.
+    let sortieDuMoteur = () => afficherExercice(false);
+
     async function demarrerFluxPasAPas(tache) {
       try {
         const { demarrerTache, api } = await importerMoteur();
         afficherExercice(true);
-        detruireExerciceEnCours = await demarrerTache(document.getElementById("conteneur-moteur"), tache, { api, surSortie: () => afficherExercice(false) });
+        detruireExerciceEnCours = await demarrerTache(document.getElementById("conteneur-moteur"), tache, { api, surSortie: () => sortieDuMoteur() });
       } catch (e) {
         window.afficherErreurFatale("Impossible d'ouvrir la tâche : " + e.message);
       }
@@ -540,7 +550,7 @@
       try {
         const { ouvrir, api } = await importerMoteur();
         afficherExercice(true);
-        detruireExerciceEnCours = await ouvrir(document.getElementById("conteneur-moteur"), exercice.id, { api, surSortie: () => afficherExercice(false), surExerciceTermine: () => afficherExercice(false) });
+        detruireExerciceEnCours = await ouvrir(document.getElementById("conteneur-moteur"), exercice.id, { api, surSortie: () => sortieDuMoteur(), surExerciceTermine: () => sortieDuMoteur() });
       } catch (e) {
         window.afficherErreurFatale("Impossible d'ouvrir l'exercice : " + e.message);
       }
@@ -1007,7 +1017,63 @@
       return li;
     }
 
-    initSupabaseClient();
+    /**
+     * Mode aperçu (RAPPORT §36) : `prof.html` ouvre `eleve.html?apercu=1` après `POST /api/taches/apercu` et dépose la session de l'élève
+     * fantôme dans `localStorage` (`apercu_session`). Lue puis RETIRÉE immédiatement : un seul onglet peut la consommer, un rechargement
+     * échoue proprement au lieu de rejouer une session périmée. Saute la connexion et `getSession()` : cet onglet n'est jamais un élève
+     * qui se reconnecte. `persistSession: false` — sinon la session fantôme s'écrirait dans le MÊME `localStorage` que l'onglet
+     * professeur (même origine, même clé du SDK) et ferait perdre sa session au professeur. Ouvre directement la tâche d'aperçu
+     * (le fantôme n'en a qu'une). Renvoie `true` si l'onglet est en mode aperçu (l'appelant ne lance alors pas `initSupabaseClient`).
+     */
+    async function initModeApercu() {
+      if (new URLSearchParams(window.location.search).get("apercu") !== "1") return false;
+      const brut = localStorage.getItem("apercu_session");
+      localStorage.removeItem("apercu_session");
+      if (!brut) {
+        window.afficherErreurFatale("Session d'aperçu introuvable — recommencez depuis « Aperçu » dans l'espace professeur (cet onglet ne peut pas être rechargé).");
+        return true;
+      }
+      let jetons;
+      try {
+        jetons = JSON.parse(brut);
+      } catch {
+        jetons = null;
+      }
+      if (!jetons || !jetons.access_token || !jetons.refresh_token) {
+        window.afficherErreurFatale("Session d'aperçu invalide.");
+        return true;
+      }
+      try {
+        const config = await fetch("/api/config").then((r) => r.json());
+        if (!config.supabaseUrl || !config.supabaseAnonKey) {
+          window.afficherErreurFatale("Configuration Supabase manquante côté serveur (SUPABASE_URL / SUPABASE_ANON_KEY).");
+          return true;
+        }
+        supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey, { auth: { persistSession: false } });
+        session = { access_token: jetons.access_token, refresh_token: jetons.refresh_token };
+        await supabaseClient.auth.setSession({ access_token: jetons.access_token, refresh_token: jetons.refresh_token });
+      } catch (e) {
+        window.afficherErreurFatale("Impossible d'initialiser l'aperçu : " + e.message);
+        return true;
+      }
+      sortieDuMoteur = () => window.close();
+      document.getElementById("bandeau-mode-apercu").hidden = false;
+      document.getElementById("authentification").hidden = true;
+      document.getElementById("espace-eleve").hidden = false;
+      // La navigation à 4 onglets n'a aucun sens pour l'élève fantôme (« Mon compte » exposerait une déconnexion trompeuse).
+      document.getElementById("onglets-nav").hidden = true;
+      document.getElementById("salutation-eleve").textContent = "Aperçu professeur";
+      afficherOnglet("mes-taches");
+      const donnees = await chargerTableauDeBord();
+      if (donnees && (donnees.en_cours ?? []).length > 0) demarrerFluxPasAPas(donnees.en_cours[0]);
+      return true;
+    }
+
+    document.getElementById("btn-quitter-apercu").addEventListener("click", () => window.close());
+
+    initModeApercu().then((estApercu) => {
+      if (!estApercu) initSupabaseClient();
+    });
   </script>
 </body>
 </html>

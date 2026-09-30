@@ -1573,6 +1573,117 @@ async function scenarioGen7Prof(navigateur: any, base: string, largeur: number) 
   await c2.close();
 }
 
+/**
+ * « Aperçu » du formulaire de tâche (RAPPORT §36), au clic, sur une tâche gen7 composée dans l'interface : le bouton n'est actif que si la
+ * composition est non vide ET exécutable (`executable`, dérivé du registre) ; le clic ouvre un onglet `eleve.html?apercu=1` où le
+ * professeur voit la tâche comme l'élève (bandeau, pas de navigation, KaTeX, correction selon les réglages), sans rien créer de réel.
+ */
+async function scenarioApercu(navigateur: any, base: string, largeur: number) {
+  const l = `${largeur} aperçu`;
+  const s: Scenario = creerScenario();
+  installerBase(s.base);
+  const { page, contexte, journal } = await preparerPage(navigateur, base, largeur, largeur < 600 ? 800 : 900, `prof:${s.profId}`, "p@x");
+  // Routes du CONTEXTE : le stub Supabase et les polices doivent aussi servir l'onglet ouvert par « Aperçu ».
+  await contexte.route("**/unpkg.com/@supabase/supabase-js**", (r: any) => r.fulfill({ contentType: "text/javascript", body: stubSupabase(`prof:${s.profId}`, "p@x") }));
+  await contexte.route("**/fonts.googleapis.com/**", (r: any) => r.fulfill({ contentType: "text/css", body: "" }));
+  await contexte.route("**/fonts.gstatic.com/**", (r: any) => r.abort());
+  await page.goto(base + "/prof.html");
+  await page.waitForSelector('button[data-onglet="taches"]:visible');
+  await page.locator('button[data-onglet="taches"]').click();
+  await page.locator("#bouton-accordeon-creer").click();
+  await page.waitForSelector("#composition-dynamique input.stepper-valeur", { state: "attached" });
+  const bouton = page.locator("#btn-apercu-tache");
+  const quantite = (variante: string, valeur: number) => page.evaluate(`(() => { const i = document.querySelector('#composition-dynamique input[data-variante-id="${variante}"]'); i.value = "${valeur}"; i.dispatchEvent(new Event("input", { bubbles: true })); i.dispatchEvent(new Event("change", { bubbles: true })); })()`);
+
+  verifier(await bouton.isDisabled() && /au moins un exercice/.test((await bouton.getAttribute("title")) ?? ""), `${l} : sans exercice, « Aperçu » est inactif et dit pourquoi`);
+  await quantite("af_mise_en_evidence", 1);
+  await quantite("af_irreductible", 1);
+  verifier(await bouton.isEnabled() && /comme l'élève/.test((await bouton.getAttribute("title")) ?? ""), `${l} : composition gen7 non vide -> « Aperçu » actif SANS nom de tâche saisi`);
+
+  // Garde par le registre : une variante composée sans générateur exécutable rend le bouton inactif, avec la raison.
+  const registre = require("../lib/registreGenerateurs").REGISTRE_GENERATEURS as { variante_id: string }[];
+  const rang = registre.findIndex((g) => g.variante_id === "af_irreductible");
+  const [retire] = registre.splice(rang, 1);
+  try {
+    await page.reload();
+    await page.waitForSelector('button[data-onglet="taches"]:visible');
+    await page.locator('button[data-onglet="taches"]').click();
+    await page.locator("#bouton-accordeon-creer").click();
+    await page.waitForSelector("#composition-dynamique input.stepper-valeur", { state: "attached" });
+    await quantite("af_mise_en_evidence", 1);
+    verifier(await bouton.isEnabled(), `${l} : variante exécutable seule -> actif même si une autre est retirée du registre`);
+    await quantite("af_irreductible", 1);
+    verifier(await bouton.isDisabled() && /af_irreductible/.test((await bouton.getAttribute("title")) ?? ""), `${l} : variante sans générateur composée -> inactif et nommée dans l'infobulle (${await bouton.getAttribute("title")})`);
+    await quantite("af_irreductible", 0);
+    verifier(await bouton.isEnabled(), `${l} : la variante retirée de la composition, le bouton se réactive`);
+  } finally {
+    registre.splice(rang, 0, retire!);
+  }
+  await page.reload();
+  await page.waitForSelector('button[data-onglet="taches"]:visible');
+  await page.locator('button[data-onglet="taches"]').click();
+  await page.locator("#bouton-accordeon-creer").click();
+  await page.waitForSelector("#composition-dynamique input.stepper-valeur", { state: "attached" });
+  await quantite("af_mise_en_evidence", 1);
+  await quantite("af_irreductible", 1);
+  await page.locator("#feedback-immediat").uncheck({ force: true }); // correction coupée : le réglage doit se retrouver dans l'aperçu
+  await page.screenshot({ path: join(CAPTURES, `${largeur}-apercu-01-formulaire.png`), fullPage: false });
+
+  // ── Clic : un onglet s'ouvre sur eleve.html?apercu=1 ──
+  const [popup] = await Promise.all([contexte.waitForEvent("page"), bouton.click()]);
+  popup.on("pageerror", (e: Error) => journal.pageerrors.push("aperçu : " + e.message));
+  popup.on("console", (m: any) => { if (m.type() === "error") journal.erreursConsole.push("aperçu : " + m.text()); });
+  popup.on("response", (r: any) => { if (r.status() >= 400) journal.reponsesEnErreur.push({ statut: r.status(), methode: r.request().method(), url: new URL(r.url()).pathname }); });
+  await popup.waitForSelector("#bandeau-mode-apercu:not([hidden])");
+  await popup.waitForSelector(".moteur-ecran-courant");
+  verifier(popup.url().endsWith("/eleve.html?apercu=1"), `${l} : l'onglet est eleve.html?apercu=1 (${popup.url()})`);
+  verifier((await popup.locator("#bandeau-mode-apercu").innerText()).includes("Mode aperçu"), `${l} : bandeau « Mode aperçu » visible`);
+  verifier(await popup.locator("#onglets-nav").isHidden() && (await popup.locator("#salutation-eleve").innerText()) === "Aperçu professeur", `${l} : pas de navigation élève, salutation « Aperçu professeur »`);
+  verifier((await popup.evaluate(`localStorage.getItem("apercu_session")`)) === null && (await page.evaluate(`localStorage.getItem("apercu_session")`)) === null, `${l} : la session d'aperçu est retirée du stockage dès le chargement`);
+  verifier((await page.locator("#statut-creer-tache").innerText()).includes("Aperçu ouvert"), `${l} : le formulaire annonce « Aperçu ouvert dans un nouvel onglet »`);
+  const consigne: string = await popup.locator(".moteur-ecran-courant .moteur-consigne").innerText();
+  verifier(consigne.includes("Étudie la fonction suivante") && (await popup.locator(".moteur-ecran-courant .moteur-consigne .katex").count()) >= 1, `${l} : l'énoncé gen7 est rendu par KaTeX dans l'aperçu`);
+  await popup.screenshot({ path: join(CAPTURES, `${largeur}-apercu-02-onglet-eleve.png`), fullPage: true });
+
+  // Le fantôme, le professeur et la base : un aperçu, pas une tâche.
+  const fantome = s.base.table("profs").find((p) => p.id === s.profId)!.eleve_apercu_id as string;
+  const taches = s.base.table("taches");
+  verifier(taches.length === 1 && taches[0]!.est_apercu === true && taches[0]!.feedback_immediat === false && typeof fantome === "string", `${l} : UNE tâche d'aperçu (correction coupée reprise du formulaire), aucune vraie tâche créée`);
+  verifier(!s.base.table("inscriptions").some((i) => i.eleve_id === fantome) && s.base.table("exercices_assignes").length === 2 && s.base.table("exercices_assignes").every((e) => e.eleve_id === fantome), `${l} : 2 exercices pour le seul fantôme, hors de toute classe`);
+
+  // Le moteur, tel quel : première réponse juste (réglage « correction coupée » : aucun verdict affiché).
+  const premier = s.base.table("exercices_assignes")[0]!;
+  const ex = genererGen7(String(premier.variante_id).slice(3) as CategorieAnalyseFonction, Number(premier.graine));
+  await repondreGen7(popup, ex, "coefficients");
+  await popup.locator(".moteur-ecran-courant").getByRole("button", { name: "Valider", exact: true }).click();
+  await popup.waitForSelector(".moteur-statut");
+  verifier((await popup.locator(".moteur-statut-correct, .moteur-statut-not_equivalent, .moteur-statut-parse_error").count()) === 0, `${l} : correction coupée du formulaire respectée dans l'aperçu (aucun verdict affiché)`);
+  verifier(s.base.table("reponses").length === 1 && s.base.table("reponses")[0]!.exercice_assigne_id === premier.id, `${l} : la réponse est écrite comme pour un élève (exclue des vues professeur par est_apercu)`);
+
+  // Un rechargement de l'onglet d'aperçu échoue proprement (session consommée).
+  await popup.reload();
+  await popup.waitForFunction(`(document.getElementById("erreur-fatale-pilote")?.textContent ?? "").includes("Session d'aperçu introuvable")`);
+  verifier(true, `${l} : rechargement -> « Session d'aperçu introuvable » (jamais une session périmée rejouée)`);
+  await popup.evaluate(`document.getElementById("erreur-fatale-pilote").textContent = ""`); // attendu ici : ne pas le compter comme panne à la fermeture
+
+  // Le professeur n'a rien perdu : sa page, sa session, sa liste de tâches.
+  verifier((await page.locator("#nom-tache").count()) === 1 && !(await page.evaluate(`document.body.innerText`) as string).includes("Impossible de charger"), `${l} : la page professeur est intacte`);
+  const liste = (await page.evaluate(`fetch("/api/taches", { headers: { Authorization: "Bearer prof:${s.profId}" } }).then((r) => r.json())`)) as unknown[];
+  verifier(liste.length === 0, `${l} : GET /api/taches ne liste aucun aperçu (${liste.length})`);
+
+  // « Fermer cet onglet » ferme l'onglet d'aperçu ; un 2e aperçu remplace le 1er.
+  const [popup2] = await Promise.all([contexte.waitForEvent("page"), bouton.click()]);
+  await popup2.waitForSelector("#bandeau-mode-apercu:not([hidden])");
+  await popup2.waitForSelector(".moteur-ecran-courant");
+  verifier(s.base.table("taches").length === 1 && s.base.table("reponses").length === 0 && s.base.table("eleves").length === 3, `${l} : 2e aperçu -> même fantôme, ancien aperçu et ses réponses supprimés`);
+  const fermeture = popup2.waitForEvent("close");
+  await popup2.locator("#btn-quitter-apercu").click();
+  await fermeture;
+  verifier(popup2.isClosed(), `${l} : « Fermer cet onglet » ferme l'onglet d'aperçu`);
+  await popup.close();
+  await contexte.close();
+}
+
 async function main() {
   const { serveur, url } = await demarrerServeur();
   const navigateur = await chromium.launch();
@@ -1602,6 +1713,8 @@ async function main() {
       controlerReponsesHttp(`${largeur} gen7 coupé`);
       await scenarioGen7Prof(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} gen7 prof`);
+      await scenarioApercu(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} aperçu`);
     }
   } catch (e) {
     // Un scénario qui plante (timeout d'attente d'un élément) ne passe jamais par `controlerReponsesHttp` :
