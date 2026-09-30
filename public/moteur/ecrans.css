@@ -370,14 +370,17 @@
 }
 
 /* ── Tableau de signes STRUCTURÉ (2N+1 colonnes, cases fusionnées sur les variations) ──
-   Largeur = celle de la colonne, jamais de défilement ni de largeur minimale : empiler des lignes change la
-   HAUTEUR, jamais la largeur (les cases gardent la même taille). Colonnes de valeur en --violet-clair sur TOUTES
-   les lignes (fond de <col>, traversant symboles, x, signes et variations). */
+   Rendu de RÉFÉRENCE validé (docs/design-system.md, « Tableau de signes plein-bord ») : de simples cellules séparées par
+   des filets fins (`border-top` / `border-right`), AUCUNE bulle ni bordure arrondie autour d'une valeur ; bande de symboles
+   `--surface-sunken` ; colonnes de valeur `--violet-clair` (fond de <col>, traversant x, signes et variations) ; titres de
+   ligne en bandeau `--surface-sunken` ; variations en 3 grandes cases (`colspan`) dont les flèches sont TRACÉES et pivotées.
+   Largeur = celle de la colonne, jamais de défilement : empiler des lignes change la HAUTEUR, jamais la largeur. */
 .moteur-table-structure {
   width: 100%;
   table-layout: fixed;
   border-collapse: collapse;
   background: var(--surface);
+  margin-bottom: var(--espace-2);
 }
 
 .moteur-table-structure .moteur-col-valeur {
@@ -396,47 +399,127 @@
    `text-transform` (« f(x) » deviendrait « F(X) »). Le texte est écrit dans sa bonne casse par l'auteur. */
 .moteur-titre-tableau,
 .moteur-table-structure .moteur-titre-ligne {
-  padding: var(--espace-2) calc(var(--retrait-plein-bord,0px));
-  background: var(--surface);
+  padding: var(--espace-1) calc(var(--retrait-plein-bord,0px));
+  background: var(--surface-sunken);
   color: var(--text-muted);
   font-size: 0.75em;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.03em;
   text-align: left;
 }
 
 .moteur-titre-tableau {
   caption-side: top;
-  padding-top: 0;
 }
 
-.moteur-ligne-tableau,
-.moteur-entete-x {
+.moteur-table-structure .moteur-titre-ligne {
   border-top: 1px solid var(--border);
 }
 
-.moteur-rangee-symboles td {
-  height: var(--espace-4);
-  font-size: 0.85em;
-}
-
-.moteur-rangee-symboles .moteur-cellule-valeur {
+/* Bande des symboles : tout le bandeau est `--surface-sunken`, seules les colonnes de valeur portent un symbole. */
+.moteur-table-structure .moteur-rangee-symboles td {
+  padding: var(--espace-1) 1px;
   background: var(--surface-sunken);
   color: var(--text-muted);
+  font-size: 0.75em;
+  font-weight: 700;
 }
 
-.moteur-rangee-x td {
-  padding: var(--espace-1) 0;
+/* Ligne des x : valeurs en gras `--violet` sur les colonnes de valeur ; les colonnes d'intervalle restent vides. */
+.moteur-table-structure .moteur-rangee-x td {
+  padding: var(--espace-2) 1px;
+  border-top: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  color: var(--violet);
+  font-weight: 700;
+}
+
+/* Lignes de cases : filets fins, padding minimal autour de la case. */
+.moteur-table-structure .moteur-rangee-signe td,
+.moteur-table-structure .moteur-rangee-variation td {
+  padding: 2px;
+  border-top: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+}
+
+.moteur-table-structure tr > td:last-child {
+  border-right: 0;
+}
+
+/* Case d'un tableau structuré : pas de bordure, pas de fond, pas de rayon — toute la cellule est la zone tactile (48px, 56px
+   sur les variations), centrée par flex. Le sommet (⌢ ⌣) est un glyphe, la flèche d'intervalle est dessinée (voir dessinerFleche). */
+.moteur-table-structure .moteur-case-signe {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  min-height: calc(var(--espace-5) + var(--espace-2));
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: none;
+  color: var(--text);
+  font-size: 1.15em;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.moteur-table-structure .moteur-case-signe.moteur-case-renseignee {
+  background: none;
+  border: 0;
+  box-shadow: none;
   color: var(--text);
 }
 
-.moteur-rangee-x .moteur-cellule-intervalle {
-  color: var(--text-muted);
+.moteur-table-structure .moteur-rangee-variation .moteur-case-signe {
+  min-height: calc(var(--espace-5) + var(--espace-3));
+  font-size: 1.3em;
 }
 
-.moteur-rangee-signe td,
-.moteur-rangee-variation td {
-  padding: var(--espace-2) 0;
+.moteur-table-structure .moteur-rangee-variation .moteur-cellule-valeur .moteur-case-signe {
+  font-size: 1.4em;
+}
+
+.moteur-table-structure .moteur-case-signe:focus-visible {
+  outline: 2px solid var(--violet-vif);
+  outline-offset: -2px;
+}
+
+/* Verdict du serveur : seul le TEXTE prend la couleur du verdict (jamais de fond ni de bulle). */
+.moteur-table-structure .moteur-case-signe.moteur-case-renseignee:disabled {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  color: var(--etat-texte);
+}
+
+/* Flèche de variation tracée (trait + pointe fixe, pivotés d'un seul bloc) : dimensions et angle posés par tableauSignes.js
+   d'après la vraie taille de la case ; seule la couleur vient d'ici (`currentColor` = `--text`, ou la couleur du verdict). */
+.moteur-fleche {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  height: 0;
+  pointer-events: none;
+}
+
+.moteur-fleche-trait {
+  display: block;
+  width: 100%;
+  height: 2px;
+  background: currentColor;
+}
+
+.moteur-fleche-pointe {
+  position: absolute;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /* Verdict du serveur : filets haut et bas du tableau plein-bord (il n'a ni cadre arrondi ni bords latéraux). */

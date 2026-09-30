@@ -1234,3 +1234,20 @@ Aucun `text-transform` dans `ecrans.css` (testé, `scripts/test-structure-tablea
 
 ### I. Limites
 9 colonnes à 390 px : 9 × 44 = 396 px > 390 px (page qui déborde de 6 px) — **hors périmètre par décision** (aucun générateur actuel n'a plus de 7 colonnes) ; à traiter avec le premier générateur à 4 valeurs. Le `0` reste offert sur toute colonne `racine` d'une ligne de facteur, même si ce n'est pas la racine de CE facteur (distracteur accepté). La 3b-3 (gen7) écrira son écran directement sur ce contrat ; `spec-gen7-phase3a.md` §2.9 décrit encore l'ancien format à 7 clés de variation.
+
+
+## §31 : Tableau de signes — rendu aligné sur la RÉFÉRENCE validée (correctif visuel de §30)
+
+Aucun SQL, aucun changement de contrat ni de comportement : seul l'**apparence** change.
+
+### A. Ce qui était faux
+§30 avait été livré vert (tests, Chromium) mais **visuellement éloigné** de la maquette validée : le prompt de révision décrivait le comportement en mots, jamais le code de la maquette. Écarts constatés : une bulle (bordure + rayon + fond) autour de chaque valeur ; sur la ligne « Variations », de petits carrés de 44px centrés dans les 3 cases fusionnées ; des flèches SVG à tracé fixe par symbole ; un titre « TABLEAU DE SIGNES » et des `<` dans la ligne des x que la référence n'a pas ; titres de ligne en blanc avec `letter-spacing: 0.08em`. **Cause : DONNÉES manquantes** (référence non transmise), pas un défaut de test — les tests vérifiaient le comportement demandé, pas l'apparence. Le code de référence est désormais dans le dépôt : `docs/reference/tableau-signes.html` (règle CLAUDE.md).
+
+### B. Corrigé (`public/moteur/ecrans.css:372-520`, `public/moteur/ecrans/tableauSignes.js:73-145`)
+Cellules à filets fins (`border-top`/`border-right: 1px solid var(--border)`) ; case = toute la cellule, sans bordure, fond ni ombre (`.moteur-table-structure .moteur-case-signe`, `ecrans.css:451`), 48px (56px sur les variations) ; bande de symboles entièrement `--surface-sunken` (`:420`) ; titres de ligne en bandeau `--surface-sunken`, `letter-spacing: 0.03em`, toujours sans `text-transform` ; colonnes d'intervalle de la ligne des x vides ; plus de titre « TABLEAU DE SIGNES » (retiré des déclarations du témoin, le champ `titre` reste facultatif). **Flèche tracée et pivotée** (`dessinerFleche`, `tableauSignes.js:75`) : mesure de la vraie case, angle `atan2(0,42·h ; 0,68·l)`, trait de la bonne longueur + pointe SVG fixe, `transform: rotate` d'un seul bloc, redessinée par `ResizeObserver` (`:134`) ; le sommet reste un glyphe `⌢`/`⌣`. Moins typographique `−` affiché pour `-` (la valeur envoyée reste `-`). `aria-label` inchangés (noms en toutes lettres). Les constantes numériques de la flèche (`FLECHE`, `:73`) sont des mesures de tracé, posées en style en ligne : `ecrans.css` n'a toujours aucune longueur en dur (`scripts/test-design-system.ts` : `1px`/`2px` désormais admis aussi dans `padding`/`margin`, exceptions déjà documentées).
+
+### C. Vérification
+`tsc -b` ; `test-design-system` (508) ; Chromium **1 463** à 390 et 1280 px, dont (`scripts/chromium-temoin-technique.ts:712`) : aucune bordure / fond / ombre sur les cases, chaque bouton occupe toute sa cellule, bande de symboles entièrement `rgb(246, 243, 251)`, flèche = **un trait + une pointe, sans aucun caractère**, angle < 0 à droite (montante) puis > 0 (descendante) puis retour (jamais `?`), longueur du trait proportionnelle à la case, flèche **redessinée** après redimensionnement, sommet en glyphe. **Comparaison côte à côte** avec le rendu de la référence dans Chromium : `captures-chromium/390-etendu-10b-carte-tableau-7-colonnes.png`.
+
+### D. Limites
+Le tableau « hérité » (5 colonnes, Section A du témoin) garde son ancien style : il n'est utilisé que par le témoin. Les symboles de la bande (`x_1`) et les valeurs (`-2`) s'affichent encore en source LaTeX tant que KaTeX n'est pas branché (3b-3, commit 4) ; la référence utilise `x₁` et `−2`. Rendu de la carte : la référence est un seul bloc de 390px ; ici le tableau sort de la carte jusqu'aux bords de l'écran (décision du propriétaire, §30-E).
