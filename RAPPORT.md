@@ -1340,9 +1340,96 @@ Aucun changement de schéma SQL.
 
 **Prérequis de production** : `eleves.actif` existe déjà (`supabase/migrations/cumulatif.sql:39`, requis par la connexion) ; aucun changement de schéma.
 
+## §36 : Bouton « Aperçu » du formulaire de tâche réactivé (`POST /api/taches/apercu`, `eleve.html?apercu=1`)
+
+**Contexte** : en phase 1 le bouton `#btn-apercu-tache` était `disabled` (§3, gen7 n'existait pas comme générateur exécutable). Les quatre variantes de gen7 sont au registre depuis §33.
+
+### A. Mécanisme de l'ancien pilote (lu avant de réactiver ; lecture seule, `pilote@6acc102`)
+`lib/routes/taches-apercu.ts` : un **élève fantôme** par professeur (`profs.eleve_apercu_id` : un vrai compte Supabase Auth + une vraie ligne `eleves`, jamais inscrit à une classe), créé paresseusement au premier aperçu ; une tâche `est_apercu = true` aux réglages du formulaire, assignée à ce seul fantôme ; l'ancienne tâche d'aperçu du professeur supprimée en cascade (au plus UNE vivante) ; mot de passe du fantôme réinitialisé à chaque aperçu puis `signInWithPassword` → session renvoyée. `prof.html` la dépose dans `localStorage` (`apercu_session`) et ouvre `eleve.html?apercu=1` ; `initModeApercu` la lit, la RETIRE aussitôt, saute la connexion, affiche un bandeau, masque la navigation et ouvre la tâche. Les réponses du professeur sont bien écrites dans `reponses` ; ce sont l'absence d'inscription du fantôme et `est_apercu` qui les excluent de toute vue professeur — pas une absence d'écriture.
+
+### B. Écarts avec l'ancien pilote (délibérés, chacun testé ou mesuré)
+1. **Fenêtre d'assignation.** `GET /api/eleves/tableau-de-bord` de ce dépôt ignore une tâche sans ligne `taches_assignations_eleves` (`lib/routes/eleves/tableau-de-bord.ts:103`, `if (!fenetre) continue`) : sans elle, l'aperçu s'ouvrait sur « aucune tâche ». La route en crée une pour le fantôme (`lib/routes/taches-apercu.ts:191`). **Mesuré** : sans cette ligne, le tableau de bord du fantôme montre 0 tâche (mutant du test).
+2. **Cascade de suppression.** L'ancienne ignorait `aides_utilisees` (table ajoutée depuis) et `taches_assignations_eleves` : le 2e aperçu aurait échoué sur une clé étrangère dès qu'une aide avait été demandée (gen7 propose des aides). Couverts (`:72-94`), en lots de 100 identifiants (limite d'URL de `.in()`), identifiants lus par `recupererToutesLesLignes`. Mutant vérifié.
+3. **Registre.** Exercices tirés du registre (`chercherGenerateur`, `tirerGraine`, `champs_attendus` du générateur), plus de `genererLigne`. Une composition contenant une variante sans générateur exécutable est refusée en **409** `variantes_indisponibles` AVANT toute écriture (`:116`) : l'aperçu précédent reste alors en place.
+4. **Compensation et aléa.** Compte Auth du fantôme supprimé si une écriture suivante échoue ; mots de passe par `crypto.randomBytes` (l'ancienne utilisait `Math.random`).
+5. **Popup.** `window.open` fait après un `await` est bloqué par plusieurs navigateurs (l'activation utilisateur n'y survit pas) : l'onglet est ouvert DANS le clic (`about:blank`), puis reçoit son adresse ; refermé en cas d'échec, message dédié si le navigateur bloque (`prof.html:4587`).
+6. **Nom facultatif.** Un aperçu n'a pas besoin d'un intitulé : `« Aperçu »` est envoyé si le champ est vide (l'ancienne route rejetait un nom vide en 400).
+7. **Sortie du moteur.** En mode aperçu « Retour » et la fin de tâche ferment l'onglet (`eleve.html:536`, `sortieDuMoteur`) : le fantôme n'a pas de liste de tâches à laquelle revenir.
+
+### C. Activation du bouton par le REGISTRE
+`GET /api/catalogue-generateurs` ajoute `executable` à chaque entrée, **dérivé à la volée** de `chercherGenerateur` (`lib/routes/catalogue-generateurs.ts:29`) — jamais une liste tenue à part (CLAUDE.md « Registre unique »). `mettreAJourBoutonApercu` (`prof.html:1938`) : bouton inactif sans exercice, ou si une variante composée a `executable === false` (infobulle qui la nomme) ; rappelé par `mettreAJourBadgeComposition` et après le chargement du catalogue. Le 409 serveur reste la vraie garde. Aujourd'hui les quatre variantes gen7 sont exécutables, donc le bouton est actif dès qu'un exercice est composé ; le cas « non exécutable » est prouvé en retirant une variante du registre le temps du test.
+
+### D. Livré
+Route `lib/routes/taches-apercu.ts` (routée AVANT `/api/taches/:id`, sinon « apercu » serait lu comme un identifiant : `api/router.ts:314`) ; `prof.html:766` (bouton), `:1938`, `:4587` ; `eleve.html:90` (bandeau), `:1028` (`initModeApercu`, `persistSession: false` : sinon la session fantôme écraserait celle du professeur, même origine et même clé de stockage), `:536`. Harnais : `fauxSupabase.ts` (jeton `eleve:` d'un compte élève, e-mail renvoyé par `updateUserById`, défaut `est_apercu = false`).
+
+### E. Tests
+`scripts/test-apercu-tache.ts` (45 vérifications, vrai routeur, registre gen7 réel) : validation (401, 405, 400 dont le témoin technique), 409 avant écriture, fantôme créé puis réutilisé, réglages copiés (correction coupée, aide, chrono), exercices du registre, session, moteur élève tel quel, cascade complète, exclusion de `GET /api/taches`, de `PATCH/DELETE`, des statistiques et listes professeur, isolation entre professeurs, catalogue `executable`. `test-routeur.ts` : dispatch de `taches/apercu`. **Chromium** (`scenarioApercu`, `chromium-temoin-technique.ts:1581`, 390 et 1280 px) sur une tâche gen7 composée dans le formulaire : bouton inactif/actif/infobulle, garde par le registre (variante retirée puis restituée), clic → onglet `eleve.html?apercu=1` (bandeau, navigation masquée, KaTeX, session retirée du stockage, réglage « correction coupée » respecté), première réponse juste, rechargement → « Session d'aperçu introuvable », page professeur intacte, 2e aperçu remplaçant le 1er, « Fermer cet onglet ». `chromium-temoin` : 1839 vérifications.
+
+### F. Limites
+- Deux aperçus SIMULTANÉS d'un professeur sans fantôme pourraient en créer deux (le dernier lié gagne) ; hors d'un usage manuel.
+- La session du fantôme transite par `localStorage` (même origine, retirée au chargement) : comme l'ancien pilote ; un script tiers de la même origine pourrait la lire pendant ce court instant.
+- Aucun changement de schéma (`profs.eleve_apercu_id`, `taches.est_apercu` existent : `cumulatif.sql:151-152`).
+- Le message de capture évoqué par la demande (« tâche gen7 composée comme celle de la capture ») n'était pas joint : le scénario compose lui-même `af_mise_en_evidence` + `af_irreductible`.
+- **Une exécution de `chromium-temoin` sur l'export propre du commit a échoué UNE fois (exception non identifiée : ma commande n'affichait que la dernière ligne, tronquée), sans que je puisse la reproduire ensuite : 12 exécutions consécutives sur le même code, toutes vertes (4 locales, 2 sur exports neufs à froid, 6 en parallèle par trois). Cause non établie ; hypothèse non vérifiée : une attente de 30 s dépassée sur une machine chargée. Si elle revient, relever le message complet avant toute conclusion.**
+- `scripts/test-rls-schema.ts` attendait 3 fichiers appelant `signInWithPassword` : `lib/routes/taches-apercu.ts` est le 4e (examiné : dernier usage du client, aucun accès aux données ensuite).
+
+## §37 : Retour en arrière sur les écrans déjà traversés (réglage de tâche, sous correction immédiate coupée)
+
+Section construite commit par commit (3b-4). Décisions D1–D9 validées avant le code ; l'analyse est dans `ANALYSE-retour-en-arriere.md` (livrée en conversation).
+
+### §37-A : une seule définition de « terminé » (commits 1 et 2)
+
+- `champsTermines` (`lib/etatExercice.ts`) est désormais la seule dérivation de « quels champs sont terminés » (réussi, tentatives épuisées ou chrono écoulé). Utilisée par `lib/verrouillageTache.ts`, `lib/routes/eleves/mes-resultats.ts` et `lib/routes/profs/resultats.ts` ; `calculerEtatExercice` reste l'autorité à l'échelle d'un exercice, et un test différentiel de 4000 historiques les compare (`scripts/test-completion-unique.ts`).
+- **Deux changements de comportement, délibérés et isolés** : (1) `verrouillageTache` ignorait l'expiration du chrono (tâche classée « en cours » pour le contrôle d'écriture, « effectuée » au tableau de bord) ; (2) la colonne `complet` de la vue prof valait « a une réponse » (plus faible que les trois autres écrans). Les deux échouent sur l'ancien code (mutants tués dans le test).
+
+### §37-B : réglage `autoriser_retour_arriere` et colonne `remis_le` (commit 3)
+
+- **Migration (discipline CLAUDE.md)** : `taches.autoriser_retour_arriere boolean not null default false` (`supabase/schema.sql:109`, `supabase/migrations/cumulatif.sql:195`) et `exercices_assignes.remis_le timestamptz` (`schema.sql:210`, `cumulatif.sql:196`), instructions idempotentes (`add column if not exists`) ajoutées au fichier cumulatif, jamais à un nouveau fichier. `scripts/test-reglage-retour-arriere.ts` vérifie leur présence dans les DEUX fichiers.
+- **Règle effective** : `retourArriereEffectif(feedbackImmediat, autoriser)` (`lib/moteurTentatives.ts`, à côté de `tentativesMaxEffectif`) — le réglage n'agit que sous correction coupée.
+- **Validation** (`lib/validationCorpsTaches.ts`) : booléen exigé ; `autoriser_retour_arriere: true` avec `chrono_mode: "par_ecran"` → 400 (D6). Le chrono `global` reste compatible.
+- **Routes** : `POST /api/taches`, `PATCH /api/taches/:id`, `POST /api/taches/apercu` écrivent la colonne ; `GET /api/taches` la renvoie (édition, duplication).
+- **Formulaire prof** (`public/prof.html`, `#autoriser-retour-arriere`) : même patron que `reponse-visible` — grisé et décoché sous correction immédiate ou chrono « Par écran » ; réciproquement l'option « Par écran » est grisée tant que le retour est coché ; envoyé par `construireCorpsTache`, relu par `demarrerModification` / `dupliquerTache`, remis à zéro par `reinitialiserFormulaireTache`. Scénario Chromium ajouté à `scenarioProf` (aux deux largeurs).
+- Non encore câblé à ce commit (suivants) : l'usage de `remis_le` et de la règle effective par les routes élève.
+
+### §37-C : état dérivé, remise, routes (commit 4)
+
+- **Validité par ordre d'insertion (D4)** — `lib/reponsesValides.ts` : `amontsTransitifs` (fermeture transitive de `dependDe`) et `dernieresReponsesValides` (une ligne est valide si elle est plus récente que la dernière ligne de chaque écran amont ; l'état d'un écran = sa dernière ligne si valide). Aucune écriture d'invalidation, aucune ligne supprimée : la dérivation est identique à chaque lecture. `reponses.ts` n'ajoute une ligne que si la réponse DIFFÈRE (D7, `trim()` des deux côtés) : renvoyer la même chose ne périme rien.
+- **État** — `calculerEtatExercice` (`lib/etatExercice.ts`) calcule, sous retour effectif (`ContexteTache.retourArriere`), sur `donneesEffectives` (dernière ligne valide par écran, un seul essai) ; chaque champ porte `modifiable` (répondu, exercice pas verrouillé) ; l'exercice porte `exerciceVerrouille` (rendu OU chrono global écoulé, `exerciceVerrouille()`), `pretARendre`, et **`termine` exige le verrou** : avoir répondu à tout ne termine pas l'exercice (D3) — sinon la dernière réponse ferait tout révéler sans relecture possible. `champsTermines` (lecteurs en masse : `verrouillageTache`, `mes-resultats`, `profs/resultats`) applique la même règle (tout ou rien selon `remis`/chrono global).
+- **Routes** : `POST /api/reponses` accepte l'écran courant OU un écran `modifiable` (409 sinon, 409 si rendu/expiré), vérifie sur les seules réponses de l'AMONT de l'écran, répond `modifiable`, `pret_a_rendre`, `champs_invalides`, `inchangee` (uniquement sous retour) ; `POST /api/reponses/aide` reste possible sur un écran modifiable (l'usage est collant, D5) ; `GET /api/exercices/:id` sert `modifiable`, `tache.retour_arriere`, `pret_a_rendre` et la dernière réponse valide (pré-remplissage) ; **nouvelle route `POST /api/exercices/:id/remise`** (`lib/routes/exercices/[id]/remise.ts`, routée dans `api/router.ts`) : pose `exercices_assignes.remis_le` si tous les écrans ont une réponse valide, idempotente, 403 hors fenêtre, 409 sans retour.
+- **Lecteurs alignés sur la dernière réponse valide** : `mes-resultats` (score d'un champ) et `profs/resultats` (statut par champ ; un écran périmé disparaît de la liste). Les statistiques (bugs détectés, durées, `serieActuelle`) continuent de compter TOUTES les lignes (D8).
+- **Non-fuite** : `scripts/test-retour-arriere.ts` compare la réponse HTTP d'une réussite et d'un échec (identiques, octet pour octet) et le GET (identique hors texte saisi) ; aucun `statut` nulle part dans la charge utile avant la remise.
+- **Harnais** : `BaseMemoire.maintenant` produit des horodatages STRICTEMENT croissants (microsecondes comme Postgres) : deux lignes insérées dans la même milliseconde étaient ex æquo et le tri `order("horodatage")` en perdait l'ordre — invisible jusque-là, fatal dès que l'ordre d'insertion porte du sens.
+- **Tests** : `scripts/test-retour-arriere.ts` (147 vérifications, trois mutants tués : validité toujours vraie, réponse identique ignorée, `termine` sans remise) ; `scripts/test-completion-unique.ts` étendu (2000 historiques sous retour : `calculerEtatExercice.termine` == complétion des lecteurs).
+- **Limite connue** : modifier le réglage `autoriser_retour_arriere` d'une tâche DÉJÀ assignée change la lecture des lignes existantes (sans retour, la première ligne d'un écran fait foi ; avec retour, la dernière valide) ; comme pour les autres réglages de tâche, rien ne réécrit l'historique.
+
+### §37-D : client (commit 5)
+
+- **Pré-remplissage des six composants** (`public/moteur/ecrans/*.js`) : option `valeurInitiale` (la `reponse_brute` DÉJÀ confirmée) ; décodage défensif (JSON illisible, forme inattendue, valeur hors de l'alphabet de la case → ignoré, écran vierge ; `Object.hasOwn` pour les clés d'élève ; jamais interprété comme du balisage). Contrat documenté dans `public/moteur/ecrans/index.js`.
+- **Moteur** (`public/moteur/moteur.js`) : sous `tache.retour_arriere`, un écran répondu montre sa dernière réponse et « Modifier ma réponse » ; la modification ouvre l'écran pré-rempli (un seul formulaire à la fois, « Annuler ») ; la réponse enregistrée annonce `inchangée` / `modifiée` et le nombre d'écrans aval à refaire, sans aucun verdict ; quand `pret_a_rendre`, le panneau « Rendre cet exercice » (confirmation en deux clics) appelle `POST /api/exercices/:id/remise` (`api.rendreExercice`), puis le flux d'origine (« Exercice terminé », « Terminer »). Le chrono global court aussi pendant la relecture (compte à rebours dans le panneau). Tout l'état affiché vient du serveur ; le client ne garde que l'écran en cours de modification.
+- **Style** : aucune valeur en dur, aucun nouveau token (`.moteur-bouton-modifier { align-self: flex-start }` ; le panneau réutilise `.moteur-fin`) ; `chromium-design` et `test-design-system` inchangés.
+- **Scénario Chromium** (`scenarioRetourArriere`, 390 px et 1280 px, gen7 `af_mise_en_evidence` sous correction coupée) : parcours des 8 écrans sans aucun verdict ; les 8 écrans pré-remplis ; **aller-retour exact des six composants** (« Modifier » puis « Valider » sans changer → « Réponse inchangée. », aucune ligne écrite : si un composant re-sérialisait autrement, une simple relecture périmerait l'aval) ; « Annuler » n'écrit rien ; modifier `racinesChamp1` → racinesChamp2 ET le tableau disparaissent, « Rendre » aussi, racinesChamp2 est rebâti sur la nouvelle factorisation ; remise en deux clics ; les 8 verdicts n'apparaissent qu'APRÈS la remise ; les anciennes lignes sont conservées ; le réglage est sans effet sous correction immédiate (« Question suivante », aucun « Modifier »).
+- **Écart signalé** : dans ce scénario, `racinesChamp1` est modifié en enveloppant la bonne réponse de parenthèses (`(4x(x + 5))`), c'est-à-dire une chaîne DIFFÉRENTE mais équivalente — le comportement voulu (D7) : c'est la chaîne, pas le sens, qui décide d'invalider l'aval.
+
+### §37-E : citations, validation, points ouverts
+
+**Livré (fichier:ligne, tête de série `4c060ed`)** — règle effective `lib/moteurTentatives.ts:51` ; validité `lib/reponsesValides.ts:18` (amonts), `:37` (dernières valides) ; définition unique de « terminé » `lib/etatExercice.ts:230` (`champsTermines`), `:260` (`exerciceVerrouille`), `:268` (`donneesEffectives`), `:320` (`calculerEtatExercice`) ; lecteurs : `lib/verrouillageTache.ts:85`, `lib/routes/eleves/mes-resultats.ts:250`, `lib/routes/profs/resultats.ts:384` ; routes : réponse identique `lib/routes/reponses.ts:141`, vérification sur l'amont `:133`, aide `lib/routes/reponses-aide.ts:75`, remise `lib/routes/exercices/[id]/remise.ts:15` (routée `api/router.ts:209`) ; validation `lib/validationCorpsTaches.ts:88` ; colonnes `supabase/schema.sql:109` et `:210`, **migration `supabase/migrations/cumulatif.sql:195-196`** ; formulaire `public/prof.html:663` (case), `:2467` (verrou réciproque) ; client `public/moteur/moteur.js:125` (« Modifier ma réponse »), `:157` (panneau « Rendre ») ; scénario `scripts/chromium-temoin-technique.ts:1563`.
+
+**Validation (export propre `git archive` + `npm ci` du commit `4c060ed`)** : `tsc -b` propre ; tous les `scripts/test-*.ts` + smoke verts (dont les nouveaux `test-completion-unique` 6048, `test-reglage-retour-arriere` 30, `test-retour-arriere` 147) ; `chromium-temoin` 1985 ; `chromium-design` 222 (inchangé). Mutants tués : ancienne boucle de `verrouillageTache` (sans chrono), ancienne définition « a une réponse » de la vue prof, validité toujours vraie, réponse identique ignorée, `termine` sans remise.
+
+**Décisions D1–D9** : appliquées telles que validées ; D9 en deux commits (unification à comportement conservé sauf `verrouillageTache` qui gagne le chrono ; puis `profs/resultats` aligné, changement assumé).
+
+**Points ouverts / risques**
+1. Le comportement d'un exercice déjà commencé change si le prof active/désactive le réglage après assignation (§37-C, limite connue).
+2. `serieActuelle` (tableau de bord) compte toutes les lignes, y compris les réponses remplacées par une modification (D8) : une série peut inclure un essai remplacé.
+3. Un élève qui n'ouvre jamais « Rendre » laisse l'exercice « en cours » jusqu'à l'échéance de la tâche ; à l'échéance, la tâche passe en « antérieure » et les DERNIÈRES réponses valides sont notées/révélées sans remise (comportement voulu de l'échéance, non spécifié par D1–D9 : à confirmer).
+4. Deux onglets ouverts sur le même exercice : le second reçoit un 409 (état relu), jamais une corruption ; pas de verrou optimiste sur `remis_le`.
+
+### §37-F : confirmations du propriétaire
+
+Point ouvert 3 de §37-E **confirmé comme comportement voulu** : à l'échéance sans remise explicite, les dernières réponses valides sont notées et révélées automatiquement. Points 1 (réglage modifié après assignation) et 2 (série qui compte les réponses remplacées) : acceptés tels quels, non urgents.
 ## §38 : Cascade des coefficients dans gen7 (`allure`, `axeSommet`, `domaineImage`) et cascade uniforme dans les deux régimes de correction
 
-Numérotation : §36 (Aperçu) et §37 (retour en arrière) sont dans les PR #23 et #24, pas encore fusionnées ; cette section prend §38 pour ne pas leur être en concurrence.
+Numérotation : §36 (Aperçu, PR #23) et §37 (retour en arrière, PR #24) sont fusionnés avant cette section ; conflit de fin de fichier résolu en gardant les trois sections dans l'ordre.
 
 ### A. Signalement du propriétaire (test réel, tâche déployée, `f(x) = 4x² + 8x`, correction immédiate)
 

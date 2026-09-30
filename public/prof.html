@@ -648,6 +648,20 @@
               <button type="button" class="stepper-bouton" data-stepper-cible="tentatives-supplementaires" data-stepper-delta="1" aria-label="Augmenter">+</button>
             </div>
           </div>
+          <!--
+            Retour en arrière (RAPPORT §37) : l'élève peut revenir sur un écran déjà traversé et modifier sa réponse
+            jusqu'à ce qu'il rende l'exercice. Même patron que `reponse-visible` : toujours visible, GRISÉ et remis à
+            décoché quand il n'a pas de sens (`appliquerVerrouReglages`) — sous correction immédiate (le verdict est
+            déjà connu) ou avec un chrono « par écran » (un écran chronométré ne se rouvre pas). Le serveur applique la
+            même règle (`retourArriereEffectif`, lib/moteurTentatives.ts ; lib/validationCorpsTaches.ts).
+          -->
+          <div class="ligne-reglage ligne-reglage-indent">
+            <span class="libelle-reglage">
+              <span class="icone-reglage icone-reglage-bleue" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path></svg></span>
+              <span id="libelle-retour-arriere">Autoriser le retour en arrière (si correction immédiate coupée)</span>
+            </span>
+            <input id="autoriser-retour-arriere" type="checkbox" class="toggle-natif" />
+          </div>
           <div class="ligne-reglage">
             <span class="libelle-reglage">
               <span class="icone-reglage icone-reglage-violette" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></span>
@@ -761,10 +775,9 @@
                ET en modification (voir prof.html : construireCorpsTache() lit le formulaire tel
                quel, sans distinction) : ouvre la tâche telle qu'un élève la verrait, sans la créer
                réellement (POST /api/taches/apercu, jamais POST /api/taches). -->
-          <!-- Phase 1 (socle de gestion) : désactivé — dépend de POST /api/taches/apercu
-               (lib/routes/taches-apercu.ts, reporté en phase 2, voir RAPPORT.md §3) ET du moteur
-               d'exercice côté eleve.html (absent de cette phase, voir RAPPORT.md §E). -->
-          <button id="btn-apercu-tache" type="button" class="bouton-secondaire" disabled title="Disponible en phase 2 (nécessite le moteur d'exercice)"><span class="emoji-inline" aria-hidden="true">👁</span>Aperçu</button>
+          <!-- Réactivé (RAPPORT §36) : actif seulement si la composition n'est pas vide ET si tout ce qui est composé sait
+               s'exécuter (`executable`, dérivé du registre par GET /api/catalogue-generateurs) — voir `mettreAJourBoutonApercu`. -->
+          <button id="btn-apercu-tache" type="button" class="bouton-secondaire" disabled title="Ajoutez au moins un exercice à la composition pour voir l'aperçu."><span class="emoji-inline" aria-hidden="true">👁</span>Aperçu</button>
           <!-- `btn-creer-tache-texte` distinct de l'emoji : `demarrerModification`/`quitterModeModification`
                réécrivent le libellé ("Créer" <-> "Enregistrer les modifications") — cibler ce seul
                span évite d'effacer `.emoji-inline` en réassignant `textContent` sur tout le bouton. -->
@@ -1931,6 +1944,24 @@
      * de l'onglet "Sélection" restent synchronisés PARTOUT où le total l'est déjà, sans nouveau
      * point d'appel à retenir séparément.
      */
+    /**
+     * État du bouton « Aperçu » (RAPPORT §36) : inactif sans exercice, ou si une variante composée n'a pas de générateur exécutable
+     * (`executable` renvoyé par GET /api/catalogue-generateurs, dérivé du registre — jamais une liste tenue ici). Le serveur refuse
+     * de toute façon (409) : ce n'est que l'explication donnée avant le clic.
+     */
+    function mettreAJourBoutonApercu() {
+      const bouton = document.getElementById("btn-apercu-tache");
+      const choisies = [...document.querySelectorAll("#composition-dynamique input[data-variante-id]")].filter((input) => (Number(input.value) || 0) > 0).map((input) => input.dataset.varianteId);
+      const indisponibles = choisies.filter((id) => (catalogue ?? []).some((entree) => entree.variante_id === id && entree.executable === false));
+      bouton.disabled = choisies.length === 0 || indisponibles.length > 0;
+      bouton.title =
+        choisies.length === 0
+          ? "Ajoutez au moins un exercice à la composition pour voir l'aperçu."
+          : indisponibles.length > 0
+            ? "Aperçu impossible : le générateur n'est pas encore disponible pour " + indisponibles.join(", ") + "."
+            : "Voir la tâche comme l'élève la verra (rien n'est créé).";
+    }
+
     function mettreAJourBadgeComposition() {
       const total = [...document.querySelectorAll("#composition-dynamique input[data-variante-id]")].reduce(
         (somme, input) => somme + (Number(input.value) || 0),
@@ -1939,6 +1970,7 @@
       document.getElementById("badge-composition-valeur").textContent = total;
       const nom = document.getElementById("nom-tache").value.trim();
       document.getElementById("btn-creer-tache").disabled = nom === "" || total === 0;
+      mettreAJourBoutonApercu();
       // Prompt "Nouveau design (Aperçu en direct)" : même total/même nom que le badge flottant
       // ci-dessus, réutilisés tels quels pour l'aperçu en direct de la carte "Créer une tâche"
       // (`#apercu-tache-nom`/`#apercu-tache-exercices`) — jamais recalculés séparément.
@@ -2178,6 +2210,7 @@
       // visibilité sur le mode chrono actuellement sélectionné (cohérent même si `chrono-mode` a
       // déjà une valeur != "aucun" au moment où ce catalogue finit de charger, ex. rechargement).
       appliquerVerrouReglages();
+      mettreAJourBoutonApercu();
     }
 
     /** Cache de la dernière liste de classes du prof (prompt "Gestion de classe étendue", Étape 5) — réutilisé par le formulaire de transfert pour peupler son sélecteur de classe de destination sans refetch. */
@@ -2427,6 +2460,20 @@
       for (const bouton of document.querySelectorAll('[data-stepper-cible="tentatives-supplementaires"]')) bouton.disabled = !feedbackImmediat;
       if (!feedbackImmediat) tentatives.value = "0";
 
+      // Retour en arrière (RAPPORT §37) : grisé + décoché sous correction immédiate ET avec un chrono « par écran »
+      // (incompatible, D6) ; réciproquement l'option « Par écran » du chrono est grisée tant que le retour est coché.
+      const retour = document.getElementById("autoriser-retour-arriere");
+      const selecteurChrono = document.getElementById("chrono-mode");
+      const retourImpossible = feedbackImmediat || selecteurChrono.value === "par_ecran";
+      retour.disabled = retourImpossible;
+      if (retourImpossible) retour.checked = false;
+      selecteurChrono.querySelector('option[value="par_ecran"]').disabled = retour.checked;
+      document.getElementById("libelle-retour-arriere").title = feedbackImmediat
+        ? "Sans effet sous correction immédiate : décochez d'abord la correction immédiate."
+        : selecteurChrono.value === "par_ecran"
+          ? "Incompatible avec un chrono par écran."
+          : "";
+
       const aideActivee = document.getElementById("aide-activee").checked;
       const penalite = document.getElementById("aide-penalite-pourcent");
       penalite.disabled = !aideActivee;
@@ -2496,6 +2543,7 @@
 
     document.getElementById("feedback-immediat").addEventListener("change", appliquerVerrouReglages);
     document.getElementById("aide-activee").addEventListener("change", appliquerVerrouReglages);
+    document.getElementById("autoriser-retour-arriere").addEventListener("change", appliquerVerrouReglages);
     document.getElementById("chrono-mode").addEventListener("change", () => {
       if (document.getElementById("chrono-mode").value === "par_ecran") preremplirDureesVariantesParDefaut();
       appliquerVerrouReglages();
@@ -2519,6 +2567,7 @@
       }
       document.getElementById("feedback-immediat").checked = true;
       document.getElementById("reponse-visible").checked = false;
+      document.getElementById("autoriser-retour-arriere").checked = false;
       document.getElementById("tentatives-supplementaires").value = "0";
       document.getElementById("aide-activee").checked = false;
       document.getElementById("aide-penalite-pourcent").value = "0";
@@ -2570,6 +2619,7 @@
       remplirFormulaireComposition(tache.composition);
       document.getElementById("feedback-immediat").checked = tache.feedback_immediat;
       document.getElementById("reponse-visible").checked = tache.reponse_visible;
+      document.getElementById("autoriser-retour-arriere").checked = tache.autoriser_retour_arriere ?? false;
       document.getElementById("tentatives-supplementaires").value = tache.tentatives_supplementaires ?? 0;
       document.getElementById("aide-activee").checked = tache.aide_activee ?? false;
       document.getElementById("aide-penalite-pourcent").value = tache.aide_penalite_pourcent ?? 0;
@@ -2951,6 +3001,7 @@
       remplirFormulaireComposition(tache.composition);
       document.getElementById("feedback-immediat").checked = tache.feedback_immediat;
       document.getElementById("reponse-visible").checked = tache.reponse_visible;
+      document.getElementById("autoriser-retour-arriere").checked = tache.autoriser_retour_arriere ?? false;
       document.getElementById("tentatives-supplementaires").value = tache.tentatives_supplementaires ?? 0;
       document.getElementById("aide-activee").checked = tache.aide_activee ?? false;
       document.getElementById("aide-penalite-pourcent").value = tache.aide_penalite_pourcent ?? 0;
@@ -4467,6 +4518,7 @@
 
       const feedbackImmediat = document.getElementById("feedback-immediat").checked;
       const reponseVisible = document.getElementById("reponse-visible").checked;
+      const autoriserRetourArriere = document.getElementById("autoriser-retour-arriere").checked;
       // Prompt "Tentatives, aide, récapitulatif" (3/3), Étape 1 : 4 réglages supplémentaires, mêmes conventions que ci-dessus.
       const tentativesSupplementaires = Number(document.getElementById("tentatives-supplementaires").value);
       const aideActivee = document.getElementById("aide-activee").checked;
@@ -4502,6 +4554,7 @@
           composition,
           feedback_immediat: feedbackImmediat,
           reponse_visible: reponseVisible,
+          autoriser_retour_arriere: autoriserRetourArriere,
           tentatives_supplementaires: tentativesSupplementaires,
           aide_activee: aideActivee,
           aide_penalite_pourcent: aidePenalitePourcent,
@@ -4559,10 +4612,53 @@
      * immédiatement au chargement côté `eleve.html`, voir ce fichier) : mécanisme de transfert
      * même origine entre onglets, pas de nouveau canal réseau.
      */
-    // Bouton désactivé pour la phase 1 (voir HTML) — garde défensive au cas où il serait
-    // déclenché programmatiquement malgré `disabled`.
-    document.getElementById("btn-apercu-tache").addEventListener("click", () => {
-      document.getElementById("statut-creer-tache").textContent = "Aperçu indisponible en phase 1 (nécessite le moteur d'exercice).";
+    /**
+     * L'onglet est ouvert AVANT l'appel réseau, dans le geste de l'utilisateur : un `window.open` fait après un `await` est bloqué par
+     * les navigateurs (Safari, Firefox) qui ne gardent pas l'activation. Il reçoit son adresse une fois la session prête ; en cas
+     * d'échec il est refermé. La session de l'élève fantôme passe par `localStorage` (même origine), retirée dès le chargement côté
+     * `eleve.html` (`initModeApercu`).
+     */
+    document.getElementById("btn-apercu-tache").addEventListener("click", async () => {
+      const statut = document.getElementById("statut-creer-tache");
+      statut.textContent = "Préparation de l'aperçu…";
+      const onglet = window.open("about:blank", "_blank");
+      const fermer = () => {
+        if (onglet) onglet.close();
+      };
+      try {
+        const resultatCorps = construireCorpsTache();
+        if (!resultatCorps.ok) {
+          fermer();
+          statut.textContent = resultatCorps.erreur;
+          document.getElementById("chrono-duree-secondes").focus();
+          return;
+        }
+        if (resultatCorps.corps.composition.length === 0) {
+          fermer();
+          statut.textContent = "Ajoutez au moins un exercice à la composition avant l'aperçu.";
+          return;
+        }
+        if (!onglet) {
+          statut.textContent = "Le navigateur a bloqué l'ouverture de l'aperçu : autorisez les fenêtres pop-up pour ce site, puis recommencez.";
+          return;
+        }
+        // Le nom n'a aucune importance pour un aperçu : on n'oblige pas à en saisir un.
+        const corps = { ...resultatCorps.corps, nom: resultatCorps.corps.nom.trim() === "" ? "Aperçu" : resultatCorps.corps.nom };
+        const entetes = { "Content-Type": "application/json", Authorization: "Bearer " + session.access_token };
+        const reponse = await fetch("/api/taches/apercu", { method: "POST", headers: entetes, body: JSON.stringify(corps) });
+        const charge = await reponse.json();
+        if (!reponse.ok) {
+          fermer();
+          statut.textContent = formaterErreur(charge);
+          return;
+        }
+        localStorage.setItem("apercu_session", JSON.stringify({ access_token: charge.access_token, refresh_token: charge.refresh_token }));
+        onglet.location.href = "/eleve.html?apercu=1";
+        statut.textContent = "Aperçu ouvert dans un nouvel onglet.";
+      } catch (e) {
+        fermer();
+        statut.textContent = "Erreur inattendue : " + e.message;
+      }
     });
 
     /**

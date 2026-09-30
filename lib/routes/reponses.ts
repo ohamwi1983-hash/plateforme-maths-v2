@@ -8,6 +8,7 @@ import { construireChampVue, REGLAGES_FORCEES_ANTERIEURES } from "../tableauDeBo
 import { joindreBugsDetectes } from "../profilCompetences";
 import { categorieTachePourEleve } from "../verrouillageTache";
 import { dependancesTerminees } from "../cascadeEcrans";
+import { amontsTransitifs } from "../reponsesValides";
 
 /**
  * POST /api/reponses — enregistre et vérifie UNE réponse confirmée (dispatcher générique, phase 2).
@@ -96,14 +97,27 @@ export const gererReponses = avecGestionErreurs(async function handler(req: Requ
 
   const avant = calculerEtatExercice(regenere, donnees, contexte, maintenant);
   const champAvant = avant.champs.find((c) => c.champ === champ)!;
-  if (champAvant.verrouille) {
-    res.status(409).json({ erreur: "Ce champ est déjà terminé" });
-    return;
-  }
-  // Un champ n'est soumis que dans l'ordre déclaré par le générateur (`etatActuel`).
-  if (avant.champCourant !== champ) {
-    res.status(409).json({ erreur: "Ce champ n'est pas l'écran courant de l'exercice", champ_courant: avant.champCourant });
-    return;
+  if (avant.retourArriere) {
+    // Retour en arrière (RAPPORT §37) : un exercice rendu ou dont le chrono global est écoulé ne se modifie plus ; sinon on peut
+    // soumettre l'écran courant OU modifier un écran déjà répondu (`modifiable`), jamais un écran pas encore atteint.
+    if (avant.exerciceVerrouille) {
+      res.status(409).json({ erreur: "Cet exercice est rendu ou son temps est écoulé : il n'est plus modifiable" });
+      return;
+    }
+    if (!champAvant.modifiable && avant.champCourant !== champ) {
+      res.status(409).json({ erreur: "Ce champ n'est pas l'écran courant de l'exercice", champ_courant: avant.champCourant });
+      return;
+    }
+  } else {
+    if (champAvant.verrouille) {
+      res.status(409).json({ erreur: "Ce champ est déjà terminé" });
+      return;
+    }
+    // Un champ n'est soumis que dans l'ordre déclaré par le générateur (`etatActuel`).
+    if (avant.champCourant !== champ) {
+      res.status(409).json({ erreur: "Ce champ n'est pas l'écran courant de l'exercice", champ_courant: avant.champCourant });
+      return;
+    }
   }
 
   // Cascade (RAPPORT §18) : la vérification se fait sur l'exercice PROJETÉ (données issues des réponses
@@ -114,27 +128,41 @@ export const gererReponses = avecGestionErreurs(async function handler(req: Requ
     res.status(409).json({ erreur: "Cet écran dépend d'écrans précédents pas encore terminés", champ_courant: avant.champCourant });
     return;
   }
-  const projete = projeterExercice(regenere, avant.reponsesConfirmees, contexte);
+  // Retour en arrière : on vérifie sur les seules réponses de l'AMONT de l'écran (jamais sur celle d'un écran aval, ni sur l'ancienne
+  // réponse de l'écran lui-même) ; sans retour, tous les écrans terminés sont déjà en amont de l'écran courant : filtre sans effet.
+  const amontDuChamp = amontsTransitifs(regenere.ecrans).get(champ) ?? new Set<string>();
+  const projete = projeterExercice(regenere, avant.retourArriere ? avant.reponsesConfirmees.filter((r) => amontDuChamp.has(r.champ)) : avant.reponsesConfirmees, contexte);
   const resultat = verifierAvecControle(regenere.generateur, projete.exercice, champ, reponse_brute);
   const debutChamp = horodatageDebutPertinent("par_ecran", champ, donnees.debuts);
   const aideUtilisee = donnees.champsAvecAide.has(champ);
-  const { error: erreurInsertion } = await admin.from("reponses").insert({
-    exercice_assigne_id,
-    champ,
-    valeur_saisie: reponse_brute,
-    statut: resultat.statut,
-    bug_detecte: joindreBugsDetectes(resultat.codesCompetence),
-    indice_utilise: aideUtilisee,
-    duree_ecoulee_secondes: calculerDureeEcouleeSecondes(debutChamp, maintenant),
-    // Score partiel (RAPPORT §16) : stockée pour le calcul serveur du score, JAMAIS renvoyée plus bas.
-    fraction_correcte: resultat.statut === "not_equivalent" ? (resultat.fractionCorrecte ?? null) : null,
-  });
-  if (erreurInsertion) throw new Error(erreurInsertion.message);
 
-  const historiqueApres = [...(donnees.reponsesParChamp.get(champ) ?? []), { exercice_assigne_id, champ, valeur_saisie: reponse_brute, statut: resultat.statut, indice_utilise: aideUtilisee, fraction_correcte: resultat.statut === "not_equivalent" ? (resultat.fractionCorrecte ?? null) : null }];
-  donnees.reponsesParChamp.set(champ, historiqueApres);
-  const apres = calculerEtatExercice(regenere, donnees, contexte, maintenant);
+  // Retour en arrière, D7 : re-soumettre EXACTEMENT la même réponse (aux espaces de bord près) ne touche à rien — aucune ligne
+  // écrite, donc aucun écran aval invalidé (l'ordre d'insertion est ce qui invalide, `lib/reponsesValides.ts`).
+  const identique = avant.retourArriere && champAvant.modifiable && champAvant.derniere !== null && champAvant.derniere.valeur_saisie.trim() === reponse_brute.trim();
+  let apres = avant;
+  if (!identique) {
+    const fractionCorrecte = resultat.statut === "not_equivalent" ? (resultat.fractionCorrecte ?? null) : null; // Score partiel (RAPPORT §16) : stockée pour le calcul serveur du score, JAMAIS renvoyée plus bas.
+    const { error: erreurInsertion } = await admin.from("reponses").insert({
+      exercice_assigne_id,
+      champ,
+      valeur_saisie: reponse_brute,
+      statut: resultat.statut,
+      bug_detecte: joindreBugsDetectes(resultat.codesCompetence),
+      indice_utilise: aideUtilisee,
+      duree_ecoulee_secondes: calculerDureeEcouleeSecondes(debutChamp, maintenant),
+      fraction_correcte: fractionCorrecte,
+    });
+    if (erreurInsertion) throw new Error(erreurInsertion.message);
+
+    const ligneInseree = { exercice_assigne_id, champ, valeur_saisie: reponse_brute, statut: resultat.statut, indice_utilise: aideUtilisee, fraction_correcte: fractionCorrecte };
+    donnees.reponsesParChamp.set(champ, [...(donnees.reponsesParChamp.get(champ) ?? []), ligneInseree]);
+    donnees.lignesChronologiques.push(ligneInseree);
+    apres = calculerEtatExercice(regenere, donnees, contexte, maintenant);
+  }
   const champApres = apres.champs.find((c) => c.champ === champ)!;
+  // Écrans aval qui avaient une réponse valide et n'en ont plus : la conséquence de la modification (à re-répondre), déterminée par
+  // les seuls choix de l'élève — pas un verdict — donc sans risque de révélation.
+  const champsInvalides = avant.champs.filter((c) => c.champ !== champ && c.verrouille && !apres.champs.find((a) => a.champ === c.champ)!.verrouille).map((c) => c.champ);
 
   // Même gating que le tableau de bord (`construireChampVue` -> `construireReponseHttpReponses`) :
   // `feedback_immediat`/`reponse_visible`, révélation forcée à l'épuisement des tentatives (sous
@@ -144,17 +172,21 @@ export const gererReponses = avecGestionErreurs(async function handler(req: Requ
   // consulte via GET /api/exercices/:id, qui révèle tout à ce moment-là).
   const tacheTerminee = apres.termine && (await tacheEstCompletePourEleve(admin, ligne.tache_id as string, eleve.id, maintenant));
   const reveleTout = revelationFinDeTache(contexte, tacheTerminee);
-  const vue = construireChampVue(champ, { valeur_saisie: reponse_brute, statut: resultat.statut }, regenere.generateur.solutionAttendue(projete.exercice, champ), reveleTout ? REGLAGES_FORCEES_ANTERIEURES : contexte.reglages, reveleTout, champApres.etat);
+  const reponseRetenue = identique ? { valeur_saisie: champAvant.derniere!.valeur_saisie, statut: champAvant.derniere!.statut } : { valeur_saisie: reponse_brute, statut: resultat.statut };
+  const vue = construireChampVue(champ, reponseRetenue, regenere.generateur.solutionAttendue(projete.exercice, champ), reveleTout ? REGLAGES_FORCEES_ANTERIEURES : contexte.reglages, reveleTout, champApres.etat);
+  // `verrouille` pour le client = « ne peut plus être modifié » : un champ répondu mais modifiable (retour en arrière) n'est pas verrouillé.
+  const verrouilleClient = champApres.verrouille && !champApres.modifiable;
   res.status(200).json({
     ...(vue.statut !== null ? { statut: vue.statut } : {}),
     ...(vue.solution_attendue !== null ? { solution_attendue: vue.solution_attendue } : {}),
     ...(resultat.statut === "parse_error" && contexte.reglages.feedback_immediat ? { message_erreur: resultat.messageErreur } : {}),
     enregistree: true,
-    verrouille: champApres.verrouille,
+    verrouille: verrouilleClient,
     revele: vue.revele,
     tache_terminee: tacheTerminee,
-    tentatives_restantes: champApres.verrouille ? 0 : Math.max(0, contexte.tentativesMax - champApres.etat.tentativesUtilisees),
+    tentatives_restantes: verrouilleClient ? 0 : champApres.modifiable ? 1 : Math.max(0, contexte.tentativesMax - champApres.etat.tentativesUtilisees),
     champ_courant: apres.champCourant,
     exercice_termine: apres.termine,
+    ...(avant.retourArriere ? { modifiable: champApres.modifiable, pret_a_rendre: apres.pretARendre, champs_invalides: champsInvalides, inchangee: identique } : {}),
   });
 });

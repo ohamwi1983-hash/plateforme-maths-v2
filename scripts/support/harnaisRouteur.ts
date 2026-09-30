@@ -124,6 +124,7 @@ export interface OptionsTache {
   aide_penalite_pourcent?: number;
   chrono_mode?: string;
   chrono_duree_secondes?: number | null;
+  autoriser_retour_arriere?: boolean;
   nom?: string;
 }
 
@@ -139,6 +140,7 @@ export function creerTache(s: Scenario, o: OptionsTache = {}): string {
     afficher_recapitulatif: false,
     chrono_mode: o.chrono_mode ?? "aucun",
     chrono_duree_secondes: o.chrono_duree_secondes ?? null,
+    autoriser_retour_arriere: o.autoriser_retour_arriere ?? false,
     est_apercu: false,
   });
   for (const v of o.variantes ?? [{ variante_id: "_temoin_technique_v1", nombre_exercices: 1 }]) {

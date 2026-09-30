@@ -13,7 +13,7 @@
 export default {
   type: "intervalle",
 
-  creer(_ecran, { surSoumission, surChangement }) {
+  creer(_ecran, { surSoumission, surChangement, valeurInitiale }) {
     const element = document.createElement("div");
     element.className = "moteur-intervalle";
     const etat = { crochetG: null, crochetD: null, infG: false, infD: false };
@@ -111,6 +111,22 @@ export default {
     });
     borneG.addEventListener("input", changement);
     borneD.addEventListener("input", changement);
+    // Réponse déjà confirmée (retour en arrière) : `{ crochetGauche, borneGauche, crochetDroit, borneDroite }` ; autre forme ignorée.
+    if (typeof valeurInitiale === "string") {
+      try {
+        const v = JSON.parse(valeurInitiale);
+        if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+          if (v.crochetGauche === "[" || v.crochetGauche === "]") etat.crochetG = v.crochetGauche;
+          if (v.crochetDroit === "[" || v.crochetDroit === "]") etat.crochetD = v.crochetDroit;
+          if (v.borneGauche === "-inf") etat.infG = true;
+          else if (typeof v.borneGauche === "string") borneG.value = v.borneGauche;
+          if (v.borneDroite === "+inf") etat.infD = true;
+          else if (typeof v.borneDroite === "string") borneD.value = v.borneDroite;
+        }
+      } catch {
+        /* réponse illisible : écran vierge */
+      }
+    }
     rafraichir();
 
     return {

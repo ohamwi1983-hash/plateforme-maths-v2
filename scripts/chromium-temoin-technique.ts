@@ -26,7 +26,7 @@ import {
 } from "../src/generateurs/_temoinTechnique";
 
 import {
-  champsAnalyseFonction, genererExercice as genererGen7, rangeesTableau, reponseBruteCorrecteAnalyseFonction as reponseGen7, type CategorieAnalyseFonction, type ExerciceAnalyseFonction,
+  champsAnalyseFonction, factorisationVersLatex, genererExercice as genererGen7, rangeesTableau, reponseBruteCorrecteAnalyseFonction as reponseGen7, type CategorieAnalyseFonction, type ExerciceAnalyseFonction,
 } from "../src/generateurs/analyseFonction";
 
 const RACINE = join(__dirname, "..");
@@ -564,6 +564,32 @@ async function scenarioProf(navigateur: any, base: string, largeur: number) {
   await page.locator("#feedback-immediat").check({ force: true });
   t = await lireTentatives();
   verifier(!t.inputDesactive && t.boutonsDesactives.every((d) => !d), `${l} prof : recocher la correction immédiate déverrouille les tentatives`);
+
+  // Retour en arrière (RAPPORT §37) : grisé sous correction immédiate ET avec un chrono « par écran » (réciproquement, « Par écran » est
+  // grisé tant que le retour est coché) ; décoché de force quand il devient impossible ; envoyé au serveur ; relu à la modification.
+  {
+    const lireRetour = async () => (await page.evaluate(`(() => { const c = document.getElementById("autoriser-retour-arriere"); const o = document.querySelector('#chrono-mode option[value="par_ecran"]'); return { coche: c.checked, desactive: c.disabled, opacite: Number(getComputedStyle(c).opacity), parEcranDesactive: o.disabled }; })()`)) as { coche: boolean; desactive: boolean; opacite: number; parEcranDesactive: boolean };
+    let r = await lireRetour();
+    verifier(r.desactive && !r.coche && r.opacite < 1, `${l} prof : sous correction immédiate, le retour en arrière est grisé et décoché (${JSON.stringify(r)})`);
+    await page.locator("#feedback-immediat").uncheck({ force: true });
+    r = await lireRetour();
+    verifier(!r.desactive && !r.coche && !r.parEcranDesactive, `${l} prof : correction coupée : le retour est disponible (décoché), « Par écran » l'est aussi (${JSON.stringify(r)})`);
+    await page.locator("#autoriser-retour-arriere").check({ force: true });
+    r = await lireRetour();
+    verifier(r.coche && r.parEcranDesactive, `${l} prof : retour coché -> l'option chrono « Par écran » est grisée (${JSON.stringify(r)})`);
+    await page.locator("#autoriser-retour-arriere").uncheck({ force: true });
+    await page.locator("#chrono-mode").selectOption("par_ecran");
+    r = await lireRetour();
+    verifier(r.desactive && !r.coche, `${l} prof : chrono « Par écran » -> le retour est grisé et décoché (${JSON.stringify(r)})`);
+    await page.locator("#chrono-mode").selectOption("global");
+    r = await lireRetour();
+    verifier(!r.desactive, `${l} prof : chrono « Global » : le retour reste disponible (${JSON.stringify(r)})`);
+    await page.locator("#autoriser-retour-arriere").check({ force: true });
+    await page.locator("#feedback-immediat").check({ force: true });
+    r = await lireRetour();
+    verifier(r.desactive && !r.coche, `${l} prof : recocher la correction immédiate décoche et grise le retour (${JSON.stringify(r)})`);
+    await page.locator("#chrono-mode").selectOption("aucun");
+  }
 
   // Un champ DÉSACTIVÉ doit se voir : le grisage était écrit champ par champ (`#aide-penalite-pourcent:disabled`), le champ
   // « Durée (secondes) » du chrono en était resté dépourvu (RAPPORT §29). On vérifie ici les deux états sur le rendu réel.
@@ -1407,8 +1433,8 @@ async function ouvrirTacheGen7(navigateur: any, base: string, largeur: number, s
 }
 
 /** Assigne (API réelle) une tâche d'UNE variante gen7 avec la graine voulue ; renvoie l'exercice régénéré. */
-async function assignerGen7(s: Scenario, categorie: CategorieAnalyseFonction, graine: number, options: { feedback?: boolean; tentatives?: number } = {}): Promise<{ ex: ExerciceAnalyseFonction; tacheId: string }> {
-  const tacheId = creerTache(s, { nom: `gen7 ${categorie}`, feedback_immediat: options.feedback ?? true, tentatives_supplementaires: options.tentatives ?? 0, reponse_visible: true, variantes: [{ variante_id: `af_${categorie}`, nombre_exercices: 1 }] });
+async function assignerGen7(s: Scenario, categorie: CategorieAnalyseFonction, graine: number, options: { feedback?: boolean; tentatives?: number; retour?: boolean } = {}): Promise<{ ex: ExerciceAnalyseFonction; tacheId: string }> {
+  const tacheId = creerTache(s, { nom: `gen7 ${categorie}`, autoriser_retour_arriere: options.retour ?? false, feedback_immediat: options.feedback ?? true, tentatives_supplementaires: options.tentatives ?? 0, reponse_visible: true, variantes: [{ variante_id: `af_${categorie}`, nombre_exercices: 1 }] });
   const origine = Math.random;
   Math.random = () => graine / 2 ** 32;
   try {
@@ -1585,6 +1611,130 @@ async function scenarioGen7Cascade(navigateur: any, base: string, largeur: numbe
   }
 }
 
+/**
+ * Retour en arrière (RAPPORT §37), joué dans le navigateur sur gen7 (cascade racinesChamp1 -> racinesChamp2 -> tableau) :
+ * « Modifier ma réponse » sur chaque écran (les SIX composants pré-remplis, aller-retour sans altération : re-valider sans changer
+ * = « inchangée », aucune ligne écrite), modification de racinesChamp1 qui périme racinesChamp2 ET le tableau, remise explicite,
+ * révélation d'un coup APRÈS la remise seulement ; et le réglage sans effet sous correction immédiate.
+ */
+async function scenarioRetourArriere(navigateur: any, base: string, largeur: number) {
+  const l = `${largeur} retour`;
+  const s: Scenario = creerScenario();
+  installerBase(s.base);
+  const { ex, tacheId } = await assignerGen7(s, "mise_en_evidence", 12345, { feedback: false, retour: true }); // f = 4x² + 8x
+  const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+  const courant = page.locator(".moteur-ecran-courant");
+  const lignes = () => s.base.table("reponses").length;
+  const sansVerdict = async () => (await page.locator(".moteur-statut-correct, .moteur-statut-not_equivalent, .moteur-statut-parse_error, .moteur-solution").count()) === 0;
+  /** « Valider » puis le bouton de suite ; renvoie le message affiché entre les deux. */
+  const validerRetour = async (suite: RegExp): Promise<string> => {
+    await courant.getByRole("button", { name: "Valider", exact: true }).click();
+    await page.waitForSelector(".moteur-ecran-courant .moteur-retour .moteur-statut");
+    const message = ((await courant.locator(".moteur-retour .moteur-statut").textContent()) ?? "").replace(/\s+/g, " ").trim();
+    await courant.getByRole("button", { name: suite }).click();
+    return message;
+  };
+  const carte = (champ: string) => page.locator(`.moteur-ecran:has(.moteur-consigne)`).nth(ORDRE_GEN7.indexOf(champ));
+  const ORDRE_GEN7 = champsAnalyseFonction("mise_en_evidence");
+
+  // ── Parcours des 8 écrans ; jamais de verdict, jamais de « Question suivante » : un écran répondu reste modifiable ──
+  for (const [i, champ] of ORDRE_GEN7.entries()) {
+    await page.waitForFunction(`document.querySelectorAll(".moteur-ecran-courant").length === 1`);
+    await repondreGen7(page, ex, champ);
+    const message = await validerRetour(i === ORDRE_GEN7.length - 1 ? /Revoir mes réponses/ : /Écran suivant/);
+    verifier(message === "Réponse enregistrée.", `${l} / ${champ} : message neutre (« ${message} »)`);
+    verifier(await sansVerdict(), `${l} / ${champ} : aucun verdict ni solution`);
+  }
+  await page.waitForSelector(".moteur-remise");
+  verifier((await page.getByRole("button", { name: "Modifier ma réponse" }).count()) === 8, `${l} : « Modifier ma réponse » sur chacun des 8 écrans`);
+  verifier((await page.locator(".moteur-ecran-courant").count()) === 0 && (await sansVerdict()), `${l} : panneau « Rendre » affiché, rien de corrigé`);
+  await page.screenshot({ path: join(CAPTURES, `${l}-01-panneau-remise.png`), fullPage: true });
+
+  // ── Chaque composant est pré-rempli, et re-valider sans changer n'écrit RIEN (round-trip exact de la réponse) ──
+  const avantTout = lignes();
+  for (const champ of ORDRE_GEN7) {
+    await carte(champ).getByRole("button", { name: "Modifier ma réponse" }).click();
+    await page.waitForFunction(`document.querySelectorAll(".moteur-ecran-courant").length === 1`);
+    verifier((await page.locator(".moteur-remise").count()) === 0 && (await page.getByRole("button", { name: "Annuler" }).count()) === 1, `${l} / ${champ} : un seul formulaire ouvert, avec « Annuler », sans panneau de remise`);
+    const valider = courant.getByRole("button", { name: "Valider", exact: true });
+    verifier(await valider.isEnabled(), `${l} / ${champ} : l'écran s'ouvre pré-rempli (« Valider » actif sans rien toucher)`);
+    if (champ === "coefficients") {
+      const attendu = JSON.parse(reponseGen7(ex, "coefficients"));
+      const lus = { a: await courant.locator("#mc-coefficients-a").inputValue(), b: await courant.locator("#mc-coefficients-b").inputValue(), c: await courant.locator("#mc-coefficients-c").inputValue() };
+      verifier(JSON.stringify(lus) === JSON.stringify(attendu), `${l} : champs_multiples pré-rempli (attendu ${JSON.stringify(attendu)}, lu ${JSON.stringify(lus)})`);
+    }
+    if (champ === "racinesReconnaissance") verifier((await courant.locator(".moteur-choix input:checked").count()) === 1, `${l} : qcm pré-rempli (un choix coché)`);
+    if (champ === "racinesChamp1") verifier((await courant.locator(".moteur-champ").first().inputValue()) === reponseGen7(ex, "racinesChamp1"), `${l} : champ_expression pré-rempli`);
+    if (champ === "racinesChamp2") verifier((await courant.locator(".moteur-liste-ligne .moteur-champ").count()) === 2, `${l} : liste_valeurs pré-rempli (2 valeurs)`);
+    if (champ === "domaineImage") verifier((await courant.locator(".moteur-apercu").textContent()) !== "?… ; …?" && (await courant.locator(".moteur-bouton-crochet").first().textContent()) !== "?", `${l} : intervalle pré-rempli`);
+    if (champ === "tableauSignes") verifier((await courant.locator(".moteur-case-renseignee").count()) === (await courant.locator(".moteur-case-signe").count()), `${l} : tableau_signes pré-rempli (toutes les cases renseignées)`);
+    if (champ === "racinesChamp1") await page.screenshot({ path: join(CAPTURES, `${l}-02-modification-prerempli.png`), fullPage: true });
+    const message = await validerRetour(/Revoir mes réponses|Continuer/);
+    verifier(message.includes("Réponse inchangée."), `${l} / ${champ} : re-valider sans changer = « inchangée » (« ${message} »)`);
+    await page.waitForSelector(".moteur-remise");
+  }
+  verifier(lignes() === avantTout, `${l} : aller-retour exact des six composants : AUCUNE ligne écrite (${avantTout} -> ${lignes()})`);
+
+  // ── Annuler ──
+  await carte("allure").getByRole("button", { name: "Modifier ma réponse" }).click();
+  await page.getByRole("button", { name: "Annuler" }).click();
+  await page.waitForSelector(".moteur-remise");
+  verifier(lignes() === avantTout, `${l} : « Annuler » n'écrit rien`);
+
+  // ── Modifier racinesChamp1 : racinesChamp2 ET le tableau sont périmés ; le panneau disparaît ──
+  await carte("racinesChamp1").getByRole("button", { name: "Modifier ma réponse" }).click();
+  const autreEcriture = `(${reponseGen7(ex, "racinesChamp1")})`; // même factorisation, chaîne DIFFÉRENTE : c'est une modification
+  await courant.locator(".moteur-champ").first().fill(autreEcriture);
+  const message = await validerRetour(/Continuer/);
+  verifier(message.includes("Réponse modifiée.") && message.includes("à refaire (2)"), `${l} : la modification annonce 2 écrans à refaire (« ${message} »)`);
+  await page.waitForSelector(".moteur-ecran-courant");
+  verifier((await page.locator(".moteur-message-succes").first().textContent())?.includes("2 écrans qui en dépendent") === true, `${l} : la notice de tête le rappelle`);
+  verifier((await lireConsigneGen7(page)).includes(`$${factorisationVersLatex(autreEcriture)} = 0$`), `${l} : racinesChamp2 est bâti sur la NOUVELLE factorisation (${autreEcriture})`);
+  verifier((await page.locator(".moteur-remise").count()) === 0 && (await page.getByRole("button", { name: "Modifier ma réponse" }).count()) === 6, `${l} : plus de « Rendre » ; 6 écrans intacts restent modifiables`);
+  verifier((await page.locator(".moteur-table-structure").count()) === 0, `${l} : le tableau (aval) a disparu`);
+  await page.screenshot({ path: join(CAPTURES, `${l}-03-aval-perime.png`), fullPage: true });
+  await repondreGen7(page, ex, "racinesChamp2");
+  await validerRetour(/Écran suivant/);
+  await page.waitForSelector(".moteur-table-structure");
+  await repondreGen7(page, ex, "tableauSignes");
+  await validerRetour(/Revoir mes réponses/);
+  await page.waitForSelector(".moteur-remise");
+  verifier(await sansVerdict(), `${l} : toujours rien de corrigé avant la remise`);
+  verifier(s.base.table("exercices_assignes")[0]!.remis_le === null, `${l} : pas encore rendu`);
+
+  // ── Remise : confirmation en deux clics, puis TOUT est révélé d'un coup ──
+  await page.getByRole("button", { name: "Rendre cet exercice" }).click();
+  verifier(s.base.table("exercices_assignes")[0]!.remis_le === null, `${l} : le premier clic ne rend pas (confirmation demandée)`);
+  await page.getByRole("button", { name: /Confirmer : après avoir rendu/ }).click();
+  await page.waitForSelector(".moteur-fin:has-text('Exercice terminé')");
+  verifier(s.base.table("exercices_assignes")[0]!.remis_le !== null, `${l} : remis_le écrit`);
+  verifier((await page.getByRole("button", { name: "Modifier ma réponse" }).count()) === 0, `${l} : plus aucun « Modifier » après la remise`);
+  {
+    const [justes, faux] = [await page.locator(".moteur-statut-correct").count(), await page.locator(".moteur-statut-not_equivalent").count()];
+    verifier(justes === 8 && faux === 0, `${l} : après la remise, les 8 verdicts sont révélés d'un coup (dernières réponses, toutes justes) : ${justes} justes, ${faux} faux ${JSON.stringify(s.base.table("reponses").slice(8).map((r) => [r.champ, r.statut]))}`);
+  }
+  await page.screenshot({ path: join(CAPTURES, `${l}-04-apres-remise.png`), fullPage: true });
+  await page.getByRole("button", { name: "Terminer" }).click();
+  await page.waitForSelector("#tableau-de-bord:not([hidden])");
+  verifier(s.base.table("reponses").length === avantTout + 3, `${l} : les anciennes lignes sont conservées (${s.base.table("reponses").length})`);
+  verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+  await contexte.close();
+
+  // ── Réglage sans effet sous correction immédiate ──
+  {
+    const s2: Scenario = creerScenario();
+    installerBase(s2.base);
+    const { ex: ex2 } = await assignerGen7(s2, "mise_en_evidence", 12345, { feedback: true, retour: true });
+    const c2 = await ouvrirTacheGen7(navigateur, base, largeur, s2);
+    await repondreGen7(c2.page, ex2, "coefficients");
+    await c2.page.locator(".moteur-ecran-courant").getByRole("button", { name: "Valider", exact: true }).click();
+    await c2.page.waitForSelector(".moteur-statut-correct");
+    verifier((await c2.page.getByRole("button", { name: "Question suivante" }).count()) === 1 && (await c2.page.getByRole("button", { name: /Modifier ma réponse/ }).count()) === 0, `${l} : sous correction immédiate le réglage est sans effet (verdict, « Question suivante », aucun « Modifier »)`);
+    await c2.contexte.close();
+  }
+  void tacheId;
+}
+
 /** Le professeur COMPOSE une tâche gen7 dans prof.html (champs actifs, création réelle), puis l'assigne ; l'élève la reçoit. */
 async function scenarioGen7Prof(navigateur: any, base: string, largeur: number) {
   const l = `${largeur}`;
@@ -1631,6 +1781,117 @@ async function scenarioGen7Prof(navigateur: any, base: string, largeur: number) 
   await c2.close();
 }
 
+/**
+ * « Aperçu » du formulaire de tâche (RAPPORT §36), au clic, sur une tâche gen7 composée dans l'interface : le bouton n'est actif que si la
+ * composition est non vide ET exécutable (`executable`, dérivé du registre) ; le clic ouvre un onglet `eleve.html?apercu=1` où le
+ * professeur voit la tâche comme l'élève (bandeau, pas de navigation, KaTeX, correction selon les réglages), sans rien créer de réel.
+ */
+async function scenarioApercu(navigateur: any, base: string, largeur: number) {
+  const l = `${largeur} aperçu`;
+  const s: Scenario = creerScenario();
+  installerBase(s.base);
+  const { page, contexte, journal } = await preparerPage(navigateur, base, largeur, largeur < 600 ? 800 : 900, `prof:${s.profId}`, "p@x");
+  // Routes du CONTEXTE : le stub Supabase et les polices doivent aussi servir l'onglet ouvert par « Aperçu ».
+  await contexte.route("**/unpkg.com/@supabase/supabase-js**", (r: any) => r.fulfill({ contentType: "text/javascript", body: stubSupabase(`prof:${s.profId}`, "p@x") }));
+  await contexte.route("**/fonts.googleapis.com/**", (r: any) => r.fulfill({ contentType: "text/css", body: "" }));
+  await contexte.route("**/fonts.gstatic.com/**", (r: any) => r.abort());
+  await page.goto(base + "/prof.html");
+  await page.waitForSelector('button[data-onglet="taches"]:visible');
+  await page.locator('button[data-onglet="taches"]').click();
+  await page.locator("#bouton-accordeon-creer").click();
+  await page.waitForSelector("#composition-dynamique input.stepper-valeur", { state: "attached" });
+  const bouton = page.locator("#btn-apercu-tache");
+  const quantite = (variante: string, valeur: number) => page.evaluate(`(() => { const i = document.querySelector('#composition-dynamique input[data-variante-id="${variante}"]'); i.value = "${valeur}"; i.dispatchEvent(new Event("input", { bubbles: true })); i.dispatchEvent(new Event("change", { bubbles: true })); })()`);
+
+  verifier(await bouton.isDisabled() && /au moins un exercice/.test((await bouton.getAttribute("title")) ?? ""), `${l} : sans exercice, « Aperçu » est inactif et dit pourquoi`);
+  await quantite("af_mise_en_evidence", 1);
+  await quantite("af_irreductible", 1);
+  verifier(await bouton.isEnabled() && /comme l'élève/.test((await bouton.getAttribute("title")) ?? ""), `${l} : composition gen7 non vide -> « Aperçu » actif SANS nom de tâche saisi`);
+
+  // Garde par le registre : une variante composée sans générateur exécutable rend le bouton inactif, avec la raison.
+  const registre = require("../lib/registreGenerateurs").REGISTRE_GENERATEURS as { variante_id: string }[];
+  const rang = registre.findIndex((g) => g.variante_id === "af_irreductible");
+  const [retire] = registre.splice(rang, 1);
+  try {
+    await page.reload();
+    await page.waitForSelector('button[data-onglet="taches"]:visible');
+    await page.locator('button[data-onglet="taches"]').click();
+    await page.locator("#bouton-accordeon-creer").click();
+    await page.waitForSelector("#composition-dynamique input.stepper-valeur", { state: "attached" });
+    await quantite("af_mise_en_evidence", 1);
+    verifier(await bouton.isEnabled(), `${l} : variante exécutable seule -> actif même si une autre est retirée du registre`);
+    await quantite("af_irreductible", 1);
+    verifier(await bouton.isDisabled() && /af_irreductible/.test((await bouton.getAttribute("title")) ?? ""), `${l} : variante sans générateur composée -> inactif et nommée dans l'infobulle (${await bouton.getAttribute("title")})`);
+    await quantite("af_irreductible", 0);
+    verifier(await bouton.isEnabled(), `${l} : la variante retirée de la composition, le bouton se réactive`);
+  } finally {
+    registre.splice(rang, 0, retire!);
+  }
+  await page.reload();
+  await page.waitForSelector('button[data-onglet="taches"]:visible');
+  await page.locator('button[data-onglet="taches"]').click();
+  await page.locator("#bouton-accordeon-creer").click();
+  await page.waitForSelector("#composition-dynamique input.stepper-valeur", { state: "attached" });
+  await quantite("af_mise_en_evidence", 1);
+  await quantite("af_irreductible", 1);
+  await page.locator("#feedback-immediat").uncheck({ force: true }); // correction coupée : le réglage doit se retrouver dans l'aperçu
+  await page.screenshot({ path: join(CAPTURES, `${largeur}-apercu-01-formulaire.png`), fullPage: false });
+
+  // ── Clic : un onglet s'ouvre sur eleve.html?apercu=1 ──
+  const [popup] = await Promise.all([contexte.waitForEvent("page"), bouton.click()]);
+  popup.on("pageerror", (e: Error) => journal.pageerrors.push("aperçu : " + e.message));
+  popup.on("console", (m: any) => { if (m.type() === "error") journal.erreursConsole.push("aperçu : " + m.text()); });
+  popup.on("response", (r: any) => { if (r.status() >= 400) journal.reponsesEnErreur.push({ statut: r.status(), methode: r.request().method(), url: new URL(r.url()).pathname }); });
+  await popup.waitForSelector("#bandeau-mode-apercu:not([hidden])");
+  await popup.waitForSelector(".moteur-ecran-courant");
+  verifier(popup.url().endsWith("/eleve.html?apercu=1"), `${l} : l'onglet est eleve.html?apercu=1 (${popup.url()})`);
+  verifier((await popup.locator("#bandeau-mode-apercu").innerText()).includes("Mode aperçu"), `${l} : bandeau « Mode aperçu » visible`);
+  verifier(await popup.locator("#onglets-nav").isHidden() && (await popup.locator("#salutation-eleve").innerText()) === "Aperçu professeur", `${l} : pas de navigation élève, salutation « Aperçu professeur »`);
+  verifier((await popup.evaluate(`localStorage.getItem("apercu_session")`)) === null && (await page.evaluate(`localStorage.getItem("apercu_session")`)) === null, `${l} : la session d'aperçu est retirée du stockage dès le chargement`);
+  verifier((await page.locator("#statut-creer-tache").innerText()).includes("Aperçu ouvert"), `${l} : le formulaire annonce « Aperçu ouvert dans un nouvel onglet »`);
+  const consigne: string = await popup.locator(".moteur-ecran-courant .moteur-consigne").innerText();
+  verifier(consigne.includes("Étudie la fonction suivante") && (await popup.locator(".moteur-ecran-courant .moteur-consigne .katex").count()) >= 1, `${l} : l'énoncé gen7 est rendu par KaTeX dans l'aperçu`);
+  await popup.screenshot({ path: join(CAPTURES, `${largeur}-apercu-02-onglet-eleve.png`), fullPage: true });
+
+  // Le fantôme, le professeur et la base : un aperçu, pas une tâche.
+  const fantome = s.base.table("profs").find((p) => p.id === s.profId)!.eleve_apercu_id as string;
+  const taches = s.base.table("taches");
+  verifier(taches.length === 1 && taches[0]!.est_apercu === true && taches[0]!.feedback_immediat === false && typeof fantome === "string", `${l} : UNE tâche d'aperçu (correction coupée reprise du formulaire), aucune vraie tâche créée`);
+  verifier(!s.base.table("inscriptions").some((i) => i.eleve_id === fantome) && s.base.table("exercices_assignes").length === 2 && s.base.table("exercices_assignes").every((e) => e.eleve_id === fantome), `${l} : 2 exercices pour le seul fantôme, hors de toute classe`);
+
+  // Le moteur, tel quel : première réponse juste (réglage « correction coupée » : aucun verdict affiché).
+  const premier = s.base.table("exercices_assignes")[0]!;
+  const ex = genererGen7(String(premier.variante_id).slice(3) as CategorieAnalyseFonction, Number(premier.graine));
+  await repondreGen7(popup, ex, "coefficients");
+  await popup.locator(".moteur-ecran-courant").getByRole("button", { name: "Valider", exact: true }).click();
+  await popup.waitForSelector(".moteur-statut");
+  verifier((await popup.locator(".moteur-statut-correct, .moteur-statut-not_equivalent, .moteur-statut-parse_error").count()) === 0, `${l} : correction coupée du formulaire respectée dans l'aperçu (aucun verdict affiché)`);
+  verifier(s.base.table("reponses").length === 1 && s.base.table("reponses")[0]!.exercice_assigne_id === premier.id, `${l} : la réponse est écrite comme pour un élève (exclue des vues professeur par est_apercu)`);
+
+  // Un rechargement de l'onglet d'aperçu échoue proprement (session consommée).
+  await popup.reload();
+  await popup.waitForFunction(`(document.getElementById("erreur-fatale-pilote")?.textContent ?? "").includes("Session d'aperçu introuvable")`);
+  verifier(true, `${l} : rechargement -> « Session d'aperçu introuvable » (jamais une session périmée rejouée)`);
+  await popup.evaluate(`document.getElementById("erreur-fatale-pilote").textContent = ""`); // attendu ici : ne pas le compter comme panne à la fermeture
+
+  // Le professeur n'a rien perdu : sa page, sa session, sa liste de tâches.
+  verifier((await page.locator("#nom-tache").count()) === 1 && !(await page.evaluate(`document.body.innerText`) as string).includes("Impossible de charger"), `${l} : la page professeur est intacte`);
+  const liste = (await page.evaluate(`fetch("/api/taches", { headers: { Authorization: "Bearer prof:${s.profId}" } }).then((r) => r.json())`)) as unknown[];
+  verifier(liste.length === 0, `${l} : GET /api/taches ne liste aucun aperçu (${liste.length})`);
+
+  // « Fermer cet onglet » ferme l'onglet d'aperçu ; un 2e aperçu remplace le 1er.
+  const [popup2] = await Promise.all([contexte.waitForEvent("page"), bouton.click()]);
+  await popup2.waitForSelector("#bandeau-mode-apercu:not([hidden])");
+  await popup2.waitForSelector(".moteur-ecran-courant");
+  verifier(s.base.table("taches").length === 1 && s.base.table("reponses").length === 0 && s.base.table("eleves").length === 3, `${l} : 2e aperçu -> même fantôme, ancien aperçu et ses réponses supprimés`);
+  const fermeture = popup2.waitForEvent("close");
+  await popup2.locator("#btn-quitter-apercu").click();
+  await fermeture;
+  verifier(popup2.isClosed(), `${l} : « Fermer cet onglet » ferme l'onglet d'aperçu`);
+  await popup.close();
+  await contexte.close();
+}
+
 async function main() {
   const { serveur, url } = await demarrerServeur();
   const navigateur = await chromium.launch();
@@ -1662,6 +1923,10 @@ async function main() {
       controlerReponsesHttp(`${largeur} gen7 prof`);
       await scenarioGen7Cascade(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} gen7 cascade`);
+      await scenarioApercu(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} aperçu`);
+      await scenarioRetourArriere(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} retour en arrière`);
     }
   } catch (e) {
     // Un scénario qui plante (timeout d'attente d'un élément) ne passe jamais par `controlerReponsesHttp` :
