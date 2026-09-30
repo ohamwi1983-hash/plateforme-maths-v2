@@ -10,7 +10,7 @@ import { CHOIX_RECONNAISSANCE } from "./reconnaissance";
 import { ecransRacines } from "./racines";
 import { CHAMP_RACINES_FACTORISATION, CHAMP_RACINES_ZEROS } from "./racines/types";
 import { ecranTableauSignes } from "./tableauSignes";
-import { CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE, CHAMP_RECONNAISSANCE, CHAMP_TABLEAU_SIGNES, type FonctionSecondDegre } from "./types";
+import { CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE, CHAMP_RECONNAISSANCE, CHAMP_TABLEAU_SIGNES, fonctionEffective, type FonctionSecondDegre } from "./types";
 
 /**
  * Les écrans de gen7, dans l'ordre : coefficients, allure, axeSommet, domaineImage, racinesReconnaissance, [racinesChamp1, racinesChamp2],
@@ -82,7 +82,7 @@ export function ecransAnalyseFonction(ex: ExerciceAnalyseFonction): EcranDeclare
    * l'aide exige des entiers), repli sur la vraie parabole — publique dans l'énoncé — plutôt que de retirer l'aide : `aide_disponible` ne doit jamais
    * dépendre de la justesse d'une réponse (une saisie non entière est forcément fausse : le bouton d'aide qui disparaît serait un verdict visible).
    */
-  const aideParabole = (options: { surlignageImf?: boolean }): Pick<EcranDeclare, "aide"> => {
+  const aideParabole = (options: { surlignageImf?: boolean; marquesOx?: boolean }): Pick<EcranDeclare, "aide"> => {
     const p = aideParaboleAdmissible(e) ? e : f;
     return { aide: { type: "croquis_parabole", a: p.a, b: p.b, c: p.c, marqueS: true, ...options } };
   };
@@ -146,9 +146,10 @@ export function ecransAnalyseFonction(ex: ExerciceAnalyseFonction): EcranDeclare
     ecrans.push({ ...champ2, dependDe: [CHAMP_RACINES_FACTORISATION], consigne: avecFaits(CHAMP_RACINES_ZEROS, `${ligneFactorisation(ex.zeros)} ${champ2.consigne}`) });
   }
   ecrans.push({
-    ...ecranTableauSignes(f, ex.affichageTableau, composer(CHAMP_TABLEAU_SIGNES, "Complète le tableau de signe et de variation de $f$.")),
-    aide: { type: "croquis_parabole", a: f.a, b: f.b, c: f.c, marqueS: true, marquesOx: true },
-    dependDe: dependancesTableau,
+    // RAPPORT §41 : le tableau est jugé sur la fonction EFFECTIVE (coefficients confirmés) ; ses racines et son sommet en sont dérivés.
+    ...ecranTableauSignes(fonctionEffective(ex), ex.affichageTableau, composer(CHAMP_TABLEAU_SIGNES, "Complète le tableau de signe et de variation de $f$.", enonceEffectif)),
+    ...aideParabole({ marquesOx: true }),
+    dependDe: [CHAMP_COEFFICIENTS, ...dependancesTableau],
   });
   return ecrans;
 }
@@ -183,7 +184,9 @@ export function ligneFaits(ex: ExerciceAnalyseFonction, avantChamp: string): str
   if (precedents.has(CHAMP_ALLURE)) faits.push(`parabole tournée vers le ${f.a > 0 ? "haut" : "bas"}`);
   if (precedents.has(CHAMP_AXE_SOMMET)) faits.push(`axe de symétrie $x = ${latexNombre(f.xS)}$, sommet $S(${latexNombre(f.xS)}\\,;\\,${latexNombre(f.yS)})$`);
   if (precedents.has(CHAMP_DOMAINE_IMAGE)) faits.push(`$\\mathrm{dom}\\,f = \\mathbb{R}$ et $\\mathrm{im}\\,f = ${f.a > 0 ? `[${latexNombre(f.yS)}\\,;\\,+\\infty[` : `]-\\infty\\,;\\,${latexNombre(f.yS)}]`}$`);
-  if (precedents.has(CHAMP_RACINES_FACTORISATION) && precedents.has(CHAMP_RACINES_ZEROS) && ex.zeros !== null) {
+  // Les écrans « racines » portent sur l'équation VRAIE (non cascadée) : avec des coefficients faux, leurs racines ne sont pas celles de la fonction que le tableau
+  // affiche (la sienne) — les rappeler comme un fait la contredirait (RAPPORT §41).
+  if (precedents.has(CHAMP_RACINES_FACTORISATION) && precedents.has(CHAMP_RACINES_ZEROS) && ex.zeros !== null && !e.coefficientsEleve) {
     const [r1, r2] = ex.zeros.racines;
     faits.push(r1 === r2 ? `racine double $x_1 = ${latexRacine(r1)}$` : `racines $x_1 = ${latexRacine(r1)}$ et $x_2 = ${latexRacine(r2)}$`);
   }

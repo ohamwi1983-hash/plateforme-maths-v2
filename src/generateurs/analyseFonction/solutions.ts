@@ -5,7 +5,7 @@ import { reponseBruteZerosCorrecte } from "./racines";
 import { CHAMP_RACINES_FACTORISATION, CHAMP_RACINES_ZEROS } from "./racines/types";
 import { CHOIX_RECONNAISSANCE } from "./reconnaissance";
 import { rangeesTableau, solutionTableau } from "./tableauSignes";
-import { CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE, CHAMP_RECONNAISSANCE, CHAMP_TABLEAU_SIGNES } from "./types";
+import { CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE, CHAMP_RECONNAISSANCE, CHAMP_TABLEAU_SIGNES, fonctionEffective } from "./types";
 import { signeDe } from "./allure";
 
 /** Solution lisible d'un champ (texte d'auteur, balisage `$…$`) : `axeSommet` écrit `x = …` (l'ancien pilote l'omettait, D8). */
@@ -34,8 +34,9 @@ export function solutionAttendueAnalyseFonction(ex: ExerciceAnalyseFonction, cha
       return r1 === r2 ? `$${latexRacine(r1)}$` : `$${latexRacine(r1)}$ ; $${latexRacine(r2)}$`;
     }
     case CHAMP_TABLEAU_SIGNES: {
-      const sol = solutionTableau(f);
-      return rangeesTableau(f)
+      const fe = fonctionEffective(ex); // RAPPORT §41 : le tableau est jugé sur la fonction effective
+      const sol = solutionTableau(fe);
+      return rangeesTableau(fe)
         .map((rangee) => `${rangee.ligne === "signe" ? "Signe" : "Variations"} : ${rangee.cellules.map((c) => (sol[rangee.ligne] as Record<string, string>)[c.ancre]).join(" ")}`)
         .join(" ; ");
     }
@@ -66,7 +67,7 @@ export function reponseBruteCorrecteAnalyseFonction(ex: ExerciceAnalyseFonction,
       if (ex.zeros === null || f.categorie === "irreductible") throw new Error("gen7 : racinesChamp2 n'existe pas pour af_irreductible");
       return reponseBruteZerosCorrecte({ categorie: f.categorie, a: f.a, b: f.b, c: f.c, racines: ex.zeros.racines, formeFactorisee: ex.formeFactorisee ?? "" });
     case CHAMP_TABLEAU_SIGNES:
-      return JSON.stringify(solutionTableau(f));
+      return JSON.stringify(solutionTableau(fonctionEffective(ex)));
     default:
       throw new Error(`gen7 : champ inconnu « ${champ} »`);
   }

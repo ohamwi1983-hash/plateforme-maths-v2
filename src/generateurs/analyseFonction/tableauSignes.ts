@@ -1,7 +1,7 @@
 import type { ColonneTableauSignes, EcranTableauSignes, LigneTableauSignes, ResultatVerification } from "../../../lib/contratGenerateur";
 import { decoderTableauSignes } from "../../../lib/reponsesEcran";
 import { comparerCasesTableau, resoudreRangees, type RangeeResolue } from "../../../lib/structureTableau";
-import { latexNombre } from "./formatage";
+import { latexRacine } from "./formatage";
 import { CHAMP_TABLEAU_SIGNES, CODE_SIGNE_VARIATION_PARTIEL, type FonctionSecondDegre } from "./types";
 
 /**
@@ -54,7 +54,7 @@ function points(f: FonctionSecondDegre): { x: number; symbole: string; racine: b
  */
 export function colonnesTableau(f: FonctionSecondDegre, affichage: AffichageColonnes): ColonneCalculee[] {
   const pts = points(f);
-  const nom = (i: number): string => (affichage === "vraies" ? latexNombre((pts[i] as { x: number }).x) : (pts[i] as { symbole: string }).symbole.slice(1, -1));
+  const nom = (i: number): string => (affichage === "vraies" ? latexRacine((pts[i] as { x: number }).x) : (pts[i] as { symbole: string }).symbole.slice(1, -1));
   const colonnes: ColonneCalculee[] = [];
   pts.forEach((p, i) => {
     const gauche = i === 0 ? `x < ${nom(0)}` : `${nom(i - 1)} < x < ${nom(i)}`;
@@ -64,7 +64,7 @@ export function colonnesTableau(f: FonctionSecondDegre, affichage: AffichageColo
         id: `c${2 * i + 1}`,
         libelle: `$x = ${nom(i)}$`,
         genre: "valeur",
-        valeur: affichage === "vraies" ? `$${latexNombre(p.x)}$` : p.symbole,
+        valeur: affichage === "vraies" ? `$${latexRacine(p.x)}$` : p.symbole,
         ...(affichage === "vraies" ? { symbole: p.symbole } : {}),
         ...(p.racine ? { racine: true } : {}),
         ...(p.sommet ? { sommet: true } : {}),
@@ -93,7 +93,8 @@ export function rangeesTableau(f: FonctionSecondDegre): RangeeResolue[] {
 }
 
 const f_ = (f: FonctionSecondDegre, x: number): number => f.a * x * x + f.b * x + f.c;
-const signeReel = (v: number): string => (v > 0 ? "+" : v < 0 ? "-" : "0");
+/** Signe d'une valeur de f ; « 0 » à la tolérance flottante près (une racine irrationnelle d'une fonction effective donne f(r) ≈ 1e-15, pas 0). */
+const signeReel = (v: number, echelle: number): string => (Math.abs(v) <= 1e-9 * Math.max(1, echelle) ? "0" : v > 0 ? "+" : "-");
 
 /** Réponse attendue `{ signe: { c0… }, variation: { c0, c3, c4 } }` (clés d'ancrage). */
 export function solutionTableau(f: FonctionSecondDegre): Record<string, Record<string, string>> {
@@ -105,7 +106,7 @@ export function solutionTableau(f: FonctionSecondDegre): Record<string, Record<s
   for (const rangee of rangeesTableau(f)) {
     for (const cellule of rangee.cellules) {
       const abscisse = x.get(cellule.ancre) as number;
-      if (rangee.ligne === ID_LIGNE_SIGNE) signes[cellule.ancre] = signeReel(f_(f, abscisse));
+      if (rangee.ligne === ID_LIGNE_SIGNE) signes[cellule.ancre] = signeReel(f_(f, abscisse), Math.abs(f.a) * abscisse * abscisse + Math.abs(f.b) * Math.abs(abscisse) + Math.abs(f.c));
       else if (cellule.couvre.some((id) => sommets.has(id))) variation[cellule.ancre] = f.a > 0 ? "⌣" : "⌢";
       else variation[cellule.ancre] = abscisse < f.xS ? (f.a > 0 ? "↘" : "↗") : f.a > 0 ? "↗" : "↘";
     }

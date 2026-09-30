@@ -72,6 +72,8 @@ export interface DonneesEffectives {
   xS: number;
   yS: number;
   yImage: number;
+  /** Racines réelles de la parabole des coefficients effectifs (`[r, r]` si double, `null` si Δ < 0) : le tableau de signes en dérive ses colonnes. */
+  racines: [number, number] | null;
   /** `a, b, c` viennent de l'élève ET diffèrent des vrais (sert au panneau de faits : une donnée fausse n'établit aucun fait). */
   coefficientsEleve: boolean;
   /** `yImage` diffère de la vraie ordonnée du sommet (idem). */
@@ -87,5 +89,15 @@ export interface DonneesEffectives {
 
 /** Données effectives d'un exercice non projeté : les vraies. */
 export function effectifVrai(f: FonctionSecondDegre): DonneesEffectives {
-  return { a: f.a, b: f.b, c: f.c, xS: f.xS, yS: f.yS, yImage: f.yS, coefficientsEleve: false, ordonneeEleve: false, coefficientsAffiches: false, ordonneeAffichee: false };
+  return { a: f.a, b: f.b, c: f.c, xS: f.xS, yS: f.yS, yImage: f.yS, racines: f.racines, coefficientsEleve: false, ordonneeEleve: false, coefficientsAffiches: false, ordonneeAffichee: false };
+}
+
+/**
+ * Fonction sur laquelle le TABLEAU DE SIGNES est jugé (RAPPORT §41) : celle des coefficients CONFIRMÉS quand ils diffèrent des vrais, sinon la vraie
+ * (l'objet `ex.fonction` lui-même : aucun changement pour un élève dont les coefficients sont justes ou inexploitables). Racines et sommet en sont
+ * DÉRIVÉS, jamais lus dans les réponses à `axeSommet`/`racinesChamp2` (des valeurs incohérentes entre elles donneraient un tableau mal formé).
+ */
+export function fonctionEffective(ex: { fonction: FonctionSecondDegre; effectif: DonneesEffectives }): FonctionSecondDegre {
+  const e = ex.effectif;
+  return e.coefficientsEleve ? { categorie: ex.fonction.categorie, a: e.a, b: e.b, c: e.c, xS: e.xS, yS: e.yS, racines: e.racines } : ex.fonction;
 }
