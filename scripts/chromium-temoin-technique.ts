@@ -26,7 +26,7 @@ import {
 } from "../src/generateurs/_temoinTechnique";
 
 import {
-  champsAnalyseFonction, factorisationVersLatex, genererExercice as genererGen7, rangeesTableau, reponseBruteCorrecteAnalyseFonction as reponseGen7, type CategorieAnalyseFonction, type ExerciceAnalyseFonction,
+  champsAnalyseFonction, factorisationVersLatex, fonctionEffective, genererExercice as genererGen7, projeterAnalyseFonction as projeterGen7, rangeesTableau, solutionTableau as solutionTableauGen7, reponseBruteCorrecteAnalyseFonction as reponseGen7, type CategorieAnalyseFonction, type ExerciceAnalyseFonction,
 } from "../src/generateurs/analyseFonction";
 
 const RACINE = join(__dirname, "..");
@@ -1789,6 +1789,57 @@ async function scenarioApercuRetour(navigateur: any, base: string, largeur: numb
   }
 }
 
+/**
+ * Cascade sur le TABLEAU DE SIGNES (RAPPORT §41), dans le navigateur et les deux régimes : coefficients confirmés a = −5, b = 4, c = 0 (faux pour
+ * f = 3x² + 3x, graine du scénario) -> le tableau servi est celui de SA fonction (racines 0 et 0,8 ; a < 0) et est accepté ; en correction
+ * immédiate ses valeurs de x sont les siennes (0 ; 0,4 ; 0,8), en correction coupée elles restent symboliques.
+ */
+async function scenarioGen7CascadeTableau(navigateur: any, base: string, largeur: number) {
+  for (const feedback of [true, false]) {
+    const l = `${largeur} gen7 cascade tableau ${feedback ? "immédiat" : "coupé"}`;
+    const s: Scenario = creerScenario();
+    installerBase(s.base);
+    const { ex } = await assignerGen7(s, "mise_en_evidence", 12345, { feedback });
+    const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+    const courant = page.locator(".moteur-ecran-courant");
+    const valider = async () => {
+      const avant = (await page.evaluate(`document.querySelector(".moteur-ecran-courant .moteur-consigne").textContent`)) as string;
+      await courant.getByRole("button", { name: "Valider", exact: true }).click();
+      await page.waitForSelector(".moteur-ecran-courant .moteur-retour .moteur-statut");
+      await page.getByRole("button", { name: /Question suivante|Voir la fin/ }).click();
+      await page.waitForFunction(`(() => { const c = document.querySelector(".moteur-ecran-courant .moteur-consigne"); return document.querySelector(".moteur-fin") !== null || (c !== null && c.textContent !== ${JSON.stringify(avant)}); })()`);
+    };
+    for (const [k, v] of [["a", "-5"], ["b", "4"], ["c", "0"]]) await courant.locator(`#mc-coefficients-${k}`).fill(v);
+    await valider();
+    await repondreGen7(page, ex, "allure");
+    await valider();
+    await courant.locator("#mc-axeSommet-axeTexte").fill("x = 2/5");
+    await courant.locator("#mc-axeSommet-xS").fill("2/5");
+    await courant.locator("#mc-axeSommet-yS").fill("4/5");
+    await valider();
+    await repondreGen7(page, ex, "domaineImage");
+    await valider();
+    for (const champ of ["racinesReconnaissance", "racinesChamp1", "racinesChamp2"]) {
+      await repondreGen7(page, ex, champ);
+      await valider();
+    }
+    await page.waitForSelector(".moteur-table-structure");
+    const entetes = ((await page.evaluate(`[...document.querySelectorAll(".moteur-ecran-courant .moteur-rangee-x td")].map((td) => td.querySelector("annotation")?.textContent?.trim() ?? "")`)) as string[]).filter((t) => t !== "");
+    if (feedback) verifier(JSON.stringify(entetes) === JSON.stringify(["0", "0.4", "0.8"]), `${l} : la ligne des x montre SES valeurs (${JSON.stringify(entetes)})`);
+    else verifier(entetes.join() === "x_1,x_S,x_2", `${l} : correction coupée, valeurs symboliques (${JSON.stringify(entetes)})`);
+    await page.screenshot({ path: join(CAPTURES, `${largeur}-gen7-cascade-tableau-${feedback ? "immediat" : "coupe"}.png`), fullPage: true });
+    // le tableau de SA fonction (a < 0 : − 0 + + + 0 −, ⌢) est accepté
+    const eff = fonctionEffective(projeterGen7(ex, [{ champ: "coefficients", reponseBrute: JSON.stringify({ a: "-5", b: "4", c: "0" }), statut: "not_equivalent" }], { correctionImmediate: feedback }));
+    await remplirTableauGen7(page, ex, solutionTableauGen7(eff));
+    await courant.getByRole("button", { name: "Valider", exact: true }).click();
+    await page.waitForSelector(".moteur-ecran-courant .moteur-retour .moteur-statut");
+    const statut = s.base.table("reponses").find((r) => r.champ === "tableauSignes")?.statut;
+    verifier(statut === "correct", `${l} : le tableau de SA fonction est accepté (${statut})`);
+    verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+    await contexte.close();
+  }
+}
+
 /** Le professeur COMPOSE une tâche gen7 dans prof.html (champs actifs, création réelle), puis l'assigne ; l'élève la reçoit. */
 async function scenarioGen7Prof(navigateur: any, base: string, largeur: number) {
   const l = `${largeur}`;
@@ -1977,6 +2028,8 @@ async function main() {
       controlerReponsesHttp(`${largeur} gen7 prof`);
       await scenarioGen7Cascade(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} gen7 cascade`);
+      await scenarioGen7CascadeTableau(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} gen7 cascade tableau`);
       await scenarioApercu(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} aperçu`);
       await scenarioApercuRetour(navigateur, url, largeur);

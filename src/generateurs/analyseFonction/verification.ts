@@ -8,7 +8,7 @@ import { verifierRacinesChamp1, verifierRacinesChamp2 } from "./racines";
 import { CHAMP_RACINES_FACTORISATION, CHAMP_RACINES_ZEROS, type DonneesRacines } from "./racines/types";
 import { verifierReconnaissance } from "./reconnaissance";
 import { verifierTableauSignes } from "./tableauSignes";
-import { CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE, CHAMP_RECONNAISSANCE, CHAMP_TABLEAU_SIGNES } from "./types";
+import { fonctionEffective, CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE, CHAMP_RECONNAISSANCE, CHAMP_TABLEAU_SIGNES } from "./types";
 
 /** `DonneesRacines` d'un exercice à racines. `racinesChamp1` vérifie la VRAIE fonction ; `racinesChamp2` les racines EFFECTIVES (cascade). */
 function donneesRacines(ex: ExerciceAnalyseFonction, champ: string): DonneesRacines {
@@ -38,7 +38,7 @@ export function verifierAnalyseFonction(ex: ExerciceAnalyseFonction, champ: stri
     case CHAMP_RACINES_ZEROS:
       return verifierRacinesChamp2(donneesRacines(ex, champ), reponseBrute);
     case CHAMP_TABLEAU_SIGNES:
-      return verifierTableauSignes(f, reponseBrute);
+      return verifierTableauSignes(fonctionEffective(ex), reponseBrute);
     default:
       throw new Error(`gen7 : champ inconnu « ${champ} »`);
   }

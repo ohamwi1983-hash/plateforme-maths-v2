@@ -9,6 +9,7 @@
     "test-score-partiel": "tsx scripts/test-score-partiel.ts",
     "test-poids-ecran": "tsx scripts/test-poids-ecran.ts",
     "test-cascade-gen7-coefficients": "tsx scripts/test-cascade-gen7-coefficients.ts",
+    "test-cascade-tableau-gen7": "tsx scripts/test-cascade-tableau-gen7.ts",
     "test-cascade": "tsx scripts/test-cascade.ts",
     "test-verification-racines": "tsx scripts/test-verification-racines.ts",
     "test-durcissement-prototype": "tsx scripts/test-durcissement-prototype.ts",

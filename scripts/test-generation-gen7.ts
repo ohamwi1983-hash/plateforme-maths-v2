@@ -234,8 +234,9 @@ for (const categorie of CATEGORIES) {
   verifier(coupe.filter((c) => c.genre === "valeur").every((c) => /^\$x_(1|2|S)\$$/.test(c.valeur ?? "") && c.symbole === undefined), `B ${categorie} : correction coupée → valeurs SYMBOLIQUES, pas de bande de symboles`);
   verifier(!/[0-9]/.test(JSON.stringify(coupe.map((c) => [c.libelle, c.valeur, c.symbole])).replace(/x_[12]/g, "x_")), `B ${categorie} : correction coupée → aucun chiffre dans le tableau servi (${JSON.stringify(coupe.map((c) => c.libelle))})`);
   const dep = tab(ex).dependDe ?? [];
-  verifier(categorie === "irreductible" ? dep.join() === "axeSommet" : dep.join() === "axeSommet,racinesChamp2", `B ${categorie} : tableau gardé par ${dep.join()}`);
-  verifier(!ecransServis(ecransAnalyseFonction(ex), new Set(["axeSommet"]), false).some((s) => s.champ === "tableauSignes") === (categorie !== "irreductible"), `B ${categorie} : tableau non servi tant que ses prédécesseurs ne sont pas terminés`);
+  // RAPPORT §41 : le tableau dépend aussi de `coefficients` (il est jugé sur la fonction effective).
+  verifier(categorie === "irreductible" ? dep.join() === "coefficients,axeSommet" : dep.join() === "coefficients,axeSommet,racinesChamp2", `B ${categorie} : tableau gardé par ${dep.join()}`);
+  verifier(!ecransServis(ecransAnalyseFonction(ex), new Set(["coefficients", "axeSommet"]), false).some((s) => s.champ === "tableauSignes") === (categorie !== "irreductible"), `B ${categorie} : tableau non servi tant que ses prédécesseurs ne sont pas terminés`);
   // La vérification du tableau ne dépend PAS de l'affichage.
   const brute = reponseBruteCorrecteAnalyseFonction(ex, "tableauSignes");
   verifier(verifierAnalyseFonction(projeterAnalyseFonction(ex, [], { correctionImmediate: false }), "tableauSignes", brute).statut === "correct", `B ${categorie} : le tableau attendu est celui de la vraie fonction, quel que soit l'affichage`);

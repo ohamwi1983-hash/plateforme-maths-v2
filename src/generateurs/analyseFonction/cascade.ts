@@ -169,6 +169,21 @@ export function racinesDeFactorisation(texte: string): [number, number] | null {
 const COEFFICIENT_ABS_MIN = 1e-6;
 const ORDONNEE_ABS_MAX = 1e6;
 
+/**
+ * Racines réelles de ax² + bx + c pour des coefficients QUELCONQUES (ceux de l'élève) : discriminant nul à la tolérance près -> racine double
+ * EXACTEMENT égale (le tableau distingue `x₁ = x₂` par égalité) ; `null` si Δ < 0.
+ */
+function racinesEffectives(a: number, b: number, c: number): [number, number] | null {
+  const delta = b * b - 4 * a * c;
+  const tolerance = 1e-9 * Math.max(1, b * b, Math.abs(4 * a * c));
+  if (delta < -tolerance) return null;
+  const xS = -b / (2 * a);
+  if (Math.abs(delta) <= tolerance) return [xS, xS];
+  const s = Math.sqrt(delta);
+  const [r1, r2] = [(-b - s) / (2 * a), (-b + s) / (2 * a)];
+  return r1 <= r2 ? [r1, r2] : [r2, r1];
+}
+
 /** Coefficients d'une réponse `coefficients` confirmée ; `null` si illisible, `a` quasi nul ou démesuré (inexploitable -> repli sur les vrais). */
 function lireCoefficients(reponseBrute: string): { a: number; b: number; c: number } | null {
   const d = decoderChampsMultiples(reponseBrute, { champs: SOUS_CHAMPS_COEFFICIENTS });
@@ -206,7 +221,7 @@ export function effectifDepuisReponses(f: FonctionSecondDegre, reponsesConfirmee
   if (lus !== null && differe) {
     const xS = -lus.b / (2 * lus.a);
     const yS = lus.a * xS * xS + lus.b * xS + lus.c;
-    base = { ...base, a: lus.a, b: lus.b, c: lus.c, xS: xS === 0 ? 0 : xS, yS: yS === 0 ? 0 : yS, yImage: yS === 0 ? 0 : yS, coefficientsEleve: true };
+    base = { ...base, a: lus.a, b: lus.b, c: lus.c, xS: xS === 0 ? 0 : xS, yS: yS === 0 ? 0 : yS, yImage: yS === 0 ? 0 : yS, racines: racinesEffectives(lus.a, lus.b, lus.c), coefficientsEleve: true };
   }
   const axe = reponsesConfirmees.find((r) => r.champ === CHAMP_AXE_SOMMET);
   const y = axe !== undefined && axe.statut === "not_equivalent" ? lireOrdonneeSommet(axe.reponseBrute) : null;
