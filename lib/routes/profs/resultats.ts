@@ -4,6 +4,9 @@ import { profAuthentifie, supabaseAdmin } from "../../supabaseAdmin";
 import { chargerTacheDuProf } from "../../tacheDuProf";
 import { elevesDeLaClasse } from "../../elevesDeLaClasse";
 import { exerciceEstComplet } from "../../tableauDeBord";
+import { champsTermines, chargerContexteTache, type ContexteTache } from "../../etatExercice";
+import type { LigneDebutEcran } from "../../moteurTentatives";
+import type { StatutVerification } from "../../../src/moteur/statutVerification";
 import { separerBugsDetectes, calculerProfilCompetences, type CompetenceProfil } from "../../profilCompetences";
 import { DICTIONNAIRE_COMPETENCES } from "../../dictionnaireCompetences";
 import { EXPLICATIONS_COMPETENCES } from "../../explicationsCompetences";
@@ -257,17 +260,59 @@ export const gererProfsResultats = avecGestionErreurs(async function handler(req
   // Correctif (pagination défensive — voir RAPPORT.md) : le mode `classe_id` (contrairement au mode
   // `tache_id`, borné à une seule tâche) peut porter sur un volume de réponses qui dépasse la
   // limite PostgREST de 1000 lignes.
-  let reponsesBrutes: { exercice_assigne_id: string; champ: string; statut: string; bug_detecte: string | null; duree_ecoulee_secondes: number | null; horodatage: string }[];
+  let reponsesBrutes: { exercice_assigne_id: string; champ: string; statut: string; bug_detecte: string | null; duree_ecoulee_secondes: number | null; horodatage: string; fraction_correcte: number | null }[];
   try {
     reponsesBrutes = await recupererToutesLesLignes(() =>
       admin
         .from("reponses")
-        .select("exercice_assigne_id, champ, statut, bug_detecte, duree_ecoulee_secondes, horodatage")
+        .select("exercice_assigne_id, champ, statut, bug_detecte, duree_ecoulee_secondes, horodatage, fraction_correcte")
         .in("exercice_assigne_id", exerciceIds.length > 0 ? exerciceIds : [""])
         .order("horodatage", { ascending: false }),
     );
   } catch (e) {
     res.status(500).json({ erreur: "Échec de récupération des réponses", detail: e instanceof Error ? e.message : String(e) });
+    return;
+  }
+
+  // Débuts d'écran (chrono) : nécessaires à la définition UNIQUE de « champ terminé » (RAPPORT §37).
+  let debutsBruts: (LigneDebutEcran & { exercice_assigne_id: string })[];
+  try {
+    debutsBruts = await recupererToutesLesLignes<LigneDebutEcran & { exercice_assigne_id: string }>(() =>
+      admin.from("debuts_ecran").select("exercice_assigne_id, champ, horodatage_debut").in("exercice_assigne_id", exerciceIds.length > 0 ? exerciceIds : [""]),
+    );
+  } catch (e) {
+    res.status(500).json({ erreur: "Échec de récupération des débuts d'écran", detail: e instanceof Error ? e.message : String(e) });
+    return;
+  }
+  const debutsParExercice = new Map<string, LigneDebutEcran[]>();
+  for (const d of debutsBruts) {
+    if (!debutsParExercice.has(d.exercice_assigne_id)) debutsParExercice.set(d.exercice_assigne_id, []);
+    debutsParExercice.get(d.exercice_assigne_id)!.push({ champ: d.champ, horodatage_debut: d.horodatage_debut });
+  }
+  // Historique par exercice puis champ, du plus ancien au plus récent (`reponsesBrutes` est trié du plus récent au plus ancien).
+  const historiqueParExercice = new Map<string, Map<string, { statut: StatutVerification; fraction_correcte: number | null }[]>>();
+  for (const r of [...reponsesBrutes].reverse()) {
+    if (!historiqueParExercice.has(r.exercice_assigne_id)) historiqueParExercice.set(r.exercice_assigne_id, new Map());
+    const parChamp = historiqueParExercice.get(r.exercice_assigne_id)!;
+    if (!parChamp.has(r.champ)) parChamp.set(r.champ, []);
+    parChamp.get(r.champ)!.push({ statut: r.statut as StatutVerification, fraction_correcte: r.fraction_correcte ?? null });
+  }
+  const contextesParTacheVariante = new Map<string, ContexteTache | null>();
+  const contexteDe = async (tacheIdEx: string, varianteId: string): Promise<ContexteTache | null> => {
+    const cle = `${tacheIdEx}:${varianteId}`;
+    if (!contextesParTacheVariante.has(cle)) contextesParTacheVariante.set(cle, await chargerContexteTache(admin, tacheIdEx, varianteId));
+    return contextesParTacheVariante.get(cle)!;
+  };
+  const maintenant = new Date();
+  const champsTerminesParExercice = new Map<string, Set<string>>();
+  try {
+    for (const ex of exercicesBruts) {
+      const contexte = ex.champs_attendus === null ? null : await contexteDe(ex.tache_id, ex.variante_id);
+      if (ex.champs_attendus === null || contexte === null) continue;
+      champsTerminesParExercice.set(ex.id, champsTermines(ex.champs_attendus, historiqueParExercice.get(ex.id) ?? new Map(), debutsParExercice.get(ex.id) ?? [], contexte, maintenant));
+    }
+  } catch (e) {
+    res.status(500).json({ erreur: "Échec de récupération des réglages de tâche", detail: e instanceof Error ? e.message : String(e) });
     return;
   }
 
@@ -348,7 +393,8 @@ export const gererProfsResultats = avecGestionErreurs(async function handler(req
         nom_tache: nomTacheParId.get(ex.tache_id) ?? "(tâche introuvable)",
         date_creation_tache: dateTacheParId.get(ex.tache_id) ?? "",
         variante_id: ex.variante_id,
-        complet: ex.champs_attendus !== null && exerciceEstComplet(ex.champs_attendus, champsRepondus),
+        // Définition UNIQUE (RAPPORT §37) : « complet » = chaque champ attendu est TERMINÉ (réussi, tentatives épuisées ou chrono écoulé), plus « a une réponse ».
+        complet: ex.champs_attendus !== null && exerciceEstComplet(ex.champs_attendus, champsTerminesParExercice.get(ex.id) ?? new Set()),
         champs,
         competences: calculerProfilCompetences(bugsDetectesParExercice.get(ex.id) ?? []),
         temps_total: tempsTotalExerciceDepuisReponses(reponsesTempsParExercice.get(ex.id) ?? []),

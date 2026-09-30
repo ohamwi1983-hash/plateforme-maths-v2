@@ -3,7 +3,7 @@
 //     tirés (statuts, tentatives 1..3, chrono aucun / par écran / global, expiré ou non) ;
 //  2. accord de bout en bout : la catégorie de `categorieTachePourEleve` (verrouillageTache.ts, qui gate POST /reponses) == celle du
 //     tableau de bord élève (`en_cours` / `effectuees`), dans des scénarios réels du vrai routeur — dont l'EXPIRATION DU CHRONO,
-//     que l'ancienne boucle de verrouillageTache ignorait.
+//     que l'ancienne boucle de verrouillageTache ignorait ; et « complet » de profs/resultats (vue prof), qui valait « a une réponse ».
 // Lancer : `npm run test-completion-unique`. Sans réseau.
 
 export {}; // module
@@ -83,6 +83,10 @@ async function main(): Promise<void> {
     const parTableauDeBord = await categorieDuTableauDeBord("eleve:eleve-1", tacheId);
     verifier(parVerrouillage === attendu, `${nom} : verrouillageTache dit « ${parVerrouillage} », attendu « ${attendu} »`);
     verifier(parTableauDeBord === attendu, `${nom} : le tableau de bord dit « ${parTableauDeBord} », attendu « ${attendu} »`);
+    // Vue professeur (C2, RAPPORT §37) : « complet » d'un exercice = la tâche est effectuée (un seul exercice par tâche ici).
+    const pr = await appeler("profs/resultats", "GET", { jeton: `prof:${s.profId}`, query: { tache_id: tacheId } });
+    const completProf = pr.corps.eleves?.find((e: { id: string }) => e.id === "eleve-1")?.exercices?.[0]?.complet;
+    verifier(pr.statut === 200 && completProf === (attendu === "effectuees"), `${nom} : profs/resultats « complet » = ${completProf}, attendu ${attendu === "effectuees"} (${pr.statut})`);
     verifier(parVerrouillage === parTableauDeBord, `${nom} : verrouillageTache (${parVerrouillage}) et tableau de bord (${parTableauDeBord}) doivent s'accorder`);
   };
   const repondre = (s: ReturnType<typeof creerScenario>, ex: { id: string }, champ: string, statut: string) => s.base.inserer("reponses", { exercice_assigne_id: ex.id, champ, valeur_saisie: "x", statut, indice_utilise: false });
@@ -104,7 +108,7 @@ async function main(): Promise<void> {
     for (const e of echecs.slice(0, 30)) console.error(` - ${e}`);
     process.exit(1);
   }
-  console.log(`OK : ${nb} vérifications (champsTermines == calculerEtatExercice sur ${comparaisons} historiques ; verrouillageTache == tableau de bord dans 9 scénarios réels, dont l'expiration du chrono)`);
+  console.log(`OK : ${nb} vérifications (champsTermines == calculerEtatExercice sur ${comparaisons} historiques ; verrouillageTache == tableau de bord == « complet » de la vue prof dans 9 scénarios réels, dont l'expiration du chrono)`);
 }
 
 main().catch((e) => {
