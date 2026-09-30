@@ -72,7 +72,10 @@ export const gererInscriptionProf = avecGestionErreurs(async function handler(re
     .select("code, utilise, email_cible")
     .eq("code", code)
     .maybeSingle();
-  if (erreurInvitation || !invitation) {
+  // Une panne de la base n'est PAS « code invalide » : elle remonte en 500 (journalisé par `avecGestionErreurs`), sinon un
+  // professeur muni d'un code valide croirait son code faux pendant une panne (et rien n'apparaîtrait dans les journaux).
+  if (erreurInvitation) throw new Error(`Lecture du code d'invitation impossible : ${erreurInvitation.message}`);
+  if (!invitation) {
     res.status(404).json({ erreur: "Code d'invitation invalide" });
     return;
   }
