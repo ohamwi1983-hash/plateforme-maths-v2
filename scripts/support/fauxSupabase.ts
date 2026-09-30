@@ -86,6 +86,9 @@ export class BaseMemoire {
     if (TABLES_AVEC_ID.has(nom) && complete.id === undefined) complete.id = randomUUID();
     // Défaut du schéma (`est_apercu boolean not null default false`) : sans lui, `.eq("est_apercu", false)` ne verrait aucune vraie tâche.
     if (nom === "taches" && complete.est_apercu === undefined) complete.est_apercu = false;
+    // Défauts du schéma (RAPPORT §37) : `autoriser_retour_arriere boolean not null default false`, `remis_le` nul.
+    if (nom === "taches" && complete.autoriser_retour_arriere === undefined) complete.autoriser_retour_arriere = false;
+    if (nom === "exercices_assignes" && complete.remis_le === undefined) complete.remis_le = null;
     for (const c of COLONNES_HORODATAGE) {
       if (complete[c] === undefined && (nom !== "taches_assignations" || c !== "horodatage") && this.colonneAttendue(nom, c)) complete[c] = this.maintenant();
     }

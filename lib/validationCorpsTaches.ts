@@ -43,6 +43,8 @@ export interface CorpsTaches {
    */
   chrono_mode?: ChronoMode;
   chrono_duree_secondes?: number;
+  /** Retour en arrière (RAPPORT §37) : sans effet sous correction immédiate ; interdit avec `chrono_mode = "par_ecran"`. */
+  autoriser_retour_arriere?: boolean;
 }
 
 /**
@@ -80,6 +82,10 @@ export function estCorpsValide(corps: unknown): corps is CorpsTaches {
     return false;
   }
   if (c.chrono_mode === "global" && c.chrono_duree_secondes === undefined) return false;
+  // Retour en arrière (RAPPORT §37, D6) : un chrono PAR ÉCRAN limite la durée d'un écran ; revenir en arrière le
+  // rouvrirait (ou le laisserait expiré) — combinaison sans sens, refusée plutôt que réinterprétée.
+  if (c.autoriser_retour_arriere !== undefined && typeof c.autoriser_retour_arriere !== "boolean") return false;
+  if (c.autoriser_retour_arriere === true && c.chrono_mode === "par_ecran") return false;
   return c.composition.every((ligne) => {
     if (typeof ligne !== "object" || ligne === null) return false;
     const l = ligne as Record<string, unknown>;

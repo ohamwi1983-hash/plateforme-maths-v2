@@ -1372,3 +1372,21 @@ Route `lib/routes/taches-apercu.ts` (routée AVANT `/api/taches/:id`, sinon « a
 - Le message de capture évoqué par la demande (« tâche gen7 composée comme celle de la capture ») n'était pas joint : le scénario compose lui-même `af_mise_en_evidence` + `af_irreductible`.
 - **Une exécution de `chromium-temoin` sur l'export propre du commit a échoué UNE fois (exception non identifiée : ma commande n'affichait que la dernière ligne, tronquée), sans que je puisse la reproduire ensuite : 12 exécutions consécutives sur le même code, toutes vertes (4 locales, 2 sur exports neufs à froid, 6 en parallèle par trois). Cause non établie ; hypothèse non vérifiée : une attente de 30 s dépassée sur une machine chargée. Si elle revient, relever le message complet avant toute conclusion.**
 - `scripts/test-rls-schema.ts` attendait 3 fichiers appelant `signInWithPassword` : `lib/routes/taches-apercu.ts` est le 4e (examiné : dernier usage du client, aucun accès aux données ensuite).
+
+## §37 : Retour en arrière sur les écrans déjà traversés (réglage de tâche, sous correction immédiate coupée)
+
+Section construite commit par commit (3b-4). Décisions D1–D9 validées avant le code ; l'analyse est dans `ANALYSE-retour-en-arriere.md` (livrée en conversation).
+
+### §37-A : une seule définition de « terminé » (commits 1 et 2)
+
+- `champsTermines` (`lib/etatExercice.ts`) est désormais la seule dérivation de « quels champs sont terminés » (réussi, tentatives épuisées ou chrono écoulé). Utilisée par `lib/verrouillageTache.ts`, `lib/routes/eleves/mes-resultats.ts` et `lib/routes/profs/resultats.ts` ; `calculerEtatExercice` reste l'autorité à l'échelle d'un exercice, et un test différentiel de 4000 historiques les compare (`scripts/test-completion-unique.ts`).
+- **Deux changements de comportement, délibérés et isolés** : (1) `verrouillageTache` ignorait l'expiration du chrono (tâche classée « en cours » pour le contrôle d'écriture, « effectuée » au tableau de bord) ; (2) la colonne `complet` de la vue prof valait « a une réponse » (plus faible que les trois autres écrans). Les deux échouent sur l'ancien code (mutants tués dans le test).
+
+### §37-B : réglage `autoriser_retour_arriere` et colonne `remis_le` (commit 3)
+
+- **Migration (discipline CLAUDE.md)** : `taches.autoriser_retour_arriere boolean not null default false` (`supabase/schema.sql:109`, `supabase/migrations/cumulatif.sql:195`) et `exercices_assignes.remis_le timestamptz` (`schema.sql:210`, `cumulatif.sql:196`), instructions idempotentes (`add column if not exists`) ajoutées au fichier cumulatif, jamais à un nouveau fichier. `scripts/test-reglage-retour-arriere.ts` vérifie leur présence dans les DEUX fichiers.
+- **Règle effective** : `retourArriereEffectif(feedbackImmediat, autoriser)` (`lib/moteurTentatives.ts`, à côté de `tentativesMaxEffectif`) — le réglage n'agit que sous correction coupée.
+- **Validation** (`lib/validationCorpsTaches.ts`) : booléen exigé ; `autoriser_retour_arriere: true` avec `chrono_mode: "par_ecran"` → 400 (D6). Le chrono `global` reste compatible.
+- **Routes** : `POST /api/taches`, `PATCH /api/taches/:id`, `POST /api/taches/apercu` écrivent la colonne ; `GET /api/taches` la renvoie (édition, duplication).
+- **Formulaire prof** (`public/prof.html`, `#autoriser-retour-arriere`) : même patron que `reponse-visible` — grisé et décoché sous correction immédiate ou chrono « Par écran » ; réciproquement l'option « Par écran » est grisée tant que le retour est coché ; envoyé par `construireCorpsTache`, relu par `demarrerModification` / `dupliquerTache`, remis à zéro par `reinitialiserFormulaireTache`. Scénario Chromium ajouté à `scenarioProf` (aux deux largeurs).
+- Non encore câblé à ce commit (suivants) : l'usage de `remis_le` et de la règle effective par les routes élève.

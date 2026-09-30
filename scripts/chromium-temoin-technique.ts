@@ -565,6 +565,32 @@ async function scenarioProf(navigateur: any, base: string, largeur: number) {
   t = await lireTentatives();
   verifier(!t.inputDesactive && t.boutonsDesactives.every((d) => !d), `${l} prof : recocher la correction immédiate déverrouille les tentatives`);
 
+  // Retour en arrière (RAPPORT §37) : grisé sous correction immédiate ET avec un chrono « par écran » (réciproquement, « Par écran » est
+  // grisé tant que le retour est coché) ; décoché de force quand il devient impossible ; envoyé au serveur ; relu à la modification.
+  {
+    const lireRetour = async () => (await page.evaluate(`(() => { const c = document.getElementById("autoriser-retour-arriere"); const o = document.querySelector('#chrono-mode option[value="par_ecran"]'); return { coche: c.checked, desactive: c.disabled, opacite: Number(getComputedStyle(c).opacity), parEcranDesactive: o.disabled }; })()`)) as { coche: boolean; desactive: boolean; opacite: number; parEcranDesactive: boolean };
+    let r = await lireRetour();
+    verifier(r.desactive && !r.coche && r.opacite < 1, `${l} prof : sous correction immédiate, le retour en arrière est grisé et décoché (${JSON.stringify(r)})`);
+    await page.locator("#feedback-immediat").uncheck({ force: true });
+    r = await lireRetour();
+    verifier(!r.desactive && !r.coche && !r.parEcranDesactive, `${l} prof : correction coupée : le retour est disponible (décoché), « Par écran » l'est aussi (${JSON.stringify(r)})`);
+    await page.locator("#autoriser-retour-arriere").check({ force: true });
+    r = await lireRetour();
+    verifier(r.coche && r.parEcranDesactive, `${l} prof : retour coché -> l'option chrono « Par écran » est grisée (${JSON.stringify(r)})`);
+    await page.locator("#autoriser-retour-arriere").uncheck({ force: true });
+    await page.locator("#chrono-mode").selectOption("par_ecran");
+    r = await lireRetour();
+    verifier(r.desactive && !r.coche, `${l} prof : chrono « Par écran » -> le retour est grisé et décoché (${JSON.stringify(r)})`);
+    await page.locator("#chrono-mode").selectOption("global");
+    r = await lireRetour();
+    verifier(!r.desactive, `${l} prof : chrono « Global » : le retour reste disponible (${JSON.stringify(r)})`);
+    await page.locator("#autoriser-retour-arriere").check({ force: true });
+    await page.locator("#feedback-immediat").check({ force: true });
+    r = await lireRetour();
+    verifier(r.desactive && !r.coche, `${l} prof : recocher la correction immédiate décoche et grise le retour (${JSON.stringify(r)})`);
+    await page.locator("#chrono-mode").selectOption("aucun");
+  }
+
   // Un champ DÉSACTIVÉ doit se voir : le grisage était écrit champ par champ (`#aide-penalite-pourcent:disabled`), le champ
   // « Durée (secondes) » du chrono en était resté dépourvu (RAPPORT §29). On vérifie ici les deux états sur le rendu réel.
   {
