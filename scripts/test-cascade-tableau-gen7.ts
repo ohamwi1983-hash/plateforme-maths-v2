@@ -25,7 +25,9 @@ function verifier(condition: boolean, message: string): void {
   if (!condition) echecs.push(message);
 }
 
-const REGIMES: { nom: string; feedback: boolean }[] = [{ nom: "correction immédiate (réponse visible)", feedback: true }, { nom: "correction coupée", feedback: false }];
+// RAPPORT §45 : avec « Afficher la réponse attendue » la réponse fausse est révélée et le tableau repart de la VRAIE fonction (section 5) ; la cascade sur
+// SA fonction ne vit donc que là où rien n'a été montré : immédiate SANS la case, et correction coupée.
+const REGIMES: { nom: string; feedback: boolean }[] = [{ nom: "correction immédiate sans la case", feedback: true }, { nom: "correction coupée", feedback: false }];
 const COEF = (a: string, b: string, c: string) => JSON.stringify({ a, b, c });
 
 async function main(): Promise<void> {
@@ -35,9 +37,9 @@ async function main(): Promise<void> {
   let compteur = 0;
 
   /** Assigne UN exercice (mise_en_evidence, f = 4x² + 8x pour la graine 12345), répond à coefficients puis aux écrans intermédiaires, et renvoie l'exercice prêt au tableau. */
-  const jusquAuTableau = async (feedback: boolean, coefficients: string) => {
+  const jusquAuTableau = async (feedback: boolean, coefficients: string, visible = false) => {
     compteur++;
-    const tache = creerTache(s, { nom: `tableau ${compteur}`, variantes: [{ variante_id: "af_mise_en_evidence", nombre_exercices: 1 }], feedback_immediat: feedback, reponse_visible: feedback }); // « immédiate » = case « Afficher la réponse attendue » cochée (RAPPORT §42) : seule elle montre les valeurs vraies
+    const tache = creerTache(s, { nom: `tableau ${compteur}`, variantes: [{ variante_id: "af_mise_en_evidence", nombre_exercices: 1 }], feedback_immediat: feedback, reponse_visible: visible }); // (visible = case « Afficher la réponse attendue » cochée (RAPPORT §42) : seule elle montre les valeurs vraies
     const o = Math.random;
     Math.random = () => 12345 / 2 ** 32;
     try {
@@ -64,7 +66,7 @@ async function main(): Promise<void> {
   const tableauServi = (g: { ecrans: EcranDeclare[] }) => g.ecrans.find((e) => e.champ === "tableauSignes") as any;
   /** Fonction effective attendue pour des coefficients confirmés donnés. */
   const effectiveDe = (brut: ExerciceAnalyseFonction, coefficients: string, feedback: boolean) =>
-    fonctionEffective(projeterAnalyseFonction(brut, [{ champ: "coefficients", reponseBrute: coefficients, statut: "not_equivalent" }], { correctionImmediate: feedback, solutionMontree: feedback }));
+    fonctionEffective(projeterAnalyseFonction(brut, [{ champ: "coefficients", reponseBrute: coefficients, statut: "not_equivalent" }], { correctionImmediate: feedback, solutionMontree: false }));
 
   // ── 1. Signe de a opposé : le tableau change (2 racines, a < 0) ──
   for (const r of REGIMES) {
@@ -79,7 +81,7 @@ async function main(): Promise<void> {
     verifier(t !== undefined && t.colonnes.length === 7, `${r.nom} / a<0 : tableau à 7 colonnes servi`);
     if (r.feedback) verifier(!/racines? \$x_1/.test(t.consigne) && !t.consigne.includes("racine double"), `${r.nom} / a<0 : le panneau ne rappelle pas de racines qui contredisent SA fonction (« ${t.consigne.slice(0, 140).replace(/\n/g, " / ")} »)`);
     const valeurs = t.colonnes.filter((k: any) => k.genre === "valeur").map((k: any) => k.valeur);
-    verifier(r.feedback ? JSON.stringify(valeurs) === JSON.stringify(["$0$", "$0.4$", "$0.8$"]) : JSON.stringify(valeurs) === JSON.stringify(["$x_1$", "$x_S$", "$x_2$"]), `${r.nom} / a<0 : valeurs de x ${r.feedback ? "EFFECTIVES (celles de SA fonction)" : "symboliques"} (${JSON.stringify(valeurs)})`);
+    verifier(JSON.stringify(valeurs) === JSON.stringify(["$x_1$", "$x_S$", "$x_2$"]), `${r.nom} / a<0 : valeurs de x SYMBOLIQUES (aucune solution montrée), obtenu ${JSON.stringify(valeurs)}`);
     await x.poster("tableauSignes", JSON.stringify(sol));
     verifier(x.statuts("tableauSignes")[0] === "correct", `${r.nom} / a<0 : le tableau de SA fonction est accepté`);
     const y = await jusquAuTableau(r.feedback, c);
@@ -113,10 +115,24 @@ async function main(): Promise<void> {
   for (const r of REGIMES) {
     const x0 = await jusquAuTableau(r.feedback, "{}"); // illisible : repli
     const { ecransAnalyseFonction } = await import("../src/generateurs/analyseFonction");
-    const attendu = ecransAnalyseFonction(projeterAnalyseFonction(x0.brut, [], { correctionImmediate: r.feedback, solutionMontree: r.feedback })).find((e) => e.champ === "tableauSignes") as any;
+    const attendu = ecransAnalyseFonction(projeterAnalyseFonction(x0.brut, [], { correctionImmediate: r.feedback, solutionMontree: false })).find((e) => e.champ === "tableauSignes") as any;
     verifier(JSON.stringify(tableauServi(await x0.lire()).colonnes) === JSON.stringify(attendu.colonnes), `${r.nom} / illisibles : colonnes de la vraie fonction`);
     await x0.poster("tableauSignes", JSON.stringify(solutionTableau(x0.brut.fonction)));
     verifier(x0.statuts("tableauSignes")[0] === "correct", `${r.nom} / illisibles : la vraie fonction sert`);
+  }
+
+  // ── 4 bis. Avec « Afficher la réponse attendue » (RAPPORT §45) : coefficients faux RÉVÉLÉS -> le tableau repart de la VRAIE fonction, valeurs de x numériques ──
+  {
+    const c = COEF("-5", "4", "0"); // SA fonction : −5x² + 4x ; la vraie : 4x² + 8x (racines −2 et 0, sommet −1)
+    const x = await jusquAuTableau(true, c, true);
+    const t = tableauServi(await x.lire());
+    const valeurs = t.colonnes.filter((k: any) => k.genre === "valeur").map((k: any) => k.valeur);
+    verifier(JSON.stringify(valeurs) === JSON.stringify(["$-2$", "$-1$", "$0$"]), `avec la case : valeurs de x de la VRAIE fonction, obtenu ${JSON.stringify(valeurs)}`);
+    await x.poster("tableauSignes", JSON.stringify(solutionTableau(x.brut.fonction)));
+    verifier(x.statuts("tableauSignes")[0] === "correct", "avec la case : le tableau de la VRAIE fonction est accepté");
+    const y = await jusquAuTableau(true, c, true);
+    await y.poster("tableauSignes", JSON.stringify(solutionTableau(effectiveDe(y.brut, c, true))));
+    verifier(y.statuts("tableauSignes")[0] === "not_equivalent", "avec la case : le tableau de SA fonction (fausse, révélée) n'est plus accepté");
   }
 
   // ── 5. Déclaration de dépendance ──

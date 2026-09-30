@@ -307,7 +307,10 @@ export interface Generateur<TExercice = unknown> {
    * Cascade (RAPPORT §18) : « exercice effectif » vu par l'élève. Remplace, dans l'exercice, toute donnée
    * dérivée d'un écran précédent par la valeur que l'élève a CONFIRMÉE (`reponsesConfirmees` = champs
    * terminés, dernière soumission) — JAMAIS par la vraie valeur : une méthode juste appliquée à une donnée
-   * de départ fausse doit réussir l'écran. `ecrans`, `verifier`, `solutionAttendue` et l'aide reçoivent
+   * de départ fausse doit réussir l'écran. EXCEPTION (RAPPORT §45) : quand `solutionMontree`, les champs non
+   * réussis ont été révélés avec leur solution ; `projeterExercice` ne transmet alors que les réponses
+   * CORRECTES (`statut === "correct"`) et les écrans suivants repartent de la vraie valeur, jamais de la réponse
+   * fausse. `ecrans`, `verifier`, `solutionAttendue` et l'aide reçoivent
    * ensuite cet exercice effectif (jamais l'exercice brut) : point de substitution UNIQUE.
    * Pure et déterministe ; ne dépend que des confirmations des champs de `dependDe` de chaque écran.
    * Valeur inexploitable (non analysable, hors domaine, ou champ terminé sans réponse — chrono) : repli.
