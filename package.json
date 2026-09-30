@@ -21,6 +21,7 @@
     "test-generation-gen7": "tsx scripts/test-generation-gen7.ts",
     "test-route-gen7": "tsx scripts/test-route-gen7.ts",
     "test-katex": "tsx scripts/test-katex.ts",
+    "test-eleve-desactive": "tsx scripts/test-eleve-desactive.ts",
     "chromium-temoin": "tsx scripts/chromium-temoin-technique.ts",
     "chromium-design": "tsx scripts/chromium-fidelite-design.ts"
   },

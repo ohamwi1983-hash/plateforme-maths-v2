@@ -4,7 +4,7 @@
  * `scripts/test-routeur.ts`). Jeton d'authentification : `prof:<id>` ou `eleve:<id>`.
  */
 import { BaseMemoire } from "./fauxSupabase";
-import { profDepuisLigne } from "../../lib/authProf";
+import { eleveDepuisLigne, profDepuisLigne } from "../../lib/authProf";
 import { graineDeProfil, type ProfilTemoin } from "../../src/generateurs/_temoinTechnique";
 
 const cheminSupabaseAdmin = require.resolve("../../lib/supabaseAdmin");
@@ -26,9 +26,11 @@ export function installerBase(base: BaseMemoire): void {
         const ligne = id ? base.table("profs").find((p) => p.id === id) : undefined;
         return ligne ? profDepuisLigne(ligne as { id: string }) : null;
       },
+      // Même règle d'accès que le vrai `eleveAuthentifie` (lib/authProf.ts : élève désactivé refusé).
       eleveAuthentifie: async (entete?: string) => {
         const id = lireJeton(entete, "eleve");
-        return id && base.table("eleves").some((e) => e.id === id) ? { id } : null;
+        const ligne = id ? base.table("eleves").find((e) => e.id === id) : undefined;
+        return ligne ? eleveDepuisLigne(ligne as { id: string }) : null;
       },
     },
   } as any;
