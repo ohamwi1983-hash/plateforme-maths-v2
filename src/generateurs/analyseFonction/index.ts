@@ -10,3 +10,8 @@ export { SOUS_CHAMPS_AXE_SOMMET, verifierAxeSommet } from "./axeSommet";
 export { verifierDomaineImage } from "./domaineImage";
 export { CHOIX_RECONNAISSANCE, verifierReconnaissance } from "./reconnaissance";
 export { colonnesTableau, ecranTableauSignes, LIGNES_TABLEAU, rangeesTableau, solutionTableau, verifierTableauSignes, type AffichageColonnes } from "./tableauSignes";
+export { genererExercice, construireIrreductible, type DonneesZeros, type ExerciceAnalyseFonction } from "./exercice";
+export { factorisationVersLatex, noeudVersLatex, projeterAnalyseFonction, racinesDeFactorisation } from "./cascade";
+export { aideFormuleColoree, champsAnalyseFonction, ecransAnalyseFonction } from "./ecrans";
+export { verifierAnalyseFonction } from "./verification";
+export { reponseBruteCorrecteAnalyseFonction, solutionAttendueAnalyseFonction } from "./solutions";

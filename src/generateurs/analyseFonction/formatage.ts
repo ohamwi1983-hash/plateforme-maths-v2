@@ -53,3 +53,13 @@ function monome(terme: Terme, coefficient: number, premier: boolean): string {
 export function latexPolynome(f: Pick<FonctionSecondDegre, "a" | "b" | "c">, ordre: readonly Terme[]): string {
   return ordre.map((t, i) => monome(t, f[t], i === 0)).join("");
 }
+
+/** `ax^2 + bx + c` sans terme nul, ordre canonique (énoncé des écrans « racines », sans `$`). */
+export function equationCanonique(f: Pick<FonctionSecondDegre, "a" | "b" | "c">): string {
+  return latexPolynome(f, (["a", "b", "c"] as const).filter((t) => t === "a" || f[t] !== 0));
+}
+
+/** Écriture décimale sûre d'une valeur de racine (peut sortir de ¼ℤ après une projection sur une factorisation fausse). */
+export function latexRacine(v: number): string {
+  return Math.abs(v * 4 - Math.round(v * 4)) < 1e-9 ? latexNombre(v) : String(Math.round(v * 1e6) / 1e6);
+}
