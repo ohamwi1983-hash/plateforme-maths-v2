@@ -96,6 +96,8 @@ async function main() {
   injecterFauxAdmin(ADMIN_INUTILISE, false);
   const CAS_DISPATCH: { chemin: string; methode: string; statutAttendu: number; description: string }[] = [
     { chemin: "catalogue-generateurs", methode: "GET", statutAttendu: 401, description: "catalogue-generateurs (profAuthentifie)" },
+    { chemin: "taches/apercu", methode: "POST", statutAttendu: 401, description: "taches/apercu POST (profAuthentifie) — atteint son handler, pas `taches/:id`" },
+    { chemin: "taches/apercu", methode: "GET", statutAttendu: 405, description: "taches/apercu GET (405 de son propre handler, pas celui de `taches/:id`)" },
     { chemin: "classes/regenerer-code", methode: "POST", statutAttendu: 401, description: "classes/regenerer-code (profAuthentifie)" },
     { chemin: "classes", methode: "GET", statutAttendu: 401, description: "classes GET (profAuthentifie)" },
     { chemin: "classes", methode: "POST", statutAttendu: 401, description: "classes POST (profAuthentifie)" },

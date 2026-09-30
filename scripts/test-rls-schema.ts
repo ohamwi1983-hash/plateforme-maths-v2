@@ -54,7 +54,8 @@ function fichiersTs(dossier: string): string[] {
 // Découverte automatique : un NOUVEAU fichier qui appelle `signInWithPassword` est contrôlé aussi.
 const sansCommentairesTs = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
 const routes = ["lib", "api", "src"].flatMap(fichiersTs).filter((f) => sansCommentairesTs(readFileSync(join(RACINE, f), "utf8")).includes(".signInWithPassword("));
-verifier(routes.length === 3, `fichiers appelant signInWithPassword : ${JSON.stringify(routes)} (3 attendus ; un nouveau doit être examiné)`);
+// 4 depuis le RAPPORT §36 : `lib/routes/taches-apercu.ts` (session de l'élève fantôme) — examiné : `signInWithPassword` y est le DERNIER usage du client.
+verifier(routes.length === 4, `fichiers appelant signInWithPassword : ${JSON.stringify(routes)} (4 attendus ; un nouveau doit être examiné)`);
 for (const chemin of routes) {
   const src = sansCommentairesTs(readFileSync(join(RACINE, chemin), "utf8"));
   const i = src.indexOf(".signInWithPassword(");
