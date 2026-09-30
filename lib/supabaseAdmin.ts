@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { lireSupabaseUrl } from "./urlSupabase";
-import { profDepuisLigne, type ProfAuthentifie } from "./authProf";
+import { eleveDepuisLigne, profDepuisLigne, type EleveAuthentifie, type ProfAuthentifie } from "./authProf";
 
 /**
  * Client serveur uniquement (clé service_role) — jamais exposé au navigateur. Contourne RLS : les 13 tables
@@ -52,16 +52,17 @@ export async function profAuthentifie(authHeader: string | undefined, admin: Ret
  * `exercice_assigne_id` fourni par le client, sans aucune vérification. Contredit l'objectif même
  * du prompt ("remplacer... aucune authentification réelle"). Voir RAPPORT.md.
  */
-export async function eleveAuthentifie(authHeader: string | undefined): Promise<{ id: string } | null> {
+export async function eleveAuthentifie(authHeader: string | undefined, admin: ReturnType<typeof supabaseAdmin> = supabaseAdmin()): Promise<EleveAuthentifie | null> {
   const token = authHeader?.startsWith("Bearer ") ? authHeader.slice("Bearer ".length) : undefined;
   if (!token) return null;
 
-  const admin = supabaseAdmin();
   const { data: userData, error: userError } = await admin.auth.getUser(token);
   if (userError || !userData.user) return null;
 
-  const { data: eleve, error: eleveError } = await admin.from("eleves").select("id").eq("id", userData.user.id).maybeSingle();
+  // `actif` relu à chaque requête : un élève désactivé par son professeur est refusé ICI (401 partout, ce point unique est
+  // appelé par toutes les routes élève), et pas seulement à la connexion — son jeton déjà émis ne survit pas à la désactivation.
+  const { data: eleve, error: eleveError } = await admin.from("eleves").select("id, actif").eq("id", userData.user.id).maybeSingle();
   if (eleveError || !eleve) return null;
 
-  return { id: eleve.id as string };
+  return eleveDepuisLigne(eleve as { id: string; actif: boolean | null });
 }
