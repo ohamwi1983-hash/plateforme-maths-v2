@@ -16,7 +16,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { demarrerServeur, stubSupabase } from "./support/serveurChromium";
 import { appeler, creerScenario, creerTache, imposerProfilAssignation, installerBase } from "./support/harnaisRouteur";
-import { CHAMP_SOMME, CHAMP_PARITE, generateurTemoinTechnique as temoin, reponseBruteCorrecte, VARIANTE_TEMOIN } from "../src/generateurs/_temoinTechnique";
+import { CHAMP_SOMME, CHAMP_PARITE, CHAMP_DIVISEURS, generateurTemoinTechnique as temoin, reponseBruteCorrecte, VARIANTE_TEMOIN } from "../src/generateurs/_temoinTechnique";
 
 const RACINE = join(__dirname, "..");
 const CAPTURES = process.env.CAPTURES_DIR ?? join(RACINE, "captures-chromium");
@@ -34,7 +34,11 @@ function verifier(condition: boolean, message: string): void {
 // ── Propriétés comparées ──
 const COTES = ["Top", "Right", "Bottom", "Left"];
 const PADDING = COTES.map((c) => `padding${c}`);
-const P_CARTE = ["backgroundColor", "borderTopColor", "borderTopWidth", "borderTopStyle", "borderTopLeftRadius", "boxShadow", ...PADDING];
+// Carte d'un composant : fond, ombre, bord BAS et padding bas. Les bords haut / latéraux, les rayons et le padding haut / latéral ne sont plus ceux de
+// `composants-ecran.html` (RAPPORT §44, décision du propriétaire) : la carte est le bloc blanc de l'enveloppe — bord haut partagé avec le panneau gris,
+// angles hauts droits, et bord à bord sous 600 px (sans arrondi ni bord latéral, padding de 16 px). Ce que contient la carte (consigne, champs, boutons,
+// espacements) reste mesuré contre la référence des composants ; la carte elle-même est mesurée contre `enveloppe-exercice.html`.
+const P_CARTE = ["backgroundColor", "boxShadow", "borderBottomColor", "borderBottomWidth", "borderBottomStyle", "paddingBottom"];
 const P_TEXTE = ["color", "fontWeight", "fontSize"];
 const P_CHAMP = ["backgroundColor", "color", "borderTopColor", "borderTopWidth", "borderTopStyle", "borderTopLeftRadius", ...PADDING, "fontFamily", "fontSize"];
 const P_PRINCIPAL = ["backgroundColor", "color", "borderTopColor", "borderTopWidth", "borderTopStyle", "borderTopLeftRadius", ...PADDING, "boxShadow", "fontFamily", "fontSize", "fontWeight"];
@@ -89,6 +93,9 @@ async function mesurer(page: any, sel: string): Promise<Element | null> {
 }
 const distance = async (page: any, de: string, a: string): Promise<number | null> =>
   (await page.evaluate(`((de, a) => { const cherche = (s) => s === "@aide" ? [...document.querySelectorAll(".moteur-ecran-courant button")].find((b) => /indice/i.test(b.textContent)) : document.querySelector(s); const x = cherche(de), y = cherche(a); return x && y ? Math.round((y.getBoundingClientRect().top - x.getBoundingClientRect().bottom) * 10) / 10 : null; })(${JSON.stringify(de)}, ${JSON.stringify(a)})`)) as number | null;
+/** Décalage vertical de `a` par rapport à `de`, HAUT À HAUT (le panneau gris est DANS la carte depuis RAPPORT §47 : le « bas → haut » n'a plus de sens). */
+const decalageHaut = async (page: any, de: string, a: string): Promise<number | null> =>
+  (await page.evaluate(`((de, a) => { const x = document.querySelector(de), y = document.querySelector(a); return x && y ? Math.round((y.getBoundingClientRect().top - x.getBoundingClientRect().top) * 100) / 100 : null; })(${JSON.stringify(de)}, ${JSON.stringify(a)})`)) as number | null;
 /** État NEUTRE avant mesure : ni focus, ni survol (le survol d'un bouton secondaire change son fond). */
 const flou = async (page: any) => {
   await page.evaluate("document.activeElement && document.activeElement.blur && document.activeElement.blur()");
@@ -261,6 +268,147 @@ async function main(): Promise<void> {
     verifier(touche.interieur && touche.gauche && touche.droite && touche.haut && touche.bas && !touche.loin, `intervalle : zone tactile de 44×44 px (touchée à 5 px, plus à 9 px) : ${JSON.stringify(touche)}`);
     verifier(dims.borne === 64, `intervalle : champs de borne de 64 px de large (${dims.borne})`);
     await ctx.close();
+  }
+  // ── Enveloppe de l'exercice (RAPPORT §43) : docs/reference/enveloppe-exercice.html, à 390 ET 1280 px ──
+  {
+    const refEnveloppe = readFileSync(join(RACINE, "docs/reference/enveloppe-exercice.html"), "utf8");
+    const P_LIEN = ["display", "alignItems", "gap", "color", "fontFamily", "fontSize", "fontWeight"];
+    const P_TXT = ["color", "fontFamily", "fontSize", "fontWeight", "letterSpacing", "fontStyle"];
+    const P_PANNEAU = ["backgroundColor", "borderTopColor", "borderTopWidth", "borderTopStyle", "borderTopLeftRadius", ...PADDING];
+    const P_PISTE = ["display", "gap", "backgroundColor", "borderTopLeftRadius", "overflowX"];
+    const P_SEGMENT = ["backgroundColor", "borderTopLeftRadius"];
+    const P_MARQUE = [...P_ROND, "display", "alignItems", "justifyContent"];
+    const taille = (m: Element | null): string => `${m?._largeur}×${m?._hauteur}`;
+    /** Session du témoin : réglages de tâche + réponses déjà données (JSON brut par champ), puis ouverture du moteur. */
+    async function ouvrirEnveloppe(largeur: number, reglages: { feedback: boolean }, reponses: [string, string][]) {
+      imposerProfilAssignation("base");
+      const s = creerScenario();
+      installerBase(s.base);
+      const tid = creerTache(s, { nom: "Fidélité enveloppe", feedback_immediat: reglages.feedback, reponse_visible: false, tentatives_supplementaires: 0, variantes: [{ variante_id: VARIANTE_TEMOIN, nombre_exercices: 2 }] });
+      const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tid, eleve_ids: ["eleve-1"] } });
+      if (a.statut !== 201) throw new Error("assignation " + a.statut);
+      const ligne = s.base.table("exercices_assignes")[0]!;
+      const ex = temoin.generer(Number(ligne.graine));
+      for (const [champ, brut] of reponses) {
+        const valeur = brut.startsWith("@juste") ? reponseBruteCorrecte(ex, champ) : brut === "@faux" ? (reponseBruteCorrecte(ex, champ) === "pair" ? "impair" : "pair") : brut;
+        const r = await appeler("reponses", "POST", { jeton: "eleve:eleve-1", corps: { exercice_assigne_id: ligne.id, champ, reponse_brute: valeur } });
+        if (r.statut !== 200) throw new Error(`préparation ${champ} : ${r.statut} ${JSON.stringify(r.corps)}`);
+      }
+      const ctx = await navigateur.newContext({ viewport: { width: largeur, height: 900 }, hasTouch: largeur < 600 });
+      const page = await ctx.newPage();
+      await page.route("**/unpkg.com/@supabase/supabase-js**", (r: any) => r.fulfill({ contentType: "text/javascript", body: stubSupabase("eleve:eleve-1", "e1@x") }));
+      await page.route("**/fonts.googleapis.com/**", (r: any) => r.fulfill({ contentType: "text/css", body: "" }));
+      await page.route("**/fonts.gstatic.com/**", (r: any) => r.abort());
+      await page.addInitScript(`localStorage.setItem("eleve-profil-cache", JSON.stringify({ affichage: "Test eleve-1", prenom: "Test", nom: "eleve-1" }));`);
+      await page.goto(srv.url + "/eleve.html");
+      await page.waitForSelector(".carte-tache");
+      await page.locator(".carte-tache").click();
+      await page.waitForSelector(".moteur-ecran-courant > .moteur-rappel");
+      return { page, ctx };
+    }
+
+    for (const largeur of [390, 1280]) {
+      const l = `${largeur} px`;
+      // Référence
+      const ctxR = await navigateur.newContext({ viewport: { width: largeur, height: 900 } });
+      const pR = await ctxR.newPage();
+      await pR.route("**/fonts.googleapis.com/**", (r: any) => r.fulfill({ contentType: "text/css", body: "" }));
+      await pR.setContent(refEnveloppe);
+      await pR.locator('[data-ref="enveloppe"]').screenshot({ path: join(CAPTURES, `fidelite-ref-enveloppe-${largeur}.png`) });
+      const Rf = (ref: string) => `[data-ref="${ref}"]`;
+      const RM: Record<string, Element | null> = {};
+      for (const ref of ["suivi", "carte", "retour", "retour-puce", "retour-libelle", "surtitre", "titre", "rappel", "progression-etiquette", "piste", "segment-fait", "segment-courant", "segment-avenir", "rappel-titre", "rappel-liste", "ligne-juste", "marque-juste", "marque-faux", "marque-illisible", "marque-neutre", "marque-courant", "libelle", "valeur", "libelle-courant", "consigne"]) RM[ref] = await mesurer(pR, Rf(ref));
+      const RD = {
+        "retour→surtitre": await distance(pR, Rf("retour"), Rf("surtitre")),
+        "surtitre→titre": await distance(pR, Rf("surtitre"), Rf("titre")),
+        "titre→panneau gris": await distance(pR, Rf("titre"), Rf("rappel")),
+        "carte→panneau gris (haut à haut)": await decalageHaut(pR, Rf("carte"), Rf("rappel")),
+        "étiquette→piste": await distance(pR, Rf("progression-etiquette"), Rf("piste")),
+        "piste→titre du rappel": await distance(pR, Rf("piste"), Rf("rappel-titre")),
+        "titre du rappel→liste": await distance(pR, Rf("rappel-titre"), Rf("rappel-liste")),
+        "rappel→consigne": await distance(pR, Rf("rappel"), Rf("consigne")),
+      };
+      await ctxR.close();
+
+      // Application, correction immédiate : 3 écrans répondus (illisible, faux, juste) puis l'écran 4 courant
+      {
+        const { page, ctx } = await ouvrirEnveloppe(largeur, { feedback: true }, [[CHAMP_SOMME, "12+"], [CHAMP_PARITE, "@faux"], [CHAMP_DIVISEURS, "@juste"]]);
+        await flou(page);
+        await page.screenshot({ path: join(CAPTURES, `fidelite-app-enveloppe-${largeur}.png`), fullPage: true });
+        const A = (sel: string) => mesurer(page, sel);
+        comparer(`enveloppe ${l}`, "lien « Mes tâches »", RM["retour"]!, await A(".moteur-lien-retour"), P_LIEN);
+        comparer(`enveloppe ${l}`, "puce du lien", RM["retour-puce"]!, await A(".moteur-lien-retour-puce"), ["backgroundColor", "borderTopLeftRadius", "display", "alignItems", "justifyContent", "fontSize"]);
+        verifier(taille(RM["retour-puce"]!) === taille(await A(".moteur-lien-retour-puce")), `enveloppe ${l} / puce : taille ${taille(RM["retour-puce"]!)} attendue, ${taille(await A(".moteur-lien-retour-puce"))} obtenue`);
+        comparer(`enveloppe ${l}`, "surtitre", RM["surtitre"]!, await A(".moteur-surtitre"), P_TXT);
+        comparer(`enveloppe ${l}`, "titre", RM["titre"]!, await A(".moteur-question-titre"), P_TXT);
+        comparer(`enveloppe ${l}`, "panneau du rappel", RM["rappel"]!, await A(".moteur-rappel"), [...P_PANNEAU, "borderLeftWidth", "borderBottomWidth", "borderBottomColor", "borderTopRightRadius", "borderBottomLeftRadius"]);
+        comparer(`enveloppe ${l}`, "bandeau lien + titres", RM["suivi"]!, await A(".moteur-suivi"), ["backgroundColor", ...PADDING, "display", "flexDirection", "gap"]);
+        comparer(`enveloppe ${l}`, "carte blanche", RM["carte"]!, await A(".moteur-ecran-courant"), ["backgroundColor", "boxShadow", "borderTopWidth", "borderBottomWidth", "borderLeftWidth", "borderRightWidth", "borderTopLeftRadius", "borderTopRightRadius", "borderBottomLeftRadius", ...PADDING]);
+        // Géométrie (RAPPORT §47, qui remplace celle de §44 sur bureau ; le mobile y est inchangé) : le panneau gris est le PREMIER enfant de la carte.
+        // Bureau : encadré en retrait (1 px de bord + 24 px de padding de chaque côté), dans la carte. Mobile (≤ 600 px) : le panneau est AU-DESSUS du blanc,
+        // bord à bord, au ras du haut de la carte ; carte, panneau et bandeau font la largeur de l'écran ; le bandeau gris touche la bannière violette,
+        // de la couleur du panneau gris.
+        const geo = (await page.evaluate(`(() => { const r = (s) => { const e = document.querySelector(s); const b = e.getBoundingClientRect(); return { x: b.left, l: b.width, haut: b.top, bas: b.bottom, fond: getComputedStyle(e).backgroundColor, dedans: e.parentElement !== null && e.parentElement.classList.contains("moteur-ecran-courant"), premier: e.parentElement !== null && e.parentElement.firstElementChild === e }; }; return { ban: r(".barre-app"), suivi: r(".moteur-suivi"), rappel: r(".moteur-rappel"), carte: r(".moteur-ecran-courant"), consigne: r(".moteur-ecran-courant > .moteur-consigne"), vw: innerWidth }; })()`)) as Record<string, any>;
+        verifier(geo.rappel.dedans && geo.rappel.premier, `enveloppe ${l} : le panneau gris est le PREMIER enfant de la carte de l'écran courant`);
+        verifier(geo.rappel.bas <= geo.consigne.haut + 0.6, `enveloppe ${l} : le panneau gris est AU-DESSUS de la consigne (${geo.rappel.bas} / ${geo.consigne.haut})`);
+        if (largeur <= 600) {
+          verifier(geo.carte.l === geo.vw && geo.rappel.l === geo.vw && geo.suivi.l === geo.vw && geo.carte.x === 0 && geo.rappel.x === 0 && geo.suivi.x === 0, `enveloppe ${l} : carte blanche, panneau gris et bandeau font la LARGEUR DE L'ÉCRAN (${geo.vw} px) : ${JSON.stringify([geo.suivi.l, geo.rappel.l, geo.carte.l])}`);
+          verifier(Math.abs(geo.rappel.haut - geo.carte.haut) <= 0.6, `enveloppe ${l} : le panneau gris est au ras du haut de la carte blanche (${geo.rappel.haut} / ${geo.carte.haut})`);
+          verifier(Math.abs(geo.suivi.haut - geo.ban.bas) <= 0.6, `enveloppe ${l} : le bandeau gris touche la bannière violette (${geo.ban.bas} / ${geo.suivi.haut})`);
+          verifier(geo.suivi.fond === geo.rappel.fond && Math.abs(geo.suivi.bas - geo.rappel.haut) <= 0.6, `enveloppe ${l} : le bandeau et le panneau gris ont la même couleur et se touchent (${geo.suivi.fond} / ${geo.rappel.fond})`);
+        } else {
+          verifier(Math.abs(geo.rappel.x - geo.carte.x - 25) <= 0.6 && Math.abs(geo.carte.l - geo.rappel.l - 50) <= 0.6, `enveloppe ${l} : le panneau gris est un encadré EN RETRAIT de 25 px de chaque côté (1 px de bord + 24 px de padding) : ${JSON.stringify([geo.rappel.x - geo.carte.x, geo.carte.l - geo.rappel.l])}`);
+        }
+        comparer(`enveloppe ${l}`, "étiquette de progression", RM["progression-etiquette"]!, await A(".moteur-progression-etiquette"), ["display", "justifyContent", "color", "fontSize", "fontWeight"]);
+        comparer(`enveloppe ${l}`, "piste", RM["piste"]!, await A(".moteur-piste"), P_PISTE);
+        verifier((RM["piste"]!._hauteur) === (await A(".moteur-piste"))!._hauteur, `enveloppe ${l} / piste : hauteur ${RM["piste"]!._hauteur} attendue, ${(await A(".moteur-piste"))!._hauteur} obtenue`);
+        comparer(`enveloppe ${l}`, "segment répondu juste", RM["segment-fait"]!, await A(".moteur-segment-fait-correct"), P_SEGMENT);
+        comparer(`enveloppe ${l}`, "segment courant", RM["segment-courant"]!, await A(".moteur-segment-courant"), P_SEGMENT);
+        comparer(`enveloppe ${l}`, "titre du rappel", RM["rappel-titre"]!, await A(".moteur-rappel-titre"), P_TXT);
+        comparer(`enveloppe ${l}`, "liste du rappel", RM["rappel-liste"]!, await A(".moteur-rappel-liste"), P_FLEX);
+        comparer(`enveloppe ${l}`, "ligne", RM["ligne-juste"]!, await A(".moteur-rappel-ligne-correct"), ["display", "alignItems", "gap"]);
+        comparer(`enveloppe ${l}`, "marque juste", RM["marque-juste"]!, await A(".moteur-rappel-marque-correct"), P_MARQUE);
+        comparer(`enveloppe ${l}`, "marque faux", RM["marque-faux"]!, await A(".moteur-rappel-marque-not_equivalent"), P_MARQUE);
+        comparer(`enveloppe ${l}`, "marque illisible", RM["marque-illisible"]!, await A(".moteur-rappel-marque-parse_error"), P_MARQUE);
+        comparer(`enveloppe ${l}`, "marque courant", RM["marque-courant"]!, await A(".moteur-rappel-marque-courant"), P_MARQUE);
+        for (const [nom, sel] of [["juste", ".moteur-rappel-marque-correct"], ["faux", ".moteur-rappel-marque-not_equivalent"], ["illisible", ".moteur-rappel-marque-parse_error"], ["courant", ".moteur-rappel-marque-courant"]] as const) {
+          const ref = RM[`marque-${nom}`]!;
+          verifier(taille(ref) === taille(await A(sel)), `enveloppe ${l} / marque ${nom} : taille ${taille(ref)} attendue, ${taille(await A(sel))} obtenue`);
+        }
+        comparer(`enveloppe ${l}`, "nom de l'écran", RM["libelle"]!, await A(".moteur-rappel-ligne-correct .moteur-rappel-nom"), ["color", "fontFamily", "fontSize", "fontWeight"]);
+        comparer(`enveloppe ${l}`, "valeur", RM["valeur"]!, await A(".moteur-rappel-ligne-correct .moteur-rappel-valeur"), ["color", "fontFamily", "fontSize"]);
+        comparer(`enveloppe ${l}`, "ligne en cours", RM["libelle-courant"]!, await A(".moteur-rappel-en-cours"), ["color", "fontSize", "fontStyle"]);
+        const AD = {
+          "retour→surtitre": await distance(page, ".moteur-lien-retour", ".moteur-surtitre"),
+          "surtitre→titre": await distance(page, ".moteur-surtitre", ".moteur-question-titre"),
+          "titre→panneau gris": await distance(page, ".moteur-question-titre", ".moteur-rappel"),
+          "carte→panneau gris (haut à haut)": await decalageHaut(page, ".moteur-ecran-courant", ".moteur-rappel"),
+          "étiquette→piste": await distance(page, ".moteur-progression-etiquette", ".moteur-piste"),
+          "piste→titre du rappel": await distance(page, ".moteur-piste", ".moteur-rappel-titre"),
+          "titre du rappel→liste": await distance(page, ".moteur-rappel-titre", ".moteur-rappel-liste"),
+          "rappel→consigne": await distance(page, ".moteur-rappel", ".moteur-ecran-courant .moteur-consigne"),
+        };
+        for (const [cle, attendu] of Object.entries(RD)) verifier(AD[cle as keyof typeof AD] === attendu, `enveloppe ${l} / espacement ${cle} : ${attendu} px attendus, ${AD[cle as keyof typeof AD]} mesurés`);
+        // Zone tactile du lien « Mes tâches » ≥ 44 px : un point à 6 px au-dessus du lien le touche encore ; à 12 px, non.
+        const touche = (await page.evaluate(`(() => { const b = document.querySelector(".moteur-lien-retour"); const r = b.getBoundingClientRect(); const x = r.left + r.width / 2; const a = (dy) => { const e = document.elementFromPoint(x, dy); return !!e && (e === b || b.contains(e)); }; return { hauteur: r.height, haut6: a(r.top - 6), bas6: a(r.bottom + 6), haut12: a(r.top - 12) }; })()`)) as { hauteur: number; haut6: boolean; bas6: boolean; haut12: boolean };
+        verifier(touche.haut6 && touche.bas6 && !touche.haut12, `enveloppe ${l} : zone tactile du lien « Mes tâches » ≥ 44 px (touché à 6 px, plus à 12 px) : ${JSON.stringify(touche)}`);
+        verifier((await page.locator(".moteur-rappel-ligne").count()) === 4 && (await page.locator(".moteur-segment").count()) === 4, `enveloppe ${l} : 3 lignes répondues + 1 ligne en cours, 4 segments`);
+        verifier((await page.locator(".moteur-rappel-ligne-courant .moteur-rappel-marque").innerText()) === "4" && (await page.locator(".moteur-question-titre").innerText()) === "Question 4 sur 4", `enveloppe ${l} : « Question 4 sur 4 », ligne en cours numérotée 4`);
+        verifier((await page.locator(".moteur-ecran-courant").count()) === 1 && (await page.locator(".moteur-ecran-termine").count()) === 0, `enveloppe ${l} : UN seul écran à la fois (les écrans répondus sont des lignes du rappel)`);
+        await ctx.close();
+      }
+      // Application, correction coupée : toutes les marques sont NEUTRES, jamais une coche ni une couleur de verdict
+      {
+        const { page, ctx } = await ouvrirEnveloppe(largeur, { feedback: false }, [[CHAMP_SOMME, "12+"]]);
+        await flou(page);
+        await page.screenshot({ path: join(CAPTURES, `fidelite-app-enveloppe-coupe-${largeur}.png`), fullPage: true });
+        comparer(`enveloppe ${l} (coupée)`, "marque sans verdict", RM["marque-neutre"]!, await mesurer(page, ".moteur-rappel-marque-neutre"), P_MARQUE);
+        comparer(`enveloppe ${l} (coupée)`, "segment à venir", RM["segment-avenir"]!, await mesurer(page, ".moteur-segment-avenir"), P_SEGMENT);
+        verifier((await page.locator(".moteur-rappel-marque-neutre").innerText()) === "•" && (await page.locator(".moteur-segment-fait-neutre").count()) === 1, `enveloppe ${l} (coupée) : marque neutre « • » et segment neutre`);
+        verifier((await page.locator(".moteur-rappel-marque-correct, .moteur-rappel-marque-not_equivalent, .moteur-rappel-marque-parse_error, .moteur-segment-fait-correct, .moteur-segment-fait-not_equivalent, .moteur-segment-fait-parse_error").count()) === 0, `enveloppe ${l} (coupée) : aucune couleur de verdict avant la fin de la tâche`);
+        await ctx.close();
+      }
+    }
   }
   await navigateur.close();
   srv.serveur.close();

@@ -1520,6 +1520,75 @@ Retour du propriétaire : dans l'aperçu (téléphone), les écrans répondus n'
 - **Échec intermédiaire, cause établie (pas un « flake »)** : 1 échec à 1280 px seulement dans `scenarioEtendu` (`chromium-temoin-technique.ts`, attente de `.moteur-solution`). Depuis §42, une tâche à case cochée montre aussi la solution d'un écran RÉUSSI : `waitForSelector(".moteur-solution")` se satisfaisait d'une solution déjà à l'écran avant le rendu de celle de l'écran courant. Corrigé en attendant `courant.locator(".moteur-solution")` ; aucun code de production touché.
 - **Non couvert, à savoir** : les cas d'un exercice à plusieurs essais avec chrono `par_ecran` sous case décochée sont testés en fonction pure (`construireChampVue`, chrono écoulé sans réponse) mais pas en navigateur.
 
+## §43 : Enveloppe de l'exercice — un écran à la fois, progression et « Ce qu'on sait déjà » (design cible du propriétaire)
+
+**Demande.** Changer le design de l'écran d'exercice pour celui du gen7 de l'ancien pilote (captures Chromium + `style.css` fournis), en ne reprenant QUE : la mise en page de la page,
+le passage d'écran à écran, le rappel « Ce qu'on sait déjà ». Tout le reste reste à nous : validation / invalidation, tentatives, aides, tableau de signes, et la couleur vert / rouge / jaune
+de l'écran validé. Périmètre : interface élève (`eleve.html`) ; `prof.html` inchangé.
+
+**Faits établis avant de coder (mesurés, pas supposés).**
+- Les **31 tokens de `:root` de la source sont identiques, valeur par valeur**, aux nôtres (v2 en ajoute 5 : `--coef-a|b|c`, `--ombre-carte`, `--ombre-bouton`) ; mêmes polices (Fraunces, Inter), même lien Google Fonts. Ce n'est donc **pas** un changement de palette : c'est la structure de l'écran.
+- Les captures du premier zip (« Gen7S1 ») que j'avais prises pour l'application actuelle étaient le gen7 de l'ancien pilote, donc la cible : erreur de ma part, corrigée ici.
+- Le CSS source est une pile de correctifs par identifiant (`#af-…`, `#exercice.exercice-af`) : structure de code que `CLAUDE.md` interdit de reprendre. Seules les **valeurs** ont été relevées (rappel : `padding 14 16`, segments de 12 px, marques de 20 px ; titres : surtitre 11 px, titre Fraunces 20 px), puis réécrites avec nos tokens.
+
+**Livré.**
+- **Référence** `docs/reference/enveloppe-exercice.html` (avant le composant, comme l'exige `CLAUDE.md`) : lien, surtitre, titre, carte avec panneau en creux, quatre états de ligne (juste / faux / illisible / sans verdict) + ligne en cours.
+- **Moteur** `public/moteur/moteur.js` : `afficher` (l.108) = UN écran courant ; `construireEntete` (l.175), `construireRappel` (l.206), `ligneFaite` (l.250), `MARQUES_RAPPEL` (l.28), `nomDe` (l.37). Le rappel ne dérive que de `exercice.champs` (`verrouille`, `modifiable`, `statut`, `valeur_saisie`, `solution_attendue`) : `statut === null` (correction coupée) → marque `•` et segment `--violet-2`, **jamais une coche**. « Exercice i sur m » : `demarrerTache` passe `rang`/`total` (l.527).
+- **CSS** `public/moteur/ecrans.css` : bloc « Enveloppe » (l.31 et suivantes), uniquement des tokens (test de design system : 610 vérifications) ; `.moteur-exercice` n'a plus de padding propre (l.20) ; `--retrait-plein-bord` recalculé (`public/style.css:146` et `:152`).
+- **Contrat** : `EcranDeclare.nom` (`lib/contratGenerateur.ts:82`, optionnel), posé sur gen7 (`NOMS_ECRANS`, `ecrans.ts:62`) et le témoin (`_temoinTechnique/index.ts:602`). Le champ ne s'appelle pas `titre` : `EcranTableauSignes.titre` existe déjà.
+- **gen7** : la ligne « Ce que tu sais déjà » des consignes (`ligneFaits`, `ex.corrects`) est **supprimée**, remplacée par le rappel du moteur (valable pour tous les générateurs). Les tests qui la verrouillaient verrouillent son absence et la présence des noms.
+
+**Décisions prises, à confirmer (le propriétaire tranche).**
+1. **Mobile plein-bord NON repris.** La cible est plein-bord à ≤ 600 px (feuille sans arrondi, bandeau gris qui touche la bannière). Cela contredit la référence stricte des composants (`composants-ecran.html` : carte arrondie, padding 24, mesurée à 390 px). J'ai gardé la carte validée à toutes les largeurs ; le documenter ici plutôt que de casser une référence sans décision.
+2. **Sans écran courant** (exercice terminé, tâche antérieure, remise à venir du retour en arrière), la **relecture reste celle d'avant** (une carte par écran : énoncé, « Ta réponse », verdict, solution, « Modifier ma réponse »). Le rappel compact ne porte pas l'énoncé ; sans cette carte, un élève ne pourrait plus relire l'énoncé d'un exercice fini. L'écran de fin de la cible (« Résultat de l'exercice », récapitulatif de session) n'est PAS porté ici.
+3. **Valeur d'une ligne** = la réponse d'ÉLÈVE résumée par le composant (`resumer`), pas un texte d'auteur compact comme « Sommet : (2 ; −8) » de la cible : plus verbeux (ex. « Axe de symétrie AS ≡ x = −5/2 ; xS = −5/2 ; yS = −75/4 »). Un texte de rappel déclaré par le générateur serait plus compact ; non fait ici.
+4. **Majuscules écrites, jamais `text-transform`** (`test-structure-tableau` l'interdit, RAPPORT §30) : « EXERCICE i SUR m », « CE QU'ON SAIT DÉJÀ » sont en majuscules dans le texte ; le nom de la tâche reste tel que saisi.
+5. **Nom de la tâche** ajouté au surtitre (« EXERCICE 1 SUR 2 · DEVOIR 3 ») : la cible ne l'affichait pas, mais l'ancien écran le montrait et il est utile à l'élève.
+6. **Progression** = écrans répondus / total (avancement, pas un score) ; segments verts / rouges / ambre selon le verdict que le serveur montre, neutres sans verdict.
+
+**Fidélité mesurée.** `scripts/chromium-fidelite-design.ts` (l.265 et suivantes) rend la référence et l'application dans le même Chromium à 390 ET 1280 px et compare les styles calculés (lien, puce, surtitre, titre, panneau, piste, segments, marques, noms, valeurs) et 7 espacements ; + la zone tactile du lien (≥ 44 px par pseudo-élément) et l'absence de toute couleur de verdict sous correction coupée. **516 vérifications** (222 d'origine inchangées : les composants validés ne bougent pas). Les cinq écarts trouvés en route ont été corrigés, aucun admis (`display` inline-flex vs flex, taille de la puce en `em`, rayon des pilules en jeton).
+
+**Tests adaptés** (`scripts/chromium-temoin-technique.ts`, 2247 vérifications) : la matrice visuelle lit l'état « illisible » d'un écran verrouillé sur la marque de sa ligne (`ligneDuRappel`, l.456) sauf pour le dernier écran (l'exercice est alors terminé : relecture en carte) ; les scénarios gen7 vérifient « Question k sur N », la progression et le rappel (marques neutres sous correction coupée) ; l'aperçu du retour en arrière cherche `.moteur-rappel-ligne-neutre`.
+
+**Bug trouvé par les tests (corrigé).** Sous retour en arrière, un écran répondu mais modifiable a `verrouille = false` (`modifiable = true`) : le rappel l'ignorait. « Répondu » = `verrouille || modifiable` (`moteur.js:211`).
+
+**Non traité (hors périmètre, à décider).** Écran « Résultat de l'exercice » et récapitulatif de session (la cible) ; le tableau de session de l'ancien pilote déborde à 390 px (signalé par l'autre session : à ne pas reproduire) ; pastille « Tentative n/3 » et aides (gardées telles quelles, décision du propriétaire) ; `ContexteProjection.correctionImmediate` n'est plus lu par aucun générateur depuis la suppression de `ligneFaits` (champ conservé pour l'instant).
+
+**Validation (export propre `git archive` du commit `091fb09`, `npm ci`).** `tsc -b` OK ; 40 scripts `test-*` / `smoke*` : 0 échec ; `npm run chromium-temoin` : 2247 vérifications (390 px et 1280 px) ; `npm run chromium-design` : 516 vérifications (dont l'enveloppe à 390 et 1280 px). Captures : `captures-chromium/fidelite-app-enveloppe-{390,1280}.png`, `fidelite-app-enveloppe-coupe-{390,1280}.png`, `{390,1280}-gen7-*`.
+
+## §44 : Assemblage de l'enveloppe — gris AU-DESSUS du blanc, bord à bord sur mobile (retour du propriétaire sur §43)
+
+**Retour (captures de test sur téléphone, image 1 = cible, image 2 = §43).** Le design n'était pas respecté : (1) la largeur du bloc blanc doit être celle de l'écran ; (2) le bloc gris « Ce qu'on sait déjà » ne doit pas être
+contenu dans le bloc blanc, mais AU-DESSUS, sa bordure basse étant la bordure haute du blanc, et avoir lui aussi la largeur de l'écran ; (3) l'espace entre la bannière violette et le bloc gris doit avoir la couleur du bloc gris.
+
+**Cause (mienne).** En §43 j'avais gardé la carte arrondie à toutes les largeurs (point 1 de ma liste de décisions « à confirmer ») et placé le panneau DANS la carte, pour ne pas contredire la référence stricte de `composants-ecran.html`. Le propriétaire
+tranche : la cible prime sur mobile. Cela rend caduque cette décision et change la carte de tous les composants (voir « Conséquences »).
+
+**Livré.**
+- **DOM** : le rappel est un FRÈRE placé avant la carte (`public/moteur/moteur.js:131`), plus un enfant. La couleur de verdict ne touche donc que la carte (le gris n'en hérite plus).
+- **Bureau (> 600 px)** : panneau gris et carte blanche de même largeur, un seul bloc aux angles arrondis (gris en haut, blanc en bas) ; la carte n'a plus de bord haut : la bordure basse du gris EST le haut du blanc (`ecrans.css:271`, `.moteur-rappel + .moteur-ecran`).
+- **Mobile (≤ 600 px)** (`ecrans.css:277` et suivantes) : tout est bord à bord. Le bandeau gris (lien + titres) touche la bannière violette et a la couleur du panneau ; panneau gris (filets haut et bas) et carte blanche font la largeur de l'écran (sans arrondi, sans bord latéral, padding 16 px).
+  Les gouttières de la page sont annulées par `--gouttiere-page` / `--marge-haute-page` (`public/style.css:144`, `:155`), valeurs de mise en page et non des tokens (la gouttière mobile de 14 px n'est pas dans l'échelle). Bug évité en route : `.moteur-exercice { max-width: 100% }`
+  empêchait les marges négatives d'élargir le bloc (largeur 362 au lieu de 390) : `max-width: none` sous 600 px.
+- **Référence** `docs/reference/enveloppe-exercice.html` réécrite : même ordre, gabarit unique avec une requête `@media (max-width: 600px)`.
+
+**Mesuré en Chromium** (`scripts/chromium-fidelite-design.ts`, **573 vérifications** dont la géométrie de §44) : à 390 px, carte blanche, panneau gris et bandeau ont la largeur exacte de l'écran (390), le bandeau touche la bannière (0 px), bandeau et panneau ont la même couleur et se touchent ;
+à 1280 px comme à 390, le panneau gris n'est pas un descendant de la carte, a la même largeur et le même bord gauche, et son bas est le haut de la carte (0 px).
+
+**Conséquences (documentées, pas cachées).**
+1. **La carte des composants n'est plus celle de `composants-ecran.html` par son enveloppe** (bord haut, rayons, padding latéral, largeur). `P_CARTE` (`chromium-fidelite-design.ts:41`) ne compare plus que le fond, l'ombre, le bord bas et le padding bas ; ce que la carte CONTIENT (consigne, champs, boutons, espacements) reste mesuré contre la référence des composants, les 222 vérifications de contenu sont inchangées. Décision du propriétaire, à son initiative.
+2. **Tableau de signes** : `--retrait-plein-bord` vaut 16 px sur mobile (`style.css:158`), le padding de la carte déjà bord à bord ; 24 + 1 + gouttière sur bureau (inchangé). `verifierPleinBord` (`chromium-temoin-technique.ts`) exige maintenant, sous 600 px, un tableau de la largeur exacte de la carte (et non plus qui en sorte) et un padding de carte de 16 px.
+3. **Cohérence avec les cartes du tableau de bord** : la carte d'écran garde l'ombre et le fond de `.carte-tache` ; le rayon et le filet n'en sont plus comparés.
+4. **Test de design system** (`scripts/test-design-system.ts`, l.51 et l.55) : le seuil d'une requête `@media (max-width: 600px)` n'est pas une « longueur en dur » ; `0` est admis comme valeur de `border-radius` (angle droit) — la règle « aucun rayon en dur » reste pour toute autre valeur.
+
+**À confirmer (décision mienne sur un point non tranché).** **Sur bureau**, la cible de l'ancien pilote montrait le panneau gris DANS la carte ; j'ai appliqué la règle énoncée (« au-dessus, bord haut = bord bas ») à toutes les largeurs : un bloc gris en haut / blanc en bas, même largeur. Dis-moi si tu préfères l'ancien rendu bureau.
+
+**Validation** : voir la section ci-dessous (export propre du commit final).
+
+**Validation de §44 (export propre `git archive` du commit `13cc018`, `npm ci`).** `tsc -b` OK ; 40 scripts `test-*` / `smoke*` : 0 échec ; `npm run chromium-temoin` : 2247 vérifications ; `npm run chromium-design` : 573 vérifications.
+- **Échec intermédiaire, cause établie** : sur l'export du commit `ee7482d`, `scenarioApercu` a échoué au clic « Fermer cet onglet » (« Target page … has been closed »). Ce bouton appelle `window.close()` : Playwright peut signaler la fermeture pendant le clic. Scénario inchangé par §43-§44 et passé 4 fois avant ; le clic ne tolère plus que cette erreur précise, la fermeture reste vérifiée par l'événement `close`. Aucun code de production touché.
+- Captures : `captures-chromium/fidelite-app-enveloppe-{390,1280}.png`, `fidelite-app-enveloppe-coupe-{390,1280}.png`, `{390,1280}-gen7-*`.
+
 ## §45 : quand la solution est montrée, la cascade repart de la VRAIE valeur (précise D-A de §38, demande du propriétaire)
 
 **Demande.** Avec « Afficher la réponse attendue une fois les essais épuisés » cochée, l'élève voit la solution de chaque écran raté ; or les écrans suivants continuaient à s'appuyer sur sa réponse FAUSSE (§18, §38). Incohérent : on lui montre la vraie valeur puis on lui pose la suite sur la fausse.
@@ -1535,3 +1604,30 @@ Retour du propriétaire : dans l'aperçu (téléphone), les écrans répondus n'
 - **HYPOTHÈSE assumée** : « solution montrée » = réglage statique de la tâche, pas l'état d'un champ. Une réponse fausse avec essais restants ne déclenche rien (l'écran dépendant n'est de toute façon servi qu'une fois le champ terminé, `dependDe`).
 - **Conséquence pédagogique** : sous la case cochée, un élève qui se trompe aux coefficients ne peut plus « gagner » les écrans suivants par cohérence interne ; il repart de la vraie fonction. C'est le comportement demandé ; il rend ce régime plus exigeant que les deux autres.
 - `ContexteProjection.correctionImmediate` n'est plus lu par aucun générateur (conservé dans le contrat).
+
+## §46 : la relecture / le récapitulatif aussi bord à bord sur mobile (retour du propriétaire sur §44)
+
+**Demande.** « Même dans l'écran récapitulatif, les blocs doivent avoir une largeur égale à la largeur de l'écran. » En §44, seuls le bandeau, le panneau gris et la carte COURANTE étaient bord à bord ; les cartes de relecture (`.moteur-ecran-termine`), le panneau de remise, « Exercice terminé » et les messages gardaient la gouttière de la page (capture : 390 px → blocs de ~358 px).
+
+**Livré.**
+- `public/moteur/ecrans.css:284` (dans `@media (max-width: 600px)`) : la règle qui rendait la gouttière aux enfants hors bord à bord est SUPPRIMÉE ; `.moteur-ecran-termine`, `.moteur-fin` (dont `.moteur-remise`) et `.moteur-message` sont sans arrondi, sans bord latéral, `padding-inline: var(--espace-3)`. Uniquement des tokens (`test-design-system` : 646 vérifications).
+- **Test** : `verifierBlocsRelecturePleineLargeur` (`scripts/chromium-temoin-technique.ts:712`), appelé dans l'état « avant la remise » (cartes de relecture + panneau de remise) et « après la remise » (récapitulatif + « Exercice terminé ») : à 390 px chaque bloc touche les deux bords de l'ÉCRAN, rayon 0, bords latéraux 0 ; à 1280 px tous ont la largeur de la colonne. **Contrôle de mutation** : avec l'ancien CSS, 34 vérifications échouent ; avec le nouveau, 2313 passent.
+- `chromium-design` : 573 vérifications inchangées (la référence `enveloppe-exercice.html` décrit l'écran courant, pas la relecture).
+
+**À savoir.** Le récapitulatif n'a PAS de référence dans le design cible du propriétaire (l'écran de fin / récapitulatif de session de l'ancien pilote n'est pas porté) : ce choix (cartes de relecture « en creux » bord à bord, séparées par le fond de page) est une décision de ma part, à confirmer visuellement sur `390 retour-01-panneau-remise.png` et `390 retour-04-apres-remise.png`.
+
+## §47 : bureau — le panneau « Ce qu'on sait déjà » passe DANS la carte (choix B du propriétaire), mobile inchangé
+
+**Demande.** Après comparaison en images (bloc joint « A » contre gris dans la carte « B »), le propriétaire choisit **B sur bureau, mobile inchangé** : sur grand écran le panneau gris est un encadré en retrait dans la carte, comme l'ancien pilote (`.recap-cumulatif`) ; sous 600 px, rien ne change (gris AU-DESSUS du blanc, bord à bord, §44).
+
+**Livré (une seule structure, deux mises en page en CSS).**
+- `public/moteur/moteur.js:132` : le panneau du rappel est le **premier enfant** de la carte de l'écran courant (il était son frère précédent). Aucun élément englobant, aucun déplacement par script selon la largeur.
+- `public/moteur/ecrans.css:109` : `.moteur-rappel` = encadré (filet, arrondi `--radius-sm`, padding 14 × 16). Bloc « Assemblage » `ecrans.css:266` : la règle « bloc joint » de §44 disparaît ; sous 600 px, `.moteur-ecran-courant > .moteur-rappel` (l.312) annule le padding latéral de la carte par des marges négatives, la carte perd son padding haut, `.moteur-suivi + .moteur-ecran-courant` annule le `gap` — on retrouve exactement la mise en page de §44.
+- Référence `docs/reference/enveloppe-exercice.html` restructurée (rappel dans la carte, encadré sur bureau, marges négatives sur mobile) ; `docs/design-system.md` et `CLAUDE.md` (section Enveloppe) mis à jour. **Correction d'une erreur de §46** : la phrase ajoutée à CLAUDE.md avait été insérée au milieu d'une puce ; remise à sa place.
+- `scripts/chromium-fidelite-design.ts:347` : géométrie réécrite (panneau = premier enfant ; bureau : retrait de 25 px de chaque côté = 1 px de bord + 24 px de padding ; mobile : carte, panneau et bandeau à la largeur de l'écran, panneau au ras du haut de la carte, bandeau gris collé à la bannière) ; la distance « panneau→carte » devient « carte→panneau, HAUT À HAUT » (`decalageHaut`, l.97).
+
+**Preuve que le mobile est inchangé.** Capture `fidelite-app-enveloppe-390.png` rendue AVANT (commit `cdc1107`, export séparé) et APRÈS, comparées pixel à pixel dans Chromium (canvas) : **0 pixel différent** (390 × 971). Le bureau, lui, change comme voulu (959 → 972 px de haut à 1280).
+
+**Vérification.** `chromium-design` : 575 vérifications ; `chromium-temoin` : 2313 ; `test-design-system` : 642.
+
+**À savoir.** Le panneau ne porte JAMAIS la couleur du verdict : le vert / rouge / jaune colore la carte, l'encadré reste gris (sinon un échec serait plus visible qu'une réussite sous correction coupée, et le rappel perdrait sa couleur). Entre 601 et ~720 px (petite tablette, téléphone en paysage), la mise en page « bureau » s'applique : à valider visuellement si ce cas compte.

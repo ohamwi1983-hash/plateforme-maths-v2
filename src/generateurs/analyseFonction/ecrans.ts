@@ -5,7 +5,7 @@ import { SOUS_CHAMPS_AXE_SOMMET } from "./axeSommet";
 import { SOUS_CHAMPS_COEFFICIENTS } from "./coefficients";
 import type { ExerciceAnalyseFonction } from "./exercice";
 import { COEFFICIENT_MAX } from "../../../lib/aideTypee";
-import { equationCanonique, latexNombre, latexPolynome, latexRacine, termesNonNuls } from "./formatage";
+import { equationCanonique, latexPolynome, latexRacine, termesNonNuls } from "./formatage";
 import { CHOIX_RECONNAISSANCE } from "./reconnaissance";
 import { ecransRacines } from "./racines";
 import { CHAMP_RACINES_FACTORISATION, CHAMP_RACINES_ZEROS } from "./racines/types";
@@ -50,12 +50,24 @@ function ligneFactorisation(z: NonNullable<ExerciceAnalyseFonction["zeros"]>): s
 /**
  * Dépendances DÉCLARÉES entre écrans de gen7 (RAPPORT §38) : `allure` et `axeSommet` sont jugés sur les coefficients CONFIRMÉS,
  * `domaineImage` sur eux et sur l'ordonnée du sommet confirmée à `axeSommet`. Un écran dépendant n'est servi qu'une fois ses
- * prédécesseurs terminés (filtrage serveur) ; seul point où ces listes existent (`ligneFaits` les relit).
+ * prédécesseurs terminés (filtrage serveur) ; seul point où ces listes existent.
  */
 const DEPENDANCES_FONCTION: Readonly<Record<string, readonly string[]>> = {
   [CHAMP_ALLURE]: [CHAMP_COEFFICIENTS],
   [CHAMP_AXE_SOMMET]: [CHAMP_COEFFICIENTS],
   [CHAMP_DOMAINE_IMAGE]: [CHAMP_COEFFICIENTS, CHAMP_AXE_SOMMET],
+};
+
+/** Nom court de chaque écran (RAPPORT §43) : libellé de sa ligne dans le « Ce qu'on sait déjà » du moteur. Table de constantes du code, jamais une clé venue de l'élève. */
+const NOMS_ECRANS: Readonly<Record<string, string>> = {
+  [CHAMP_COEFFICIENTS]: "Coefficients",
+  [CHAMP_ALLURE]: "Allure",
+  [CHAMP_AXE_SOMMET]: "Sommet",
+  [CHAMP_DOMAINE_IMAGE]: "Domaine / Image",
+  [CHAMP_RECONNAISSANCE]: "Méthode",
+  [CHAMP_RACINES_FACTORISATION]: "Factorisation",
+  [CHAMP_RACINES_ZEROS]: "Racines",
+  [CHAMP_TABLEAU_SIGNES]: "Tableau de signes",
 };
 
 const arrondi6 = (v: number): number => Math.round(v * 1e6) / 1e6;
@@ -72,11 +84,8 @@ export function ecransAnalyseFonction(ex: ExerciceAnalyseFonction): EcranDeclare
   // propre à l'erreur serait un verdict visible sous correction coupée.
   const effAffiche = { a: arrondi6(e.a), b: arrondi6(e.b), c: arrondi6(e.c) };
   const enonceEffectif = e.coefficientsAffiches ? `Étudie la fonction suivante, d'après les coefficients que tu as donnés : $f(x) = ${latexPolynome(effAffiche, termesNonNuls(effAffiche))}$.` : enonce;
-  /** Énoncé + panneau de faits (une ligne, si des écrans précédents sont réussis) + question, chacun sur sa ligne. */
-  const composer = (champ: string, question: string, enonceUtilise: string = enonce): string => {
-    const faits = ligneFaits(ex, champ);
-    return faits === null ? `${enonceUtilise} ${question}` : `${enonceUtilise}\n${faits}\n${question}`;
-  };
+  /** Énoncé + question. (Le rappel des écrans précédents n'est plus une ligne de consigne : c'est le « Ce qu'on sait déjà » du moteur, RAPPORT §43.) */
+  const composer = (_champ: string, question: string, enonceUtilise: string = enonce): string => `${enonceUtilise} ${question}`;
   /**
    * Aide `croquis_parabole` sur la parabole EFFECTIVE (celle dont l'écran est jugé). Si ses coefficients ne s'y prêtent pas (non entiers, démesurés :
    * l'aide exige des entiers), repli sur la vraie parabole — publique dans l'énoncé — plutôt que de retirer l'aide : `aide_disponible` ne doit jamais
@@ -85,11 +94,6 @@ export function ecransAnalyseFonction(ex: ExerciceAnalyseFonction): EcranDeclare
   const aideParabole = (options: { surlignageImf?: boolean; marquesOx?: boolean }): Pick<EcranDeclare, "aide"> => {
     const p = aideParaboleAdmissible(e) ? e : f;
     return { aide: { type: "croquis_parabole", a: p.a, b: p.b, c: p.c, marqueS: true, ...options } };
-  };
-  /** Écrans « équation » (sans énoncé de fonction) : le panneau, s'il existe, précède le texte. */
-  const avecFaits = (champ: string, texte: string): string => {
-    const faits = ligneFaits(ex, champ);
-    return faits === null ? texte : `${faits}\n${texte}`;
   };
   const equation = `$${equationCanonique(f)} = 0$`;
   const racines = ecransRacines(f.categorie);
@@ -137,13 +141,13 @@ export function ecransAnalyseFonction(ex: ExerciceAnalyseFonction): EcranDeclare
     {
       champ: CHAMP_RECONNAISSANCE,
       type: "qcm",
-      consigne: avecFaits(CHAMP_RECONNAISSANCE, `Pour trouver les racines de $f$, on considère l'équation ${equation}. Quelle est la méthode la plus rapide ?`),
+      consigne: `Pour trouver les racines de $f$, on considère l'équation ${equation}. Quelle est la méthode la plus rapide ?`,
       choix: CHOIX_RECONNAISSANCE.map((c) => ({ id: c.id, libelle: c.libelle })),
     },
   ];
   if (champ1 && champ2 && ex.zeros) {
-    ecrans.push({ ...champ1, consigne: avecFaits(CHAMP_RACINES_FACTORISATION, `L'équation à résoudre est ${equation}. ${champ1.consigne}`) });
-    ecrans.push({ ...champ2, dependDe: [CHAMP_RACINES_FACTORISATION], consigne: avecFaits(CHAMP_RACINES_ZEROS, `${ligneFactorisation(ex.zeros)} ${champ2.consigne}`) });
+    ecrans.push({ ...champ1, consigne: `L'équation à résoudre est ${equation}. ${champ1.consigne}` });
+    ecrans.push({ ...champ2, dependDe: [CHAMP_RACINES_FACTORISATION], consigne: `${ligneFactorisation(ex.zeros)} ${champ2.consigne}` });
   }
   ecrans.push({
     // RAPPORT §41 : le tableau est jugé sur la fonction EFFECTIVE (coefficients confirmés) ; ses racines et son sommet en sont dérivés.
@@ -151,44 +155,11 @@ export function ecransAnalyseFonction(ex: ExerciceAnalyseFonction): EcranDeclare
     ...aideParabole({ marquesOx: true }),
     dependDe: [CHAMP_COEFFICIENTS, ...dependancesTableau],
   });
-  return ecrans;
+  return ecrans.map((e) => ({ ...e, nom: NOMS_ECRANS[e.champ] }));
 }
 
 /** Liste des champs de la variante, dans l'ordre (sert à `etatActuel` et à `champs_attendus`). */
 export function champsAnalyseFonction(categorie: FonctionSecondDegre["categorie"]): string[] {
   const racines = ecransRacines(categorie).map((e) => e.champ);
   return [CHAMP_COEFFICIENTS, CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_DOMAINE_IMAGE, CHAMP_RECONNAISSANCE, ...racines, CHAMP_TABLEAU_SIGNES];
-}
-
-/**
- * Panneau « Ce que tu sais déjà » (D5/D14, Q5) : une ligne de TEXTE d'auteur (`$…$`) ajoutée à la consigne des écrans qui suivent. Ce n'est
- * pas un canal supplémentaire : le client n'a aucune logique propre à gen7, il rend une consigne. Bâti par `projeterAnalyseFonction`
- * (`ex.corrects`) :
- *  - un fait n'est rappelé qu'aux écrans qui viennent APRÈS l'écran qui l'établit, et seulement si cet écran est RÉUSSI ;
- *  - jamais sous correction coupée (`corrects` est alors vide) : un fait est la bonne valeur, il ne doit pas être connu avant la fin de la tâche ;
- *  - les racines n'y figurent qu'une fois `racinesChamp1` ET `racinesChamp2` réussis (valeurs EFFECTIVES de la cascade), jamais pour `af_irreductible`.
- * Pas de filtre par écran : l'ancien « Ce qu'on sait déjà » n'en avait pas (spec 3a, §2.9 / écart n°8).
- */
-export function ligneFaits(ex: ExerciceAnalyseFonction, avantChamp: string): string | null {
-  const f = ex.fonction;
-  const ordre = champsAnalyseFonction(f.categorie);
-  // Un écran jugé sur une donnée de l'élève n'établit un FAIT que si cette donnée est la vraie : « axe juste pour SES coefficients » n'établit
-  // pas l'axe de la vraie fonction (RAPPORT §38). Sans donnée fausse, l'écran a été jugé sur la vraie fonction : c'est un fait.
-  const e = ex.effectif;
-  const donneesVraies = (champ: string): boolean =>
-    champ === CHAMP_ALLURE || champ === CHAMP_AXE_SOMMET ? !e.coefficientsEleve : champ === CHAMP_DOMAINE_IMAGE ? !e.coefficientsEleve && !e.ordonneeEleve : true;
-  const etabli = (champ: string): boolean => ex.corrects.includes(champ) && donneesVraies(champ);
-  const precedents = new Set(ordre.slice(0, ordre.indexOf(avantChamp)).filter(etabli));
-  const faits: string[] = [];
-  if (precedents.has(CHAMP_COEFFICIENTS)) faits.push(`$a = ${f.a}$, $b = ${f.b}$, $c = ${f.c}$`);
-  if (precedents.has(CHAMP_ALLURE)) faits.push(`parabole tournée vers le ${f.a > 0 ? "haut" : "bas"}`);
-  if (precedents.has(CHAMP_AXE_SOMMET)) faits.push(`axe de symétrie $x = ${latexNombre(f.xS)}$, sommet $S(${latexNombre(f.xS)}\\,;\\,${latexNombre(f.yS)})$`);
-  if (precedents.has(CHAMP_DOMAINE_IMAGE)) faits.push(`$\\mathrm{dom}\\,f = \\mathbb{R}$ et $\\mathrm{im}\\,f = ${f.a > 0 ? `[${latexNombre(f.yS)}\\,;\\,+\\infty[` : `]-\\infty\\,;\\,${latexNombre(f.yS)}]`}$`);
-  // Les écrans « racines » portent sur l'équation VRAIE (non cascadée) : avec des coefficients faux, leurs racines ne sont pas celles de la fonction que le tableau
-  // affiche (la sienne) — les rappeler comme un fait la contredirait (RAPPORT §41).
-  if (precedents.has(CHAMP_RACINES_FACTORISATION) && precedents.has(CHAMP_RACINES_ZEROS) && ex.zeros !== null && !e.coefficientsEleve) {
-    const [r1, r2] = ex.zeros.racines;
-    faits.push(r1 === r2 ? `racine double $x_1 = ${latexRacine(r1)}$` : `racines $x_1 = ${latexRacine(r1)}$ et $x_2 = ${latexRacine(r2)}$`);
-  }
-  return faits.length === 0 ? null : `Ce que tu sais déjà : ${faits.join(" ; ")}.`;
 }

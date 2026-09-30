@@ -135,6 +135,43 @@ leur conteneur (`font-size: inherit` ou `em` relatifs).
 | `--espace-4` | `24px` | Séparation de blocs |
 | `--espace-5` | `40px` | Grande séparation, base des zones tactiles |
 
+## Enveloppe de l'exercice (RAPPORT §43, assemblage révisé §44)
+
+Référence : `docs/reference/enveloppe-exercice.html` (exprimée **uniquement** avec les tokens ci-dessus : aucune valeur nouvelle, aucun
+token ajouté). `npm run chromium-design` la rend et la compare à l'application à 390 et 1280 px. Ordre à toutes les largeurs :
+**[lien + titres] → [carte de l'écran, dont le PREMIER enfant est le panneau gris : progression + « Ce qu'on sait déjà »]** (RAPPORT §47 : une seule
+structure, deux mises en page en CSS seul).
+
+| Largeur | Assemblage |
+|---|---|
+| Bureau (> 600 px) | carte blanche arrondie à la largeur de la colonne ; le panneau gris est un **encadré en retrait** dans la carte (filet, arrondi `--radius-sm`), comme l'ancien pilote ; lien et titres sur le fond de la page ; le verdict colore la carte, pas l'encadré |
+| Mobile (≤ 600 px) | **bord à bord** (inchangé depuis §44) : le bandeau gris (lien + titres) touche la bannière violette et a la couleur du panneau gris ; le panneau gris (filets haut et bas) est AU-DESSUS du blanc et, comme la carte blanche, fait la largeur de l'écran, sans arrondi ni bord latéral (marges négatives qui annulent le padding latéral de 16 px de la carte) |
+
+| Élément | Règle |
+|---|---|
+| Lien « Mes tâches » | puce ronde de 30 px `--violet-clair` + libellé 14 px gras `--violet-vif` ; zone tactile ≥ 44 px par pseudo-élément |
+| Surtitre | 11 px gras, `0.06em`, `--text-muted` : « EXERCICE i SUR m · nom de la tâche » (majuscules ÉCRITES dans le texte, jamais `text-transform`, RAPPORT §30 ; le nom de la tâche reste tel que saisi) |
+| Titre | `--font-marque` 20 px gras, `-0.01em` : « Question k sur N » |
+| Panneau gris | `--surface-sunken`, filet `--border`, padding 14 × 16 px ; arrondi `--radius-sm` sur bureau, filets haut et bas seulement sur mobile |
+| Piste de progression | 12 px de haut, fond `--violet-clair`, pilule ; un segment par écran |
+| Ligne du rappel | marque ronde de 20 px + nom (13 px gras) + réponse d'ÉLÈVE (`--font-marque` 14 px) ; l'écran courant : cercle numéroté `--violet-vif` |
+
+**Marques et segments** (couleur = le verdict que le **serveur** a décidé de montrer, `info.statut`) : `correct` → `--vert-vif` (✓), `not_equivalent`
+→ `--danger` (✕), `parse_error` → `--ambre` (!), **sans verdict** (correction coupée, `statut = null`) → marque `--violet-clair` (•) et segment
+`--violet-2` : **jamais une coche ni une couleur de verdict**, un élève juste et un élève faux voient la même chose. La couleur de la CARTE de
+l'écran courant (vert, rouge, jaune) est inchangée et ne touche que la carte ; le panneau gris, placé dans la carte, garde sa couleur grise dans tous les cas (aucune règle de verdict ne l'atteint). Aucune ligne du rappel
+n'utilise les classes `moteur-statut-*` : les sélecteurs `:has(.moteur-statut-…)` de la carte les liraient.
+
+**Gouttières** : le mobile annule celles de la page par `--gouttiere-page` (16 px bureau, 14 px mobile) et `--marge-haute-page` (24 / 16 px), définies dans
+`.contenu-page` (`style.css`) — des valeurs de mise en page, pas des tokens. `--retrait-plein-bord` du tableau de signes : 24 px de carte + 1 px de bordure +
+gouttière sur bureau ; 16 px (le padding de la carte, déjà bord à bord) sur mobile.
+
+**Carte des composants** : `composants-ecran.html` reste la référence de ce que la carte CONTIENT (consigne, champs, boutons, espacements). Sa propre enveloppe
+(bord haut, rayons, padding latéral, largeur) n'est plus celle de cette référence mais celle de `enveloppe-exercice.html` (RAPPORT §44) ; `chromium-design`
+ne compare plus sur la carte que le fond, l'ombre, le bord bas et le padding bas.
+
+Graisse 700 : utilisée par le lien, les étiquettes et les marques de l'enveloppe (la règle d'usage ci-dessus ne listait que 600).
+
 ## Tableau de signes plein-bord (phase 3b, RAPPORT §30-§31)
 
 Rendu de **référence stricte** : `docs/reference/tableau-signes.html` (code fourni par le propriétaire du projet, à ouvrir dans un navigateur pour comparer avec la capture Chromium `captures-chromium/*-etendu-10b-carte-tableau-7-colonnes.png`). Ne pas réinterpréter.

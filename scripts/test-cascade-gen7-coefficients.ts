@@ -225,7 +225,7 @@ async function main(): Promise<void> {
     verifier(gc.champs.every((c: any) => c.solution_attendue === null && c.statut === null && c.revele === false), "coupé : le GET non plus");
   }
 
-  // ── 8. Panneau « Ce que tu sais déjà » : un fait n'est rappelé que si TOUTE sa chaîne est juste ──
+  // ── 8. « Ce qu'on sait déjà » n'est plus une ligne de consigne (RAPPORT §43) : quelles que soient les réponses, aucune consigne servie n'en porte ──
   {
     const x = await nouveau({ feedback: true });
     await x.poster("coefficients", COEF_FAUX);
@@ -233,12 +233,11 @@ async function main(): Promise<void> {
     await x.poster("axeSommet", AXE("-24/5"));
     await x.poster("domaineImage", IMAGE("-24/5"));
     const g = await x.lire();
-    const faits = consigne(g, "racinesReconnaissance").split("\n").find((l) => l.startsWith("Ce que tu sais déjà")) ?? "";
-    verifier(faits === "", `coefficients faux : aucun fait issu de sa chaîne (allure/axe/image justes sur SES valeurs) n'est présenté comme acquis (« ${faits} »)`);
+    verifier(g.ecrans.every((e: any) => !e.consigne.includes("Ce que tu sais déjà")), "coefficients faux : aucune consigne ne porte de ligne de faits");
     const bon = await nouveau({ feedback: true });
     for (const champ of ["coefficients", "allure", "axeSommet", "domaineImage"]) await bon.poster(champ, reponseBruteCorrecteAnalyseFonction(bon.ex, champ));
-    const fb = consigne(await bon.lire(), "racinesReconnaissance");
-    verifier(fb.includes("$a = 4$") && fb.includes("axe de symétrie $x = -1$") && fb.includes("\\mathrm{im}\\,f = [-4"), `tout juste : les faits vrais figurent (${fb.slice(0, 160)})`);
+    const gb = await bon.lire();
+    verifier(gb.ecrans.every((e: any) => !e.consigne.includes("Ce que tu sais déjà")) && gb.ecrans.every((e: any) => typeof e.nom === "string" && e.nom.length > 0), "tout juste : aucune ligne de faits, mais chaque écran servi porte son nom");
   }
 
   // ── 9. racinesChamp2 : la cascade s'applique AUSSI sous correction immédiate (déroge à §33-D, décision D-A du propriétaire) ──

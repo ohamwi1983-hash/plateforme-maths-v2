@@ -21,6 +21,24 @@ const LIBELLES_STATUT = {
 };
 
 /**
+ * Enveloppe de l'exercice (RAPPORT §43) : marque d'une ligne du « Ce qu'on sait déjà » et couleur d'un segment de la progression, selon le
+ * `statut` que le SERVEUR a décidé de montrer (`info.statut`). Sous correction coupée il est `null` jusqu'à la fin de la tâche : toutes les
+ * lignes portent alors la MÊME marque neutre (jamais une coche : un élève juste et un élève faux voient la même chose).
+ */
+const MARQUES_RAPPEL = {
+  correct: { etat: "correct", glyphe: "✓" },
+  not_equivalent: { etat: "not_equivalent", glyphe: "✕" },
+  parse_error: { etat: "parse_error", glyphe: "!" },
+  neutre: { etat: "neutre", glyphe: "•" },
+};
+const LIBELLE_NEUTRE = "Réponse enregistrée";
+
+/** Nom court d'un écran (`ecran.nom`, texte d'auteur) ; à défaut « Question n ». */
+function nomDe(ecran, rang) {
+  return ecran && typeof ecran.nom === "string" && ecran.nom !== "" ? ecran.nom : `Question ${rang}`;
+}
+
+/**
  * `options.math: true` pour un texte d'AUTEUR (consigne, solution, message d'erreur, aide) ; sans option,
  * texte brut (interface, texte d'élève). Voir `rendreTexte.js`.
  */
@@ -54,10 +72,11 @@ function composantPour(ecran) {
 /**
  * Affiche l'exercice `exerciceId` dans `conteneur`.
  * `options.surExerciceTermine()` : l'élève a validé le dernier écran et cliqué « Terminer ».
- * `options.surSortie()` : bouton « Retour ».
+ * `options.surSortie()` : lien « Mes tâches ».
+ * `options.rang` / `options.total` (optionnels, entiers) : « Exercice rang sur total » dans le surtitre ; absents, seul le nom de la tâche est affiché.
  * Renvoie une fonction `detruire()` (arrête le compte à rebours).
  */
-export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTermine, surSortie }) {
+export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTermine, surSortie, rang, total }) {
   let minuterie = null;
   let detruit = false;
   const arreterMinuterie = () => {
@@ -88,15 +107,16 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
 
   async function afficher(exercice, contexte = {}) {
     const racine = creer("div", "moteur-exercice");
-    const entete = creer("div", "moteur-entete");
-    const sortie = creer("button", "moteur-bouton moteur-bouton-secondaire", "← Retour");
-    sortie.type = "button";
-    sortie.addEventListener("click", () => {
-      detruire();
-      surSortie();
-    });
-    entete.append(sortie, creer("p", "moteur-titre", exercice.tache.nom));
-    racine.appendChild(entete);
+    const infosParChamp = new Map(exercice.champs.map((c) => [c.champ, c]));
+    const ecransParChamp = new Map(exercice.ecrans.map((e) => [e.champ, e]));
+    const retour = exercice.tache.retour_arriere === true && exercice.saisie_possible;
+    const edition = retour && typeof contexte.edition === "string" && infosParChamp.get(contexte.edition)?.modifiable === true ? contexte.edition : null;
+    // Un seul écran à la fois (RAPPORT §43) : l'écran courant, ou l'écran en cours de modification (retour en arrière : un seul formulaire à la fois).
+    const champCourant = edition !== null ? edition : exercice.saisie_possible && exercice.champ_courant !== null ? exercice.champ_courant : null;
+    const ecranCourant = champCourant !== null ? ecransParChamp.get(champCourant) : undefined;
+    const indexCourant = ecranCourant ? exercice.champs.findIndex((c) => c.champ === ecranCourant.champ) : -1;
+
+    racine.appendChild(construireEntete(exercice, indexCourant));
 
     if (contexte.notice) {
       const notice = creer("p", "moteur-message moteur-message-succes", contexte.notice);
@@ -104,32 +124,34 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
       racine.appendChild(notice);
     }
 
-    const infosParChamp = new Map(exercice.champs.map((c) => [c.champ, c]));
-    const retour = exercice.tache.retour_arriere === true && exercice.saisie_possible;
-    const edition = retour && typeof contexte.edition === "string" && infosParChamp.get(contexte.edition)?.modifiable === true ? contexte.edition : null;
     let carteCourante = null;
-    for (const ecran of exercice.ecrans) {
-      const info = infosParChamp.get(ecran.champ);
-      // Retour en arrière : pendant la modification d'un écran déjà traversé, l'écran courant n'est pas proposé (un seul formulaire à la fois).
-      const enEdition = edition === ecran.champ && info.modifiable === true;
-      const estCourant = exercice.saisie_possible && exercice.champ_courant === ecran.champ && edition === null;
-      if (!estCourant && !enEdition && !info.verrouille && info.modifiable !== true) continue; // écrans à venir : pas encore affichés
-      const carte = creer("section", "moteur-ecran " + (estCourant || enEdition ? "moteur-ecran-courant" : "moteur-ecran-termine"));
-      carte.appendChild(creer("p", "moteur-consigne", ecran.consigne, { math: true }));
-      if (estCourant || enEdition) {
-        carteCourante = { carte, ecran, info, modification: enEdition };
-      } else {
+    if (ecranCourant) {
+      // Pendant la résolution : la carte de l'écran courant porte, EN PREMIER, le panneau gris du rappel (un encadré en retrait sur bureau ; sur mobile,
+      // bord à bord et au-dessus du blanc : RAPPORT §47, CSS seul). La carte seule porte la couleur du verdict ; les écrans déjà répondus sont les lignes du rappel.
+      const carte = creer("section", "moteur-ecran moteur-ecran-courant");
+      carte.appendChild(construireRappel(exercice, { infosParChamp, ecransParChamp, indexCourant, retour }));
+      carte.appendChild(creer("p", "moteur-consigne", ecranCourant.consigne, { math: true }));
+      carteCourante = { carte, ecran: ecranCourant, info: infosParChamp.get(ecranCourant.champ), modification: edition !== null };
+      racine.appendChild(carte);
+    } else {
+      // Exercice terminé, relecture d'une tâche antérieure, ou remise à venir (retour en arrière) : la RELECTURE de chaque écran — énoncé,
+      // ta réponse, verdict et solution quand le serveur les montre — reste celle d'avant (RAPPORT §43 : le rappel compact ne porte pas l'énoncé).
+      for (const ecran of exercice.ecrans) {
+        const info = infosParChamp.get(ecran.champ);
+        if (!info.verrouille && info.modifiable !== true) continue; // écrans à venir : pas encore affichés
+        const carte = creer("section", "moteur-ecran moteur-ecran-termine");
+        carte.appendChild(creer("p", "moteur-consigne", ecran.consigne, { math: true }));
         carte.appendChild(resumeTermine(ecran, info));
         if (info.modifiable === true) {
-          // Écran déjà répondu mais encore modifiable : la réponse actuelle (dernière réponse valide) est affichée, « Modifier » rouvre l'écran.
+          // Écran déjà répondu mais encore modifiable : « Modifier » rouvre l'écran.
           const modifier = creer("button", "moteur-bouton moteur-bouton-secondaire moteur-bouton-modifier", "Modifier ma réponse");
           modifier.type = "button";
           modifier.setAttribute("aria-label", "Modifier ma réponse à cet écran");
           modifier.addEventListener("click", () => afficher(exercice, { edition: ecran.champ }));
           carte.appendChild(modifier);
         }
+        racine.appendChild(carte);
       }
-      racine.appendChild(carte);
     }
 
     if (retour && exercice.pret_a_rendre === true && edition === null) racine.appendChild(panneauRemise(exercice));
@@ -148,6 +170,111 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
     }
     conteneur.replaceChildren(racine);
     if (carteCourante) await activerEcranCourant(exercice, carteCourante);
+  }
+
+  /** Lien « Mes tâches », surtitre « Exercice i sur m · tâche » et titre « Question k sur N » (RAPPORT §43). */
+  function construireEntete(exercice, indexCourant) {
+    const bloc = creer("div", "moteur-suivi");
+    const sortie = creer("button", "moteur-lien-retour");
+    sortie.type = "button";
+    sortie.setAttribute("aria-label", "Retour à mes tâches");
+    const puce = creer("span", "moteur-lien-retour-puce", "←");
+    puce.setAttribute("aria-hidden", "true");
+    sortie.append(puce, creer("span", undefined, "Mes tâches"));
+    sortie.addEventListener("click", () => {
+      detruire();
+      surSortie();
+    });
+    const titres = creer("div", "moteur-titres");
+    const morceaux = [];
+    // Majuscules ÉCRITES (jamais `text-transform`, RAPPORT §30 : il déformerait un nom de tâche contenant « f(x) ») ; le nom de la tâche reste tel que saisi.
+    if (Number.isInteger(rang) && Number.isInteger(total)) morceaux.push(`EXERCICE ${rang} SUR ${total}`);
+    if (exercice.tache.nom) morceaux.push(exercice.tache.nom);
+    if (morceaux.length > 0) titres.appendChild(creer("p", "moteur-surtitre", morceaux.join(" · ")));
+    const n = exercice.champs.length;
+    const titre = indexCourant >= 0 ? `Question ${indexCourant + 1} sur ${n}` : exercice.saisie_possible ? "Exercice terminé" : "Consultation";
+    titres.appendChild(creer("h2", "moteur-question-titre", titre));
+    bloc.append(sortie, titres);
+    return bloc;
+  }
+
+  /**
+   * Bloc « Progression » + « Ce qu'on sait déjà » : dérivé UNIQUEMENT de l'état que le serveur a choisi d'exposer (`exercice.champs` : `verrouille`,
+   * `statut`, `valeur_saisie`, `solution_attendue`). Aucun verdict n'est inventé ici : `statut === null` (correction coupée) donne une marque neutre.
+   * Une ligne = un écran déjà répondu (sa réponse d'ÉLÈVE, jamais interprétée comme du balisage) ; l'écran courant porte son numéro ; les écrans à venir
+   * ne sont pas listés (leur nom reste au serveur jusqu'à ce qu'ils soient servis).
+   */
+  function construireRappel(exercice, { infosParChamp, ecransParChamp, indexCourant, retour }) {
+    const bloc = creer("div", "moteur-rappel");
+    const champs = exercice.champs;
+    const n = champs.length;
+    // « Répondu » = verrouillé, ou (retour en arrière) répondu mais encore modifiable.
+    const repondu = (c) => c.verrouille === true || c.modifiable === true;
+    const faits = champs.filter((c, i) => i !== indexCourant && repondu(c)).length;
+    const pourcent = n === 0 ? 0 : Math.round((faits / n) * 100);
+
+    const etiquette = creer("div", "moteur-progression-etiquette");
+    etiquette.append(creer("span", undefined, "Progression"), creer("span", undefined, `${pourcent} %`));
+    const piste = creer("div", "moteur-piste");
+    piste.setAttribute("role", "progressbar");
+    piste.setAttribute("aria-label", "Progression dans l'exercice");
+    piste.setAttribute("aria-valuemin", "0");
+    piste.setAttribute("aria-valuemax", "100");
+    piste.setAttribute("aria-valuenow", String(pourcent));
+    champs.forEach((c, i) => {
+      const etat = i === indexCourant ? "courant" : repondu(c) ? "fait-" + (MARQUES_RAPPEL[c.statut]?.etat ?? MARQUES_RAPPEL.neutre.etat) : "avenir";
+      piste.appendChild(creer("span", "moteur-segment moteur-segment-" + etat));
+    });
+    bloc.append(etiquette, piste, creer("p", "moteur-rappel-titre", "CE QU'ON SAIT DÉJÀ"));
+
+    const liste = creer("ol", "moteur-rappel-liste");
+    champs.forEach((c, i) => {
+      const ecran = ecransParChamp.get(c.champ);
+      const nom = nomDe(ecran, i + 1);
+      if (i === indexCourant) {
+        const ligne = creer("li", "moteur-rappel-ligne moteur-rappel-ligne-courant");
+        ligne.appendChild(creer("span", "moteur-rappel-marque moteur-rappel-marque-courant", String(i + 1)));
+        const libelle = creer("span", "moteur-rappel-en-cours");
+        rendreTexte(libelle, nom, { math: true });
+        libelle.append(" — en cours");
+        ligne.appendChild(libelle);
+        liste.appendChild(ligne);
+        return;
+      }
+      if (!repondu(c)) return;
+      liste.appendChild(ligneFaite(exercice, c, ecran, nom, retour));
+    });
+    bloc.appendChild(liste);
+    return bloc;
+  }
+
+  function ligneFaite(exercice, info, ecran, nom, retour) {
+    const marque = MARQUES_RAPPEL[info.statut] ?? MARQUES_RAPPEL.neutre;
+    const ligne = creer("li", "moteur-rappel-ligne moteur-rappel-ligne-" + marque.etat);
+    const pastille = creer("span", "moteur-rappel-marque moteur-rappel-marque-" + marque.etat, marque.glyphe);
+    pastille.setAttribute("role", "img");
+    pastille.setAttribute("aria-label", LIBELLES_STATUT[info.statut] ?? LIBELLE_NEUTRE);
+    const corps = creer("div", "moteur-rappel-corps");
+    const libelle = creer("span", "moteur-rappel-nom");
+    rendreTexte(libelle, nom, { math: true });
+    libelle.append(" :");
+    corps.appendChild(libelle);
+    const valeur = creer("span", "moteur-rappel-valeur moteur-valeur");
+    if (info.valeur_saisie !== null && ecran) rendrePieces(valeur, composantPour(ecran).resumer(ecran, info.valeur_saisie));
+    else rendreTexte(valeur, "pas de réponse");
+    corps.appendChild(valeur);
+    // Une réponse juste n'a pas besoin de « Réponse attendue » (elle lui est identique) : la solution n'est rappelée que pour un écran non réussi.
+    if (info.solution_attendue !== null && info.statut !== "correct") corps.appendChild(creer("p", "moteur-rappel-solution moteur-solution", "Réponse attendue : " + info.solution_attendue, { math: true }));
+    if (retour && info.modifiable === true) {
+      // Retour en arrière : la réponse actuelle (dernière réponse valide) est affichée, « Modifier » rouvre l'écran.
+      const modifier = creer("button", "moteur-bouton moteur-bouton-secondaire moteur-bouton-modifier", "Modifier ma réponse");
+      modifier.type = "button";
+      modifier.setAttribute("aria-label", `Modifier ma réponse à l'écran « ${nom} »`);
+      modifier.addEventListener("click", () => afficher(exercice, { edition: info.champ }));
+      corps.appendChild(modifier);
+    }
+    ligne.append(pastille, corps);
+    return ligne;
   }
 
   /**
@@ -192,6 +319,7 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
     return bloc;
   }
 
+  /** Relecture d'un écran terminé (RAPPORT §43 : seulement sans écran courant) : ta réponse, le verdict et la solution tels que le serveur les montre. */
   function resumeTermine(ecran, info) {
     const bloc = creer("div", "moteur-resume");
     if (info.valeur_saisie !== null) {
@@ -396,7 +524,8 @@ export async function demarrerTache(conteneur, tache, options) {
       options.surSortie();
       return;
     }
-    detruire = await ouvrirExercice(conteneur, id, { api: options.api, surSortie: options.surSortie, surExerciceTermine: suivant });
+    const position = tache.exercices.findIndex((e) => e.id === id);
+    detruire = await ouvrirExercice(conteneur, id, { api: options.api, surSortie: options.surSortie, surExerciceTermine: suivant, rang: position + 1, total: tache.exercices.length });
   }
   await suivant();
   return () => detruire();

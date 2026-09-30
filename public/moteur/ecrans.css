@@ -23,28 +23,217 @@
   gap: var(--espace-3);
   max-width: 100%;
   margin: 0 auto;
-  padding: var(--espace-3);
+  padding: 0;
   font-family: var(--font-corps);
   color: var(--text);
 }
 
-.moteur-entete {
+/* ── Enveloppe de l'exercice (RAPPORT §43) : lien « Mes tâches », surtitre, titre « Question k sur N », progression et « Ce qu'on sait déjà ».
+   Référence : docs/reference/enveloppe-exercice.html (vérifiée en Chromium à 390 et 1280 px par `npm run chromium-design`). ── */
+.moteur-suivi {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   gap: var(--espace-3);
 }
 
-.moteur-entete .moteur-bouton {
-  flex: none;
+.moteur-lien-retour {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espace-2);
+  width: auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font-family: var(--font-corps);
+  font-size: 0.875em;
+  font-weight: 700;
+  color: var(--violet-vif);
+  cursor: pointer;
 }
 
-.moteur-titre {
+.moteur-lien-retour:hover {
+  background: transparent;
+  text-decoration: underline;
+}
+
+/* Cible tactile ≥ 44 px malgré les 30 px visibles de la puce : zone cliquable élargie par un pseudo-élément, sans changer l'apparence. */
+.moteur-lien-retour {
+  position: relative;
+}
+
+.moteur-lien-retour::after {
+  content: "";
+  position: absolute;
+  inset: calc(-1*var(--espace-2));
+}
+
+.moteur-lien-retour-puce {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--espace-4) + var(--espace-2) - 2px); /* 30px */
+  height: calc(var(--espace-4) + var(--espace-2) - 2px);
+  border-radius: 50%;
+  background: var(--violet-clair);
+  font-size: 1.0714em; /* 15px, en em relatif aux 14px du lien */
+  line-height: 1;
+}
+
+.moteur-titres {
+  min-width: 0;
+}
+
+.moteur-surtitre {
+  margin: 0 0 calc(var(--espace-1)*0.75); /* 3px */
+  font-family: var(--font-corps);
+  font-size: 0.6875em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.moteur-question-titre {
   margin: 0;
   font-family: var(--font-marque);
-  font-weight: 600;
-  color: var(--violet);
+  font-size: 1.25em;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+/* Panneau gris « en creux » de progression et de rappel des écrans déjà répondus (RAPPORT §47) : PREMIER enfant de la carte de l'écran courant.
+   Bureau : un encadré en retrait dans la carte (filet, arrondi `--radius-sm`, comme l'ancien pilote). Mobile : bord à bord, au-dessus du blanc
+   (voir « Assemblage » plus bas). Il ne porte jamais la couleur du verdict : c'est la carte qui la porte. */
+.moteur-rappel {
+  margin: 0;
+  padding: calc(var(--espace-3)*0.875) var(--espace-3); /* 14px 16px */
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.moteur-progression-etiquette {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--espace-2);
+  font-size: 0.75em;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.moteur-piste {
+  display: flex;
+  gap: calc(var(--espace-1)*1.25); /* 5px */
+  height: calc(var(--espace-2) + var(--espace-1));
+  margin-bottom: calc(var(--espace-3)*1.125); /* 18px */
+  background: var(--violet-clair);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.moteur-segment {
+  flex: 1;
+  background: var(--border);
+  border-radius: var(--radius);
+}
+
+/* Un segment répondu prend la couleur du VERDICT que le serveur a décidé de montrer ; sans verdict (correction coupée), teinte neutre. */
+.moteur-segment-fait-correct { background: var(--vert-vif); }
+.moteur-segment-fait-not_equivalent { background: var(--danger); }
+.moteur-segment-fait-parse_error { background: var(--ambre); }
+.moteur-segment-fait-neutre { background: var(--violet-2); }
+.moteur-segment-courant { background: var(--violet-vif); }
+
+.moteur-rappel-titre {
+  margin: 0 0 calc(var(--espace-2)*1.25); /* 10px */
+  font-size: 0.75em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.moteur-rappel-liste {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.moteur-rappel-ligne {
+  display: flex;
+  align-items: flex-start;
+  gap: calc(var(--espace-2)*1.25); /* 10px */
   min-width: 0;
+}
+
+.moteur-rappel-marque {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--espace-3) + var(--espace-1)); /* 20px */
+  height: calc(var(--espace-3) + var(--espace-1));
+  border-radius: 50%;
+  color: var(--surface);
+  font-size: 0.75em;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.moteur-rappel-marque-correct { background: var(--vert-vif); }
+.moteur-rappel-marque-not_equivalent { background: var(--danger); }
+.moteur-rappel-marque-parse_error { background: var(--ambre); }
+/* Sans verdict : jamais une coche (un élève juste et un élève faux voient la MÊME marque). */
+.moteur-rappel-marque-neutre { background: var(--violet-clair); color: var(--violet); }
+.moteur-rappel-marque-courant {
+  border: 2px solid var(--violet-vif);
+  color: var(--violet-vif);
+  font-size: 0.6875em;
+}
+
+.moteur-rappel-corps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--espace-1) calc(var(--espace-3)*0.75); /* 12px = 10px (ligne) + 2px (valeur) de la référence */
+  min-width: 0;
+}
+
+.moteur-rappel-nom {
+  font-size: 0.8125em;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.moteur-rappel-valeur {
+  min-width: 0;
+  font-family: var(--font-marque);
+  font-size: 0.875em;
+  color: var(--text);
   overflow-wrap: anywhere;
+}
+
+.moteur-rappel-en-cours {
+  font-size: 0.8125em;
+  font-style: italic;
+  color: var(--text-muted);
+}
+
+/* Spécificité (0,2,0) : la solution d'une ligne du rappel est du texte discret, pas le bandeau violet de `.moteur-solution` (défini plus bas). */
+.moteur-rappel .moteur-rappel-solution {
+  flex-basis: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  font-size: 0.8125em;
+  color: var(--text-muted);
 }
 
 /* ── Carte d'écran (commune aux 4 types) : mêmes fond / filet / rayon / ombre que `.panneau`,
@@ -68,9 +257,64 @@
   min-width: 0;
 }
 
+/* Relecture d'un écran terminé (exercice terminé, tâche antérieure, remise à venir) : carte « en creux » sans ombre. */
 .moteur-ecran-termine {
   background: var(--surface-sunken);
   box-shadow: none;
+}
+
+/* ── Assemblage de l'enveloppe (RAPPORT §47, qui remplace la règle « bloc joint » de §44 sur bureau) ──────────────────────────────────────
+   Bureau : UNE carte (l'écran courant) dont le premier enfant est le panneau gris en retrait ; la couleur du verdict entoure tout, l'encadré reste gris.
+   Mobile (≤ 600 px, comme la cible) : INCHANGÉ depuis §44, obtenu en CSS seul — le bandeau gris (lien, titre, progression) touche la bannière violette
+   sans espace d'une autre couleur, le panneau gris est AU-DESSUS du blanc (filets haut et bas, sans bord latéral) et la carte blanche fait la largeur
+   de l'écran (sans arrondi, sans bord latéral) : le panneau annule le padding latéral de la carte (marges négatives), et la carte n'a pas de
+   padding haut. Les gouttières de la page sont annulées par `--gouttiere-page` / `--marge-haute-page` (style.css). */
+@media (max-width: 600px) {
+  .moteur-exercice {
+    max-width: none;
+    margin-inline: calc(-1*var(--gouttiere-page,0px));
+    margin-top: calc(-1*var(--marge-haute-page,0px));
+  }
+
+  /* Relecture (exercice terminé, tâche antérieure, remise à venir : RAPPORT §46) : chaque bloc — carte d'écran, panneau de fin / de remise, message —
+     fait AUSSI la largeur de l'écran, sans arrondi ni bord latéral, comme la carte courante. Rien n'est plus décalé par la gouttière de la page. */
+  .moteur-exercice > .moteur-ecran-termine,
+  .moteur-exercice > .moteur-fin,
+  .moteur-exercice > .moteur-message {
+    border-width: 1px 0;
+    border-radius: 0;
+    padding-inline: var(--espace-3);
+  }
+
+  .moteur-exercice > .moteur-fin {
+    padding-block: var(--espace-3);
+    background: var(--surface);
+    border-style: solid;
+    border-color: var(--border);
+  }
+
+  .moteur-suivi {
+    gap: calc(var(--espace-3)*0.75);
+    padding: var(--espace-3) var(--espace-3) calc(var(--espace-3)*1.25);
+    background: var(--surface-sunken);
+  }
+
+  .moteur-suivi + .moteur-ecran-courant {
+    margin-top: calc(-1*var(--espace-3)); /* annule le `gap` : le bandeau et le panneau gris se touchent */
+  }
+
+  .moteur-ecran-courant {
+    padding: 0 var(--espace-3) var(--espace-4);
+    border-width: 0 0 1px;
+    border-radius: 0;
+  }
+
+  .moteur-ecran-courant > .moteur-rappel {
+    margin: 0 calc(-1*var(--espace-3)) calc(var(--espace-3)*0.5); /* plein-bord ; 8 px + le `gap` de 12 px = les 20 px d'avant entre le panneau et la consigne */
+    padding-inline: var(--espace-3);
+    border-width: 1px 0;
+    border-radius: 0;
+  }
 }
 
 .moteur-consigne {

@@ -76,6 +76,11 @@ interface EcranCommun {
   /** Texte de l'énoncé de CET écran (texte d'auteur, balisage `$…$` admis ; le rendu passe par `public/moteur/rendreTexte.js`). */
   consigne: string;
   /**
+   * Nom COURT de l'écran (« Coefficients », « Allure »…), texte d'auteur : libellé de sa ligne dans le « Ce qu'on sait déjà » de l'enveloppe
+   * d'exercice (RAPPORT §43). Absent : « Question n ». Aucune information sur la réponse : identique pour tous les élèves.
+   */
+  nom?: string;
+  /**
    * Aide (indice) : texte d'auteur OU aide typée (`AideTypee`, exactement 2 formes). Jamais envoyée
    * avec l'écran : servie seulement par `POST /api/reponses/aide`, qui la valide puis enregistre
    * l'usage côté serveur (pénalité calculée serveur, jamais déclarée par le client).

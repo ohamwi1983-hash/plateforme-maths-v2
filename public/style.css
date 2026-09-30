@@ -139,17 +139,23 @@ body {
  */
 .contenu-page {
   padding: var(--espace-4) var(--espace-3) 0;
-  /* Retrait « plein-bord » d'un tableau de signes (RAPPORT §30) : padding de la carte du moteur (--espace-4) + sa
-     bordure (1px) + le padding de `.moteur-exercice` qui l'enveloppe (--espace-3, ecrans.css) + la gouttière latérale
-     ci-dessus. Ces quatre termes sont dispersés dans trois règles : la géométrie est donc VÉRIFIÉE en Chromium
-     (bords du tableau = bords de la colonne, à 390px et à 1280px) — la modifier sans relancer ce test la casse. */
-  --retrait-plein-bord: calc(var(--espace-4) + 1px + var(--espace-3) + var(--espace-3));
+  /* Gouttières de la colonne (valeurs, pas des tokens : la gouttière mobile de 14 px n'est pas dans l'échelle) : lues par l'enveloppe de
+     l'exercice du moteur (ecrans.css, RAPPORT §44) pour ANNULER la gouttière et aller bord à bord sous 600 px. */
+  --gouttiere-page: var(--espace-3);
+  --marge-haute-page: var(--espace-4);
+  /* Retrait « plein-bord » d'un tableau de signes (RAPPORT §30, révisé §43-§44) : padding de la carte du moteur (--espace-4) + sa
+     bordure (1px) + la gouttière latérale ci-dessus. Ces termes sont dispersés dans plusieurs règles : la géométrie est donc VÉRIFIÉE en
+     Chromium (bords du tableau = bords de la colonne, à 390px et à 1280px) — la modifier sans relancer ce test la casse. */
+  --retrait-plein-bord: calc(var(--espace-4) + 1px + var(--espace-3));
 }
 
 @media (max-width: 600px) {
   .contenu-page {
     padding: var(--espace-3) 14px 0;
-    --retrait-plein-bord: calc(var(--espace-4) + 1px + var(--espace-3) + 14px);
+    --gouttiere-page: 14px;
+    --marge-haute-page: var(--espace-3);
+    /* Sous 600 px la carte du moteur est plein-bord (RAPPORT §44) : le tableau n'a plus à franchir que le padding de la carte (--espace-3). */
+    --retrait-plein-bord: var(--espace-3);
   }
 }
 

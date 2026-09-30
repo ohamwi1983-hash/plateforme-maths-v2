@@ -153,9 +153,6 @@ async function main(): Promise<void> {
       const p = projeterAnalyseFonction(brut, inexploitable, { correctionImmediate: c.correctionImmediate, solutionMontree: c.solutionMontree });
       verifier(p.affichageTableau === c.tableau, `gen7 (${c.nom}) : tableau « ${c.tableau} » (obtenu ${p.affichageTableau})`);
       verifier(p.zeros?.origine === c.repli, `gen7 (${c.nom}) : repli de racinesChamp2 « ${c.repli} » (obtenu ${p.zeros?.origine})`);
-      // Le panneau de faits ne dépend que du VERDICT (visible dès que la correction est immédiate) : un fait est la bonne valeur d'un écran RÉUSSI.
-      const reussi = projeterAnalyseFonction(brut, [{ champ: "coefficients", reponseBrute: "{}", statut: "correct" }], { correctionImmediate: c.correctionImmediate, solutionMontree: c.solutionMontree });
-      verifier(JSON.stringify(reussi.corrects) === JSON.stringify(c.correctionImmediate ? ["coefficients"] : []), `gen7 (${c.nom}) : faits = écrans réussis, seulement sous correction immédiate`);
     }
 
     // De bout en bout : ce que le navigateur reçoit (énoncé de racinesChamp2, colonnes du tableau).
