@@ -59,7 +59,11 @@ for (const fam of FAMILLES) {
       const attenduEleve = reponseBruteCorrecteMotifDelta(proj, champ);
       verifier(verifierMotifDelta(proj, champ, attenduEleve).statut === "correct", `${ctx} / ${champ} : la méthode juste appliquée aux coefficients de l'élève est CORRECTE`);
       const attenduVrai = reponseBruteCorrecteMotifDelta(ex, champ);
-      if (attenduVrai !== attenduEleve) verifier(verifierMotifDelta(proj, champ, attenduVrai).statut === "not_equivalent", `${ctx} / ${champ} : la réponse de la VRAIE fonction n'est pas acceptée sur celle de l'élève`);
+      // Jamais acceptée ; `parse_error` n'est possible que pour le tableau, dont la STRUCTURE (3 ou 7 colonnes) dépend de la fonction effective.
+      if (attenduVrai !== attenduEleve) {
+        const st = verifierMotifDelta(proj, champ, attenduVrai).statut;
+        verifier(champ === CHAMP_TABLEAU_SIGNES ? st !== "correct" : st === "not_equivalent", `${ctx} / ${champ} : la réponse de la VRAIE fonction n'est pas acceptée sur celle de l'élève (${st})`);
+      }
     }
 
     // 2 bis. écran « racines » : le NOMBRE de racines vient de la fonction effective (RACINES_NOMBRE_INCORRECT)
