@@ -21,6 +21,7 @@ import { reponseBruteCorrecteMotifDelta } from "../src/generateurs/analyseFoncti
 import { enonceEffectif } from "../src/generateurs/analyseFonctionMotifDelta/ecrans";
 import { approx, egaux, texteSaisieExact } from "../src/generateurs/analyseFonctionMotifDelta/exact/nombreExact";
 import { CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE } from "../src/generateurs/analyseFonction/types";
+import { CHAMP_RACINES } from "../src/generateurs/analyseFonctionMotifDelta/types";
 
 const echecs: string[] = [];
 let nb = 0;
@@ -36,6 +37,7 @@ const meme = (x: ReturnType<typeof fonctionVraie>, y: ReturnType<typeof fonction
 
 const prng = creerPrng(20261001);
 let nbCas = 0;
+let nbNombreDiff = 0;
 for (const fam of FAMILLES) {
   for (let k = 0; k < 60; k++) {
     const ex = genererExerciceMD(fam.id, prng.entierEntre(0, 2 ** 32 - 1));
@@ -53,11 +55,19 @@ for (const fam of FAMILLES) {
     verifier(fe.a.n === -ex.a.n && !meme(fe, vrai), `${ctx} : la fonction effective est celle de l'élève`);
 
     // 2. écrans dépendants jugés sur la fonction EFFECTIVE
-    for (const champ of [CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_DOMAINE_IMAGE]) {
+    for (const champ of [CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_DOMAINE_IMAGE, CHAMP_RACINES]) {
       const attenduEleve = reponseBruteCorrecteMotifDelta(proj, champ);
       verifier(verifierMotifDelta(proj, champ, attenduEleve).statut === "correct", `${ctx} / ${champ} : la méthode juste appliquée aux coefficients de l'élève est CORRECTE`);
       const attenduVrai = reponseBruteCorrecteMotifDelta(ex, champ);
       if (attenduVrai !== attenduEleve) verifier(verifierMotifDelta(proj, champ, attenduVrai).statut === "not_equivalent", `${ctx} / ${champ} : la réponse de la VRAIE fonction n'est pas acceptée sur celle de l'élève`);
+    }
+
+    // 2 bis. écran « racines » : le NOMBRE de racines vient de la fonction effective (RACINES_NOMBRE_INCORRECT)
+    {
+      const [nVrai, nEff] = [vrai.racines.length, fe.racines.length];
+      const reponseVraie = verifierMotifDelta(proj, CHAMP_RACINES, reponseBruteCorrecteMotifDelta(ex, CHAMP_RACINES));
+      if (nVrai !== nEff) verifier(reponseVraie.statut === "not_equivalent" && reponseVraie.codesCompetence.join() === "RACINES_NOMBRE_INCORRECT", `${ctx} : ${nVrai} racine(s) vraie(s) mais ${nEff} avec les coefficients de l'élève → RACINES_NOMBRE_INCORRECT (obtenu ${JSON.stringify(reponseVraie)})`);
+      nbNombreDiff += nVrai !== nEff ? 1 : 0;
     }
 
     // 1b. justes : les vrais, jamais une réécriture ; affichés
@@ -109,4 +119,10 @@ if (echecs.length > 0) {
   for (const e of echecs) console.error(` - ${e}`);
   process.exit(1);
 }
-console.log(`OK : ${nb} vérifications (cascade des coefficients confirmés sur ${nbCas} exercices : exploitables, justes, inexploitables, ordonnée, libellé, valeurs du tableau)`);
+verifier(nbNombreDiff >= 100, `couverture : ${nbNombreDiff} cas où le nombre de racines diffère entre la vraie fonction et celle de l'élève (≥ 100 attendus)`);
+if (echecs.length > 0) {
+  console.error(`ÉCHEC : ${echecs.length}+ vérification(s) en échec sur ${nb}`);
+  for (const e of echecs) console.error(` - ${e}`);
+  process.exit(1);
+}
+console.log(`OK : ${nb} vérifications (cascade des coefficients confirmés sur ${nbCas} exercices : exploitables, justes, inexploitables, ordonnée, nombre de racines (${nbNombreDiff} cas où il diffère), libellé, valeurs du tableau)`);

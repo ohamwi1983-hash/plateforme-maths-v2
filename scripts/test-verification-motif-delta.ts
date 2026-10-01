@@ -18,6 +18,7 @@ import { reponseBruteCorrecteMotifDelta, solutionAttendueMotifDelta } from "../s
 import { ecransMotifDelta, NOMS_ECRANS_MD } from "../src/generateurs/analyseFonctionMotifDelta/ecrans";
 import { approx, estRationnel, texteSaisieExact, type Exact } from "../src/generateurs/analyseFonctionMotifDelta/exact/nombreExact";
 import { CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE } from "../src/generateurs/analyseFonction/types";
+import { CHAMP_RACINES } from "../src/generateurs/analyseFonctionMotifDelta/types";
 
 const echecs: string[] = [];
 let nb = 0;
@@ -38,7 +39,7 @@ function nonSimplifie(x: Exact): string | null {
   if (r === 1 || Math.abs(q.n) < 2) return null;
   return `${q.n < 0 ? "-" : ""}sqrt(${q.n * q.n * r})${q.d > 1 ? `/${q.d}` : ""}`;
 }
-const CHAMPS_MD = [CHAMP_COEFFICIENTS, CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_DOMAINE_IMAGE] as const;
+const CHAMPS_MD = [CHAMP_COEFFICIENTS, CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_DOMAINE_IMAGE, CHAMP_RACINES] as const;
 
 for (const fam of FAMILLES) {
   for (const [i, { a, b, c }] of poolDe(fam).entries()) {
@@ -114,11 +115,49 @@ for (const fam of FAMILLES) {
     sortie(V(CHAMP_DOMAINE_IMAGE, { ...refImg, [a.n > 0 ? "borneGauche" : "borneDroite"]: "sqrt(-1)" }), "parse_error", [], "domaineImage : sqrt d'un négatif");
     sortie(V(CHAMP_DOMAINE_IMAGE, { ...refImg, [a.n > 0 ? "borneGauche" : "borneDroite"]: "" }), "parse_error", [], "domaineImage : borne vide");
 
+    // ── racines ──
+    const E = f.racines;
+    const txt = E.map((r) => texteSaisieExact(r));
+    const faux1 = "101"; // jamais une racine : toutes les racines de ces familles sont de valeur absolue < 12
+    const faux2 = "103";
+    sortie(V(CHAMP_RACINES, ["x"]), "parse_error", [], "racines : texte illisible");
+    sortie(V(CHAMP_RACINES, ["$x$"]), "parse_error", [], "racines : saisie hostile « $x$ »");
+    sortie(V(CHAMP_RACINES, ["sqrt(-1)"]), "parse_error", [], "racines : sqrt d'un négatif");
+    sortie(V(CHAMP_RACINES, ["   "]), "parse_error", [], "racines : liste de valeurs vides");
+    if (E.length === 0) {
+      sortie(V(CHAMP_RACINES, []), "correct", [], "racines : « pas de racine » (Δ < 0)");
+      sortie(V(CHAMP_RACINES, ["0"]), "not_equivalent", ["RACINES_NOMBRE_INCORRECT"], "racines : une valeur alors qu'il n'y a pas de racine");
+      sortie(V(CHAMP_RACINES, ["1", "2"]), "not_equivalent", ["RACINES_NOMBRE_INCORRECT"], "racines : deux valeurs alors qu'il n'y a pas de racine");
+    } else {
+      sortie(V(CHAMP_RACINES, []), "not_equivalent", ["RACINES_NOMBRE_INCORRECT"], "racines : « pas de racine » alors qu'il y en a");
+      sortie(V(CHAMP_RACINES, [...txt, faux1, faux2]), "not_equivalent", ["RACINES_NOMBRE_INCORRECT"], "racines : plus de deux lignes");
+      if (E.length === 1) {
+        sortie(V(CHAMP_RACINES, [txt[0], txt[0]]), "correct", [], "racines : racine double écrite deux fois");
+        sortie(V(CHAMP_RACINES, [faux1]), "not_equivalent", [], "racines : racine double fausse");
+        sortie(V(CHAMP_RACINES, [txt[0], faux1]), "not_equivalent", ["RACINES_NOMBRE_INCORRECT"], "racines : racine double + une valeur de trop");
+      } else {
+        sortie(V(CHAMP_RACINES, [...txt].reverse()), "correct", [], "racines : ordre indifférent");
+        sortie(V(CHAMP_RACINES, [txt[0]]), "not_equivalent", ["RACINES_NOMBRE_INCORRECT"], "racines : une seule des deux racines");
+        sortie(V(CHAMP_RACINES, [txt[0], txt[0]]), "not_equivalent", ["RACINES_NOMBRE_INCORRECT"], "racines : la même racine deux fois");
+        sortie(V(CHAMP_RACINES, [txt[0], faux1]), "not_equivalent", ["RACINE_PARTIELLE"], "racines : une racine juste, l'autre fausse");
+        sortie(V(CHAMP_RACINES, [txt[1], faux1]), "not_equivalent", ["RACINE_PARTIELLE"], "racines : l'autre racine juste, la première fausse");
+        sortie(V(CHAMP_RACINES, [faux1, faux2]), "not_equivalent", [], "racines : les deux fausses");
+      }
+      for (const [j, r] of E.entries()) {
+        if (!estRationnel(r)) {
+          const autres = txt.map((t, jj) => (jj === j ? approx(r).toFixed(3) : t));
+          sortie(V(CHAMP_RACINES, autres), "not_equivalent", E.length === 2 ? ["RACINE_PARTIELLE"] : [], "racines : une racine irrationnelle donnée en décimal");
+          const ns = nonSimplifie(r);
+          if (ns !== null) sortie(V(CHAMP_RACINES, txt.map((t, jj) => (jj === j ? ns : t))), "not_equivalent", ["RACINE_NON_SIMPLIFIEE"], "racines : racine juste non simplifiée");
+        }
+      }
+    }
+
     // ── déclaration des écrans et textes servis (un exercice sur 9, tous les pools couverts) ──
     if (i % 9 === 0) {
       const gen = genererExerciceMD(fam.id, 4242 + i);
       const ecrans: EcranDeclare[] = ecransMotifDelta(gen);
-      verifier(ecrans.map((e) => e.champ).join() === `${CHAMP_COEFFICIENTS},${CHAMP_ALLURE},${CHAMP_AXE_SOMMET},${CHAMP_DOMAINE_IMAGE}`, `${ctx} : les quatre premiers écrans, dans l'ordre`);
+      verifier(ecrans.map((e) => e.champ).join() === `${CHAMP_COEFFICIENTS},${CHAMP_ALLURE},${CHAMP_AXE_SOMMET},${CHAMP_DOMAINE_IMAGE},${CHAMP_RACINES}`, `${ctx} : les cinq premiers écrans, dans l'ordre`);
       for (const e of ecrans) {
         verifier(e.nom === NOMS_ECRANS_MD[e.champ] && typeof e.poids === "number", `${ctx} / ${e.champ} : nom et poids déclarés`);
         noter(e.consigne);
@@ -132,7 +171,9 @@ for (const fam of FAMILLES) {
         noter(solutionAttendueMotifDelta(gen, e.champ));
       }
       const poids = ecrans.map((e) => e.poids).join();
-      verifier(poids === "1,1,2,1", `${ctx} : poids 1, 1, 2, 1 (obtenu ${poids})`);
+      verifier(poids === `1,1,2,1,${fam.poidsRacines}`, `${ctx} : poids 1, 1, 2, 1, ${fam.poidsRacines} (obtenu ${poids})`);
+      const rac = ecrans.find((e) => e.champ === CHAMP_RACINES);
+      verifier(rac?.type === "liste_valeurs" && rac.permetAucune === true && rac.aide === undefined && rac.dependDe?.join() === CHAMP_COEFFICIENTS, `${ctx} : racines : liste_valeurs permetAucune, aucune aide, dépend des coefficients`);
       const allure = ecrans.find((e) => e.champ === CHAMP_ALLURE);
       verifier(allure?.type === "champs_multiples" && allure.illustration?.champPositionSommet === "positionSommet" && allure.illustration.champSigneAB === undefined && typeof allure.aide === "string", `${ctx} : allure : illustration « position du sommet » et UNE aide combinée`);
       const img = ecrans.find((e) => e.champ === CHAMP_DOMAINE_IMAGE);
@@ -159,4 +200,4 @@ if (echecs.length > 0) {
   for (const e of echecs) console.error(` - ${e}`);
   process.exit(1);
 }
-console.log(`OK : ${nb} vérifications (écrans 1 à 4 sur les pools exhaustifs des 10 familles, perturbations, codes, ${nbTextes} textes servis contrôlés)`);
+console.log(`OK : ${nb} vérifications (écrans 1 à 5 sur les pools exhaustifs des 10 familles, perturbations, codes, ${nbTextes} textes servis contrôlés)`);

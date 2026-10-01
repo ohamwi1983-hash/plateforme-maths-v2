@@ -6,6 +6,7 @@ import { SOUS_CHAMPS_AXE_SOMMET_MD } from "./axeSommet";
 import { SOUS_CHAMPS_COEFFICIENTS_MD } from "./coefficients";
 import { latexExact } from "./exact/nombreExact";
 import { chercherFamille } from "./familles";
+import { ecranRacinesMD } from "./racinesEcran";
 import { latexPolynomeMD, ordreAffichage } from "./formatage";
 import { rat, versNombreR } from "./exact/rationnel";
 import { CHAMP_RACINES, coefVersExact, fonctionEffective, type ExerciceMotifDelta } from "./types";
@@ -65,8 +66,8 @@ export const DEPENDANCES_MD: Readonly<Record<string, readonly string[]>> = {
   [CHAMP_TABLEAU_SIGNES]: [CHAMP_COEFFICIENTS, CHAMP_AXE_SOMMET, CHAMP_RACINES],
 };
 
-/** Écrans 1 à 4 (les écrans 5 et 6 sont ajoutés par `ecransMotifDelta`). */
-export function ecransUnAQuatre(ex: ExerciceMotifDelta): EcranDeclare[] {
+/** Écrans 1 à 5 (l'écran 6, le tableau, est ajouté par `ecransMotifDelta`). */
+export function ecransUnACinq(ex: ExerciceMotifDelta): EcranDeclare[] {
   const e = ex.effectif;
   const eff = enonceEffectif(ex);
   const fe = fonctionEffective(ex);
@@ -106,6 +107,10 @@ export function ecransUnAQuatre(ex: ExerciceMotifDelta): EcranDeclare[] {
       } est l'ensemble-image $\\mathrm{im}\\,f$ de cette fonction ?`,
       apercu: { libelle: "$\\mathrm{im}\\,f =$", auDessus: true },
     },
+    {
+      ...ecranRacinesMD(`${eff} Quelles sont les racines éventuelles de $f$ ? Une racine carrée s'écrit sqrt(2).`),
+      dependDe: [...(DEPENDANCES_MD[CHAMP_RACINES] as string[])],
+    },
   ];
 }
 
@@ -113,5 +118,5 @@ export function ecransUnAQuatre(ex: ExerciceMotifDelta): EcranDeclare[] {
 export function ecransMotifDelta(ex: ExerciceMotifDelta, ecransSuivants: readonly EcranDeclare[] = []): EcranDeclare[] {
   const famille = chercherFamille(ex.famille);
   if (famille === undefined) throw new Error(`ecransMotifDelta : famille inconnue « ${ex.famille} »`);
-  return [...ecransUnAQuatre(ex), ...ecransSuivants].map((e) => ({ ...e, nom: NOMS_ECRANS_MD[e.champ], poids: poidsDe(e.champ, famille.poidsRacines) }));
+  return [...ecransUnACinq(ex), ...ecransSuivants].map((e) => ({ ...e, nom: NOMS_ECRANS_MD[e.champ], poids: poidsDe(e.champ, famille.poidsRacines) }));
 }

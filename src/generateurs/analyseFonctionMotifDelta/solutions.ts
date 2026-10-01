@@ -1,7 +1,8 @@
 import { CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE } from "../analyseFonction/types";
 import { allureAttendue } from "./allure";
 import { latexExact, texteSaisieExact, type Exact } from "./exact/nombreExact";
-import { coefVersExact, fonctionEffective, type ExerciceMotifDelta } from "./types";
+import { CHAMP_RACINES, coefVersExact, fonctionEffective, type ExerciceMotifDelta } from "./types";
+import { reponseBruteRacines, solutionRacines } from "./racinesEcran";
 
 /**
  * Solution lisible d'un champ (texte d'AUTEUR, balisage `$…$`, racines en KaTeX `\sqrt{}` — jamais `sqrt(…)` en clair) et réponse brute qui VALIDE le champ (tests, Chromium). Les entrées
@@ -22,6 +23,8 @@ export function solutionAttendueMotifDelta(ex: ExerciceMotifDelta, champ: string
       return `$x = ${latexExact(f.xS)}$ ; $x_S = ${latexExact(f.xS)}$ ; $y_S = ${latexExact(f.yS)}$`;
     case CHAMP_DOMAINE_IMAGE:
       return f.a.n > 0 ? `$[${latexExact(yImage(ex))}\\,;\\,+\\infty[$` : `$]-\\infty\\,;\\,${latexExact(yImage(ex))}]$`;
+    case CHAMP_RACINES:
+      return solutionRacines(f);
     default:
       throw new Error(`gen7 motif/delta : champ inconnu ou non encore câblé « ${champ} »`);
   }
@@ -42,6 +45,8 @@ export function reponseBruteCorrecteMotifDelta(ex: ExerciceMotifDelta, champ: st
       const y = texteSaisieExact(yImage(ex));
       return JSON.stringify(f.a.n > 0 ? { crochetGauche: "[", borneGauche: y, crochetDroit: "[", borneDroite: "+inf" } : { crochetGauche: "]", borneGauche: "-inf", crochetDroit: "]", borneDroite: y });
     }
+    case CHAMP_RACINES:
+      return reponseBruteRacines(f);
     default:
       throw new Error(`gen7 motif/delta : champ inconnu ou non encore câblé « ${champ} »`);
   }
