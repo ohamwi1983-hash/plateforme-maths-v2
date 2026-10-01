@@ -172,6 +172,30 @@ export const DICTIONNAIRE_COMPETENCES: Record<string, { libelle: string; descrip
     libelle: "Signe vers variation",
     description: "Ligne de signe correcte mais traduction en flèches de variation fausse, ou l'inverse",
   },
+  RACINE_NON_SIMPLIFIEE: {
+    libelle: "Racine carrée non simplifiée",
+    description: "Valeur mathématiquement correcte mais écrite avec une racine carrée qui peut encore être simplifiée (√8 au lieu de 2√2)",
+  },
+  RACINES_NOMBRE_INCORRECT: {
+    libelle: "Nombre de racines",
+    description: "Se trompe sur le NOMBRE de racines (aucune, une ou deux) de la fonction étudiée, indépendamment de leurs valeurs",
+  },
+  TABLEAU_SIGNE_PARTIEL: {
+    libelle: "Ligne de signe (partielle)",
+    description: "Ligne de signe de f(x) en partie juste : certaines cases du tableau sont correctes, d'autres non",
+  },
+  TABLEAU_VARIATION_PARTIEL: {
+    libelle: "Ligne de variations (partielle)",
+    description: "Ligne des variations de f en partie juste : certaines cases sont correctes, d'autres non",
+  },
+  TABLEAU_SIGNE_INVERSE: {
+    libelle: "Signes de f inversés",
+    description: "Ligne de signe de f(x) entièrement inversée (+ à la place de −, et inversement) : confusion sur le signe de a ou sur le signe de f entre les racines",
+  },
+  TABLEAU_CONCAVITE_INCORRECTE: {
+    libelle: "Sens des variations inversé",
+    description: "Ligne des variations entièrement inversée (↗ ↘ échangés, minimum et maximum échangés) : confusion sur le sens de la parabole",
+  },
   FRACTION_NON_REDUITE: {
     libelle: "Simplification numérique",
     description: "Fraction équivalente à l'originale mais pas réduite au maximum (facteur commun aux coefficients non éliminé)",

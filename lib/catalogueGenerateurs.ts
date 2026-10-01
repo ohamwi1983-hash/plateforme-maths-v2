@@ -9,6 +9,27 @@
  * IDENTIQUES mot pour mot à l'ancien pilote (`lib/catalogueGenerateurs.ts:165-168`).
  */
 export const CATALOGUE_GENERATEURS = [
+  // gen7 « Analyse d'une fonction du second degré » (RAPPORT §49) : dix sous-variantes en deux familles — « sans discriminant » (reconnaissance de motif, `af_motif_*`)
+  // et « avec discriminant » (méthode générale, `af_delta_*`). Libellés IDENTIQUES mot pour mot à `public/catalogue-generateurs-complet.json` (4e, n° 7), où l'axe
+  // « sans discriminant » / « avec discriminant » est ajouté devant par `prof.html`.
+  { generateur_id: "gen7", variante_id: "af_motif_aucune_racine", label: "Aucune racine réelle (b=0)" },
+  { generateur_id: "gen7", variante_id: "af_motif_racine_double_rationnelle", label: "Racine double rationnelle" },
+  { generateur_id: "gen7", variante_id: "af_motif_racine_double_irrationnelle", label: "Racine double irrationnelle" },
+  { generateur_id: "gen7", variante_id: "af_motif_racines_opposees_rationnelles", label: "Racines opposées rationnelles (b=0)" },
+  { generateur_id: "gen7", variante_id: "af_motif_racines_opposees_irrationnelles", label: "Racines opposées irrationnelles (b=0)" },
+  { generateur_id: "gen7", variante_id: "af_motif_racine_nulle_rationnelle", label: "Une racine nulle, l'autre rationnelle (c=0)" },
+  { generateur_id: "gen7", variante_id: "af_motif_racine_nulle_irrationnelle", label: "Une racine nulle, l'autre irrationnelle (c=0)" },
+  { generateur_id: "gen7", variante_id: "af_delta_aucune_racine", label: "Aucune racine réelle (Δ<0)" },
+  { generateur_id: "gen7", variante_id: "af_delta_racines_rationnelles", label: "Deux racines distinctes rationnelles" },
+  { generateur_id: "gen7", variante_id: "af_delta_racines_irrationnelles", label: "Deux racines distinctes irrationnelles" },
+] as const;
+
+/**
+ * Variantes RETIRÉES du catalogue affiché (RAPPORT §49) mais toujours exécutables au registre (`Generateur.retire`) : les quatre `af_*` de gen7 « catégories » (3b-3). Elles ne sont
+ * PAS dans `CATALOGUE_GENERATEURS` : `validerComposition` refuse de nouvelles compositions. Ce tableau ne sert qu'à conserver un LIBELLÉ d'affichage (tableaux de bord, profils) pour les
+ * exercices déjà assignés ; le registre en contrôle la cohérence au chargement.
+ */
+export const VARIANTES_RETIREES = [
   { generateur_id: "gen7", variante_id: "af_mise_en_evidence", label: "Mise en évidence (c=0)" },
   { generateur_id: "gen7", variante_id: "af_binome_conjugue", label: "Binôme conjugué (b=0, différence de deux carrés)" },
   { generateur_id: "gen7", variante_id: "af_produit_remarquable", label: "Produit remarquable (Δ=0, carré parfait)" },
@@ -29,12 +50,12 @@ export function generateurIdPourVariante(varianteId: VariantePilote): string {
 }
 
 /**
- * Libellé humain d'une variante pour l'affichage. `null` (jamais une exception, contrairement à
+ * Libellé humain d'une variante pour l'affichage (catalogue actif, puis variantes retirées). `null` (jamais une exception, contrairement à
  * `generateurIdPourVariante` ci-dessus) si `varianteId` n'est pas dans le catalogue — un label
  * manquant est un simple repli d'affichage côté client, jamais une erreur de câblage serveur qui
  * doit interrompre la requête.
  */
 export function labelPourVariante(varianteId: string): string | null {
-  const entree = CATALOGUE_GENERATEURS.find((e) => e.variante_id === varianteId);
+  const entree = CATALOGUE_GENERATEURS.find((e) => e.variante_id === varianteId) ?? VARIANTES_RETIREES.find((e) => e.variante_id === varianteId);
   return entree ? entree.label : null;
 }

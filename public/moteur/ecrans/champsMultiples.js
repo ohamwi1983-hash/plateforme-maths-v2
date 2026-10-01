@@ -31,7 +31,14 @@ export default {
     const majIllustration = () => {
       if (!illustration) return;
       const lireChoix = (id) => (lecteurs.has(id) ? lecteurs.get(id)() : null);
-      zoneIllustration.replaceChildren(construireCroquisAllure({ signeA: lireChoix(illustration.champSigneA), signeAB: lireChoix(illustration.champSigneAB), c: illustration.c }));
+      zoneIllustration.replaceChildren(
+        construireCroquisAllure({
+          signeA: lireChoix(illustration.champSigneA),
+          signeAB: illustration.champSigneAB ? lireChoix(illustration.champSigneAB) : null,
+          positionSommet: illustration.champPositionSommet ? lireChoix(illustration.champPositionSommet) : null,
+          c: illustration.c,
+        }),
+      );
     };
     const changement = () => {
       majIllustration();

@@ -10,7 +10,7 @@ import { commandesInterditesDans } from "./balisageMath";
  *    (a, b ou c — classes `moteur-coef-a|b|c`, tokens de design). Le client assemble les segments. Un
  *    segment n'est jamais vide : un coefficient de valeur absolue 1 s'écrit sans chiffre, il n'y a rien à
  *    colorer, on OMET le segment (son signe reste dans un segment sans rôle).
- *  - `croquis_parabole` : croquis qualitatif de y = ax² + bx + c (a, b, c entiers, a ≠ 0) ; les options
+ *  - `croquis_parabole` : croquis qualitatif de y = ax² + bx + c (a, b, c réels FINIS, a ≠ 0 ; entiers ou non : RAPPORT §49, coefficients irrationnels) ; les options
  *    ajoutent des surcouches (marque S, surlignage de l'ensemble-image, marques sur Ox). Le client
  *    calcule la géométrie : c'est un AFFICHAGE, jamais une vérification.
  */
@@ -44,6 +44,8 @@ export type AideTypee = AideFormuleColoree | AideCroquisParabole;
 export const NB_SEGMENTS_MAX = 40;
 export const LONGUEUR_LATEX_MAX = 200;
 export const COEFFICIENT_MAX = 10000;
+/** `|a|` en dessous : parabole dégénérée (aucun croquis lisible). */
+export const COEFFICIENT_A_ABS_MIN = 1e-6;
 
 function clesInconnues(objet: Record<string, unknown>, autorisees: readonly string[]): string[] {
   return Object.keys(objet).filter((k) => !autorisees.includes(k));
@@ -85,9 +87,9 @@ export function validerAide(aide: unknown): string[] {
     for (const k of clesInconnues(objet, ["type", "a", "b", "c", "marqueS", "surlignageImf", "marquesOx"])) problemes.push(`croquis_parabole : clé inconnue « ${k} »`);
     for (const cle of ["a", "b", "c"] as const) {
       const v = objet[cle];
-      if (typeof v !== "number" || !Number.isInteger(v) || Math.abs(v) > COEFFICIENT_MAX) problemes.push(`croquis_parabole : ${cle} doit être un entier de valeur absolue ≤ ${COEFFICIENT_MAX}`);
+      if (typeof v !== "number" || !Number.isFinite(v) || Math.abs(v) > COEFFICIENT_MAX) problemes.push(`croquis_parabole : ${cle} doit être un nombre fini de valeur absolue ≤ ${COEFFICIENT_MAX}`);
     }
-    if (objet.a === 0) problemes.push("croquis_parabole : a ne peut pas valoir 0");
+    if (typeof objet.a === "number" && Math.abs(objet.a) < COEFFICIENT_A_ABS_MIN) problemes.push("croquis_parabole : a ne peut pas valoir 0 (ni être quasi nul)");
     for (const cle of ["marqueS", "surlignageImf", "marquesOx"] as const) {
       if (objet[cle] !== undefined && typeof objet[cle] !== "boolean") problemes.push(`croquis_parabole : ${cle} doit être un booléen`);
     }

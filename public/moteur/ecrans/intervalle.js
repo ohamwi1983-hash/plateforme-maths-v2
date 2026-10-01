@@ -1,3 +1,5 @@
+import { rendreTexte } from "../rendreTexte.js";
+
 /**
  * Composant d'écran « intervalle » : un seul intervalle `[borne ; borne]` que l'élève construit — crochet
  * gauche et droit à choisir, bornes tapées (nombre, décimal, fraction) ou infini (−∞ à gauche, +∞ à
@@ -13,7 +15,7 @@
 export default {
   type: "intervalle",
 
-  creer(_ecran, { surSoumission, surChangement, valeurInitiale }) {
+  creer(ecran, { surSoumission, surChangement, valeurInitiale }) {
     const element = document.createElement("div");
     element.className = "moteur-intervalle";
     const etat = { crochetG: null, crochetD: null, infG: false, infD: false };
@@ -65,7 +67,21 @@ export default {
     const apercu = document.createElement("p");
     apercu.className = "moteur-apercu";
     apercu.setAttribute("aria-hidden", "true");
-    element.append(ligne, apercu);
+    // Option `apercu` de l'écran (RAPPORT §49) : libellé d'AUTEUR (« im f = ») + valeur d'ÉLÈVE (texte brut, jamais interprété), éventuellement AU-DESSUS de la saisie.
+    const optionApercu = ecran && typeof ecran.apercu === "object" && ecran.apercu !== null ? ecran.apercu : null;
+    let apercuValeur = null;
+    if (optionApercu) {
+      apercu.classList.add("moteur-apercu-libelle");
+      const libelle = document.createElement("span");
+      libelle.className = "moteur-apercu-nom";
+      rendreTexte(libelle, optionApercu.libelle, { math: true });
+      apercuValeur = document.createElement("span");
+      apercuValeur.className = "moteur-apercu-valeur";
+      apercu.append(libelle, " ", apercuValeur);
+      if (optionApercu.auDessus) apercu.classList.add("moteur-apercu-dessus");
+    }
+    if (optionApercu && optionApercu.auDessus) element.append(apercu, ligne);
+    else element.append(ligne, apercu);
 
     // Notation française : `[` à gauche / `]` à droite = borne incluse ; `]` à gauche / `[` à droite = exclue.
     const nomCrochet = (cote, c) => {
@@ -85,7 +101,9 @@ export default {
       infD.setAttribute("aria-pressed", String(etat.infD));
       infG.classList.toggle("moteur-infini-actif", etat.infG);
       infD.classList.toggle("moteur-infini-actif", etat.infD);
-      apercu.textContent = `${etat.crochetG ?? "?"}${texteBorne(etat.infG, borneG, "−∞")} ; ${texteBorne(etat.infD, borneD, "+∞")}${etat.crochetD ?? "?"}`;
+      const texteApercu = `${etat.crochetG ?? "?"}${texteBorne(etat.infG, borneG, "−∞")} ; ${texteBorne(etat.infD, borneD, "+∞")}${etat.crochetD ?? "?"}`;
+      if (apercuValeur) apercuValeur.textContent = texteApercu;
+      else apercu.textContent = texteApercu;
     };
     const changement = () => {
       rafraichir();

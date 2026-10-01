@@ -38,6 +38,8 @@ export const CATEGORIES_COMPETENCES: Record<string, CategorieCompetence> = {
   CLASSE_MODALE_MODE_PARTIEL: { categorie: "Réponse partielle", sousCategorie: "Paire de valeurs" },
 
   RACINE_PARTIELLE: { categorie: "Réponse partielle", sousCategorie: "Liste de taille variable" },
+  TABLEAU_SIGNE_PARTIEL: { categorie: "Réponse partielle", sousCategorie: "Tableau à lignes fixes" },
+  TABLEAU_VARIATION_PARTIEL: { categorie: "Réponse partielle", sousCategorie: "Tableau à lignes fixes" },
   MODE_INCORRECT: { categorie: "Réponse partielle", sousCategorie: "Liste de taille variable" },
   LONGUEUR_PARTIELLE: { categorie: "Réponse partielle", sousCategorie: "Liste de taille variable" },
   COMBINAISON_VECTEURS_PARTIELLE: { categorie: "Réponse partielle", sousCategorie: "Liste de taille variable" },
@@ -59,9 +61,12 @@ export const CATEGORIES_COMPETENCES: Record<string, CategorieCompetence> = {
   RELATION_VECTORIELLE_SIGNE: { categorie: "Confusion de signe/sens" },
   REDUCTION_SENS_INVERSE: { categorie: "Confusion de signe/sens" },
   FC_RACINE_OPPOSEE_OUBLIEE: { categorie: "Confusion de signe/sens" },
+  TABLEAU_SIGNE_INVERSE: { categorie: "Confusion de signe/sens" },
+  TABLEAU_CONCAVITE_INCORRECTE: { categorie: "Confusion de signe/sens" },
 
   // 3. Existence/validité non reconnue
   TYPE_RACINES: { categorie: "Existence/validité non reconnue" },
+  RACINES_NOMBRE_INCORRECT: { categorie: "Existence/validité non reconnue" },
   RACINE_ETRANGERE_IGNOREE: { categorie: "Existence/validité non reconnue" },
   EXISTENCE_POINT_GRAPHIQUE: { categorie: "Existence/validité non reconnue" },
   EXISTENCE_VALEUR_ALGEBRIQUE: { categorie: "Existence/validité non reconnue" },

@@ -25,7 +25,7 @@ async function main(): Promise<void> {
   }
 
   // ── 2. Validation du corps ──
-  const base = { nom: "T", composition: [{ variante_id: "af_mise_en_evidence", nombre_exercices: 1 }] };
+  const base = { nom: "T", composition: [{ variante_id: "af_motif_racine_nulle_rationnelle", nombre_exercices: 1 }] };
   verifier(estCorpsValide({ ...base }), "corps sans le champ : valide (défaut false)");
   verifier(estCorpsValide({ ...base, feedback_immediat: false, autoriser_retour_arriere: true }), "retour + correction coupée : valide");
   verifier(estCorpsValide({ ...base, feedback_immediat: false, autoriser_retour_arriere: false, chrono_mode: "par_ecran" }), "pas de retour + chrono par écran : valide");
@@ -38,7 +38,7 @@ async function main(): Promise<void> {
   const s = creerScenario();
   installerBase(s.base);
   const jeton = `prof:${s.profId}`;
-  const composition = [{ variante_id: "af_mise_en_evidence", nombre_exercices: 1 }];
+  const composition = [{ variante_id: "af_motif_racine_nulle_rationnelle", nombre_exercices: 1 }];
   const creee = await appeler("taches", "POST", { jeton, corps: { nom: "Avec retour", feedback_immediat: false, autoriser_retour_arriere: true, composition } });
   verifier(creee.statut === 201, `POST avec retour : ${creee.statut}`);
   const sans = await appeler("taches", "POST", { jeton, corps: { nom: "Sans le champ", composition } });

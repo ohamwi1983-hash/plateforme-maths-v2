@@ -1,0 +1,84 @@
+// Test permanent — CÂBLAGE du catalogue de gen7 « motif / delta » (RAPPORT §49) : catalogue affiché, JSON, `CORRESPONDANCE_JSON_VERS_PILOTE` de prof.html, registre, variantes RETIRÉES.
+// Lancer : `npm run test-catalogue-motif-delta`. Pur (aucune base). Le champ « nombre d'exercices » non `disabled` des dix entrées est mesuré en Chromium (`scenarioGen7Prof`).
+//
+//  1. Les dix familles = les dix entrées du catalogue affiché (ids, ordre) ; libellés IDENTIQUES mot pour mot au JSON (4e, n° 7) ; deux axes (7 + 3).
+//  2. `CORRESPONDANCE_JSON_VERS_PILOTE["4e:7"]` (extrait LITTÉRALEMENT de prof.html) : dix entrées, mêmes ids, même ordre que le JSON.
+//  3. Registre : les dix nouveaux sont exécutables et actifs ; les quatre anciens sont exécutables, RETIRÉS, hors catalogue, libellés conservés ; composition : nouveaux acceptés, anciens refusés.
+//  4. `verifierCoherenceRegistre` : les trois défauts de variante retirée sont détectés.
+
+export {}; // module
+
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { CATALOGUE_GENERATEURS, VARIANTES_RETIREES, estVarianteConnue, labelPourVariante } from "../lib/catalogueGenerateurs";
+import { DICTIONNAIRE_COMPETENCES } from "../lib/dictionnaireCompetences";
+import { REGISTRE_GENERATEURS, chercherGenerateur, variantesCatalogueSansGenerateur, verifierCoherenceRegistre } from "../lib/registreGenerateurs";
+import { validerComposition } from "../lib/validationCorpsTaches";
+import { FAMILLES } from "../src/generateurs/analyseFonctionMotifDelta/familles";
+
+const echecs: string[] = [];
+let nb = 0;
+function verifier(condition: boolean, message: string): void {
+  nb++;
+  if (!condition) echecs.push(message);
+}
+
+const RACINE = path.join(__dirname, "..");
+const IDS_ANCIENS = ["af_mise_en_evidence", "af_binome_conjugue", "af_produit_remarquable", "af_irreductible"];
+
+// ── 1. Catalogue ↔ familles ↔ JSON ──
+const gen7 = CATALOGUE_GENERATEURS.filter((e) => e.generateur_id === "gen7");
+verifier(gen7.length === 10 && gen7.map((e) => e.variante_id).join() === FAMILLES.map((f) => f.id).join(), "catalogue : dix entrées gen7, mêmes identifiants et même ordre que les familles");
+verifier(CATALOGUE_GENERATEURS.length === 10, `catalogue : ${CATALOGUE_GENERATEURS.length} entrées au total (seul gen7 y figure)`);
+verifier(new Set(gen7.map((e) => e.label)).size === 10, "catalogue : dix libellés distincts");
+const json = JSON.parse(fs.readFileSync(path.join(RACINE, "public/catalogue-generateurs-complet.json"), "utf8")) as { "4e": { numero: number; chapitre: number; libelle: string; variantes: { axe: string; label: string; exemple: string }[] }[] };
+const entree7 = json["4e"].find((g) => g.numero === 7 && g.chapitre === 1);
+verifier(entree7 !== undefined && Array.isArray(entree7.variantes) && entree7.variantes.length === 10, "JSON : 4e n°7 a dix variantes");
+if (entree7) {
+  verifier(entree7.variantes.map((v) => v.label).join("|") === gen7.map((e) => e.label).join("|"), "JSON : libellés IDENTIQUES mot pour mot à CATALOGUE_GENERATEURS, dans le même ordre");
+  verifier(entree7.variantes.slice(0, 7).every((v) => v.axe === "sans discriminant") && entree7.variantes.slice(7).every((v) => v.axe === "avec discriminant"), "JSON : sept « sans discriminant » puis trois « avec discriminant »");
+  verifier(entree7.variantes.every((v) => typeof v.exemple === "string" && v.exemple.length > 20), "JSON : chaque variante a un exemple");
+  verifier(FAMILLES.slice(0, 7).every((f) => f.groupe === "motif") && FAMILLES.slice(7).every((f) => f.groupe === "delta"), "familles : sept « motif » puis trois « delta »");
+}
+
+// ── 2. prof.html ──
+const html = fs.readFileSync(path.join(RACINE, "public/prof.html"), "utf8");
+const bloc = /"4e:7":\s*\[([\s\S]*?)\]/.exec(html);
+const lignes = bloc ? [...(bloc[1] as string).matchAll(/\{\s*index:\s*(\d+),\s*variante_id:\s*"([^"]+)"\s*\}/g)].map((m) => ({ index: Number(m[1]), id: m[2] as string })) : [];
+verifier(lignes.length === 10 && lignes.every((l, i) => l.index === i && l.id === gen7[i]!.variante_id), `prof.html : CORRESPONDANCE_JSON_VERS_PILOTE["4e:7"] = les dix ids du catalogue dans l'ordre (obtenu ${JSON.stringify(lignes.map((l) => l.id))})`);
+verifier(!/variante_id:\s*"af_(mise_en_evidence|binome_conjugue|produit_remarquable|irreductible)"/.test(html), "prof.html : les anciens af_* n'y sont plus câblés");
+
+// ── 3. Registre ──
+for (const f of FAMILLES) {
+  const g = chercherGenerateur(f.id);
+  verifier(g !== null && g.generateur_id === "gen7" && g.curriculaire && g.retire !== true, `registre : ${f.id} exécutable et actif`);
+  verifier(estVarianteConnue(f.id) && validerComposition([{ variante_id: f.id, nombre_exercices: 1 }]).ok === true, `composition : ${f.id} acceptée`);
+}
+for (const id of IDS_ANCIENS) {
+  const g = chercherGenerateur(id);
+  verifier(g !== null && g.retire === true && g.curriculaire, `registre : ${id} exécutable mais RETIRÉ`);
+  verifier(!CATALOGUE_GENERATEURS.some((e) => e.variante_id === id) && VARIANTES_RETIREES.some((e) => e.variante_id === id), `${id} : hors catalogue, dans VARIANTES_RETIREES`);
+  verifier(!estVarianteConnue(id) && validerComposition([{ variante_id: id, nombre_exercices: 1 }]).ok === false, `composition : ${id} refusée (variante retirée)`);
+  verifier(labelPourVariante(id) === VARIANTES_RETIREES.find((e) => e.variante_id === id)!.label && labelPourVariante(id) !== null, `${id} : libellé d'affichage conservé (${labelPourVariante(id)})`);
+}
+verifier(REGISTRE_GENERATEURS.filter((g) => g.generateur_id === "gen7").length === 14, "registre : 14 générateurs gen7 (10 actifs + 4 retirés)");
+verifier(variantesCatalogueSansGenerateur().length === 0, "aucune variante du catalogue sans générateur");
+for (const f of FAMILLES) verifier(labelPourVariante(f.id) === gen7.find((e) => e.variante_id === f.id)!.label, `${f.id} : libellé d'affichage`);
+
+// ── 4. Détection des défauts de variante retirée ──
+const ancien = chercherGenerateur("af_irreductible")!;
+const cat = CATALOGUE_GENERATEURS as unknown as { generateur_id: string; variante_id: string }[];
+const ret = VARIANTES_RETIREES as unknown as { generateur_id: string; variante_id: string }[];
+verifier(verifierCoherenceRegistre([ancien], [...cat, ret[3]!], DICTIONNAIRE_COMPETENCES, ret).some((e) => e.includes("présent dans CATALOGUE_GENERATEURS")), "cohérence : retiré présent au catalogue détecté");
+verifier(verifierCoherenceRegistre([ancien], cat, DICTIONNAIRE_COMPETENCES, []).some((e) => e.includes("absent de VARIANTES_RETIREES")), "cohérence : retiré absent de VARIANTES_RETIREES détecté");
+verifier(verifierCoherenceRegistre([{ ...ancien, retire: false }], [], DICTIONNAIRE_COMPETENCES, ret).some((e) => e.includes("non marqué")), "cohérence : variante dans VARIANTES_RETIREES mais non marquée détectée");
+verifier(verifierCoherenceRegistre([{ ...ancien, generateur_id: "gX" }], cat, DICTIONNAIRE_COMPETENCES, ret).some((e) => e.includes("VARIANTES_RETIREES")), "cohérence : generateur_id incohérent d'un retiré détecté");
+verifier(verifierCoherenceRegistre([{ ...ancien, codesCompetenceDeclares: ["CODE_INCONNU"] }], cat, DICTIONNAIRE_COMPETENCES, ret).some((e) => e.includes("CODE_INCONNU")), "cohérence : code inconnu d'un retiré détecté");
+verifier(verifierCoherenceRegistre(REGISTRE_GENERATEURS, CATALOGUE_GENERATEURS, DICTIONNAIRE_COMPETENCES, VARIANTES_RETIREES).length === 0, "cohérence : le registre réel est sain");
+
+if (echecs.length > 0) {
+  console.error(`ÉCHEC : ${echecs.length} vérification(s) sur ${nb}`);
+  for (const e of echecs) console.error(` - ${e}`);
+  process.exit(1);
+}
+console.log(`OK : ${nb} vérifications (catalogue, JSON, CORRESPONDANCE prof.html, registre : 10 actifs + 4 retirés, compositions, cohérence)`);
