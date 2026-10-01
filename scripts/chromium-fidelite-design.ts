@@ -280,11 +280,11 @@ async function main(): Promise<void> {
     const P_MARQUE = [...P_ROND, "display", "alignItems", "justifyContent"];
     const taille = (m: Element | null): string => `${m?._largeur}×${m?._hauteur}`;
     /** Session du témoin : réglages de tâche + réponses déjà données (JSON brut par champ), puis ouverture du moteur. */
-    async function ouvrirEnveloppe(largeur: number, reglages: { feedback: boolean; retour?: boolean }, reponses: [string, string][]) {
+    async function ouvrirEnveloppe(largeur: number, reglages: { feedback: boolean; retour?: boolean; visible?: boolean }, reponses: [string, string][]) {
       imposerProfilAssignation("base");
       const s = creerScenario();
       installerBase(s.base);
-      const tid = creerTache(s, { nom: "Fidélité enveloppe", feedback_immediat: reglages.feedback, autoriser_retour_arriere: reglages.retour ?? false, reponse_visible: false, tentatives_supplementaires: 0, variantes: [{ variante_id: VARIANTE_TEMOIN, nombre_exercices: 2 }] });
+      const tid = creerTache(s, { nom: "Fidélité enveloppe", feedback_immediat: reglages.feedback, autoriser_retour_arriere: reglages.retour ?? false, reponse_visible: reglages.visible ?? false, tentatives_supplementaires: 0, variantes: [{ variante_id: VARIANTE_TEMOIN, nombre_exercices: 2 }] });
       const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tid, eleve_ids: ["eleve-1"] } });
       if (a.statut !== 201) throw new Error("assignation " + a.statut);
       const ligne = s.base.table("exercices_assignes")[0]!;
@@ -304,7 +304,7 @@ async function main(): Promise<void> {
       await page.waitForSelector(".carte-tache");
       await page.locator(".carte-tache").click();
       await page.waitForSelector(reponses.length >= 4 ? ".moteur-ecran-termine" : ".moteur-ecran-courant > .moteur-rappel");
-      return { page, ctx };
+      return { page, ctx, ex };
     }
 
     for (const largeur of [390, 1280]) {
@@ -448,6 +448,95 @@ async function main(): Promise<void> {
             verifier(Math.abs((dr ?? 99) - (cdist["relecture|réponse→crayon (haut à haut)"] ?? 0)) <= 6, `${e} : crayon centré sur le bloc « Ta réponse » (décalage haut à haut ${dr}, référence ${cdist["relecture|réponse→crayon (haut à haut)"]} ± 6 : la hauteur du bloc dépend de son texte)`);
           }
           await page.screenshot({ path: join(CAPTURES, `fidelite-app-crayon-${etat}-${largeur}.png`), fullPage: true });
+          await ctx.close();
+        }
+      }
+    }
+
+    // ── Scores (RAPPORT §50) : docs/reference/scores.html, à 390 ET 1280 px. Le score suit la solution : correction immédiate + « Afficher la réponse attendue » ──
+    {
+      const refScores = readFileSync(join(RACINE, "docs/reference/scores.html"), "utf8");
+      const P_SCORE = ["color", "fontFamily", "fontSize", "fontWeight", "fontVariantNumeric", "whiteSpace", "flexShrink"];
+      const P_TOTAL = ["display", "justifyContent", "alignItems", "borderTopColor", "borderTopWidth", "borderTopStyle", "marginTop", "paddingTop"];
+      const P_NOM = ["color", "fontFamily", "fontSize", "fontWeight"];
+      for (const largeur of [390, 1280]) {
+        const e = `scores ${largeur} px`;
+        const ctxR = await navigateur.newContext({ viewport: { width: largeur, height: 900 } });
+        const pR = await ctxR.newPage();
+        await pR.route("**/fonts.googleapis.com/**", (r: any) => r.fulfill({ contentType: "text/css", body: "" }));
+        await pR.setContent(refScores);
+        const R = async (ref: string) => mesurer(pR, `[data-ref="${ref}"]`);
+        const SR: Record<string, Element | null> = {};
+        for (const ref of ["rappel", "ligne", "corps", "nom", "points", "total", "total-nom", "total-points", "recap", "recap-table", "recap-titre", "recap-nom", "recap-points", "recap-total", "recap-total-nom", "recap-total-points"]) SR[ref] = await R(ref);
+        await pR.screenshot({ path: join(CAPTURES, `fidelite-ref-scores-${largeur}.png`), fullPage: true });
+        await ctxR.close();
+
+        // (a) pendant la résolution : lignes du rappel + total (3 écrans répondus : juste, faux sans nouvel essai → score 0, juste)
+        {
+          const { page, ctx } = await ouvrirEnveloppe(largeur, { feedback: true, visible: true }, [[CHAMP_SOMME, "@juste"], [CHAMP_PARITE, "@faux"], [CHAMP_DIVISEURS, "@juste"]]);
+          await flou(page);
+          await page.screenshot({ path: join(CAPTURES, `fidelite-app-scores-rappel-${largeur}.png`), fullPage: true });
+          const nbScores = await page.locator(".moteur-rappel-ligne .moteur-rappel-score").count();
+          verifier(nbScores === 3, `${e} : une valeur de score par ligne répondue (${nbScores})`);
+          comparer(e, "score d'une ligne", SR["points"]!, await mesurer(page, ".moteur-rappel-score"), P_SCORE);
+          comparer(e, "ligne (disposition)", SR["ligne"]!, await mesurer(page, ".moteur-rappel-ligne-correct"), ["display", "alignItems", "gap"]);
+          comparer(e, "ligne de total", SR["total"]!, await mesurer(page, ".moteur-rappel-total"), P_TOTAL);
+          comparer(e, "« Score »", SR["total-nom"]!, await mesurer(page, ".moteur-rappel-total-nom"), P_NOM);
+          comparer(e, "total (valeur)", SR["total-points"]!, await mesurer(page, ".moteur-rappel-total-points"), [...P_NOM, "fontVariantNumeric", "whiteSpace"]);
+          const textes: string[] = await page.locator(".moteur-rappel-score").allInnerTexts();
+          verifier(textes.length === 3 && textes[0] === "1 / 1 pt" && textes[1] === "0 / 1 pt" && textes[2] === "1 / 1 pt", `${e} : valeurs « 1 / 1 pt », « 0 / 1 pt », « 1 / 1 pt » (${JSON.stringify(textes)})`);
+          const total = await page.locator(".moteur-rappel-total-points").innerText();
+          verifier(/^2 \/ \d+ pts?$/.test(total), `${e} : total = somme des lignes sur le total possible de TOUS les écrans (${total})`);
+          // aucune couleur de verdict sur une valeur : même couleur pour le 100 % et le 0 %
+          const couleurs = (await page.evaluate(`[...document.querySelectorAll(".moteur-rappel-score")].map((n) => getComputedStyle(n).color)`)) as string[];
+          verifier(new Set(couleurs).size === 1, `${e} : une valeur de score n'a jamais de couleur de verdict (${couleurs.join(" | ")})`);
+          // la valeur est à DROITE de la ligne (alignée sur le bord droit du panneau, aux 16 px de padding près)
+          const geo = (await page.evaluate(`(() => { const s = document.querySelector(".moteur-rappel-score").getBoundingClientRect(); const p = document.querySelector(".moteur-rappel").getBoundingClientRect(); return { droite: p.right - s.right }; })()`)) as { droite: number };
+          verifier(Math.abs(geo.droite - 17) <= 1.2, `${e} : le score est aligné sur le bord droit du panneau (16 px de padding + 1 px de filet : ${geo.droite})`);
+          await ctx.close();
+        }
+        // (b) exercice terminé : le panneau « Résultat de l'exercice » (bloc de fin) — mêmes réponses puis dernier écran
+        {
+          // Un exercice terminé ne se rouvre pas (le moteur enchaîne vers le tableau de bord) : le bloc de fin n'existe qu'à la sortie du DERNIER écran, joué ici au clic.
+          const { page, ctx, ex } = await ouvrirEnveloppe(largeur, { feedback: true, visible: true }, [[CHAMP_SOMME, "@juste"], [CHAMP_PARITE, "@faux"], [CHAMP_DIVISEURS, "@juste"]]);
+          await page.waitForSelector(".moteur-table-signes");
+          const signes = JSON.parse(reponseBruteCorrecte(ex, CHAMP_SIGNES)) as Record<string, Record<string, string>>;
+          for (const [ligneId, colonnes] of Object.entries(signes)) {
+            const idxLigne = Object.keys(signes).indexOf(ligneId);
+            for (const [colonneId, signe] of Object.entries(colonnes)) {
+              const cellule = page.locator(".moteur-table-signes tbody tr").nth(idxLigne).locator("td").nth(Number(colonneId.slice(1))).locator("button");
+              for (let k = 0; k < 4 && (await cellule.innerText()) !== signe; k++) await cellule.click();
+            }
+          }
+          await page.locator(".moteur-ecran-courant .moteur-bouton-principal").click();
+          await page.waitForSelector(".moteur-retour .moteur-statut");
+          await page.getByRole("button", { name: /Voir la fin/ }).click();
+          await page.waitForSelector(".moteur-fin .moteur-recap");
+          await flou(page);
+          await page.screenshot({ path: join(CAPTURES, `fidelite-app-scores-recap-${largeur}.png`), fullPage: true });
+          comparer(e, "panneau du résultat", SR["recap"]!, await mesurer(page, ".moteur-recap"), P_PANNEAU);
+          comparer(e, "tableau du résultat", SR["recap-table"]!, await mesurer(page, ".moteur-recap-table"), ["display", "borderCollapse"]);
+          comparer(e, "titre du résultat", SR["recap-titre"]!, await mesurer(page, ".moteur-recap-titre"), [...["color", "fontFamily", "fontSize", "fontWeight", "letterSpacing"], "captionSide", "textAlign"]);
+          comparer(e, "nom d'un écran", SR["recap-nom"]!, await mesurer(page, ".moteur-recap-nom"), [...P_NOM, "paddingTop", "paddingBottom"]);
+          comparer(e, "points d'un écran", SR["recap-points"]!, await mesurer(page, ".moteur-recap-points"), [...P_SCORE.slice(0, 5), "textAlign", "fontVariantNumeric", "whiteSpace"]);
+          comparer(e, "ligne de total", SR["recap-total-nom"]!, await mesurer(page, ".moteur-recap-total .moteur-recap-nom"), [...P_NOM, "borderTopColor", "borderTopWidth", "paddingTop"]);
+          comparer(e, "total (points)", SR["recap-total-points"]!, await mesurer(page, ".moteur-recap-total .moteur-recap-points"), [...P_NOM, "textAlign", "borderTopColor", "borderTopWidth", "paddingTop"]);
+          const lignes = await page.locator(".moteur-recap-table tbody tr").count();
+          const premier: string = await page.locator(".moteur-recap-table tbody tr").first().innerText();
+          verifier(lignes === 5 && /1 \/ 1 pt/.test(premier), `${e} : une ligne par écran (4) et le total (${lignes}) — « ${premier.replace(/\s+/g, " ")} »`);
+          verifier(!(await page.locator(".moteur-recap-points", { hasText: "NaN" }).count()), `${e} : jamais NaN`);
+          await ctx.close();
+        }
+        // (c) SANS la case : verdict, mais aucun score nulle part (le score suit la solution)
+        {
+          const { page, ctx } = await ouvrirEnveloppe(largeur, { feedback: true, visible: false }, [[CHAMP_SOMME, "@juste"], [CHAMP_PARITE, "@faux"], [CHAMP_DIVISEURS, "@juste"]]);
+          verifier((await page.locator(".moteur-rappel-score, .moteur-rappel-total, .moteur-recap").count()) === 0, `${e} : sans « Afficher la réponse attendue », aucun score (ni ligne, ni total)`);
+          await ctx.close();
+        }
+        // (d) correction coupée : rien pendant la résolution
+        {
+          const { page, ctx } = await ouvrirEnveloppe(largeur, { feedback: false, visible: true }, [[CHAMP_SOMME, "@juste"], [CHAMP_PARITE, "@faux"]]);
+          verifier((await page.locator(".moteur-rappel-score, .moteur-rappel-total, .moteur-recap").count()) === 0, `${e} : sous correction coupée, aucun score pendant la résolution`);
           await ctx.close();
         }
       }

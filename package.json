@@ -23,6 +23,7 @@
     "test-generation-gen7": "tsx scripts/test-generation-gen7.ts",
     "test-route-gen7": "tsx scripts/test-route-gen7.ts",
     "test-route-motif-delta": "tsx scripts/test-route-motif-delta.ts",
+    "test-scores-ecran": "tsx scripts/test-scores-ecran.ts",
     "test-katex": "tsx scripts/test-katex.ts",
     "test-eleve-desactive": "tsx scripts/test-eleve-desactive.ts",
     "test-apercu-tache": "tsx scripts/test-apercu-tache.ts",

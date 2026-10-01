@@ -7,6 +7,7 @@ import { calculerEtatExercice, chargerContexteTache, chargerDonneesExercice, COL
 import { aidePresente } from "../../aideTypee";
 import { construireChampVue, REGLAGES_FORCEES_ANTERIEURES } from "../../tableauDeBord";
 import { categorieTachePourEleve } from "../../verrouillageTache";
+import { poidsDansMap, poidsDesEcrans } from "../../poidsEcran";
 
 /**
  * GET /api/exercices/:id — exercice assigné à l'élève authentifié, RÉGÉNÉRÉ depuis sa graine via le
@@ -67,6 +68,7 @@ export const gererExercicesId = avecGestionErreurs(async function handler(req: R
   const finDeTache = !anterieure && revelationFinDeTache(contexte, etat.termine && (await tacheEstCompletePourEleve(admin, ligne.tache_id as string, eleve.id, new Date())));
   const reveleTout = anterieure || finDeTache;
   const reglages = reveleTout ? REGLAGES_FORCEES_ANTERIEURES : contexte.reglages;
+  const poidsParChamp = poidsDesEcrans(regenere.ecrans);
   const champs = etat.champs.map((c) => {
     const vue = construireChampVue(c.champ, c.derniere, regenere.generateur.solutionAttendue(projete.exercice, c.champ), reglages, reveleTout, c.etat);
     return {
@@ -74,6 +76,8 @@ export const gererExercicesId = avecGestionErreurs(async function handler(req: R
       valeur_saisie: vue.valeur_saisie,
       statut: vue.statut,
       solution_attendue: vue.solution_attendue,
+      score: vue.score, // RAPPORT §50 : null sauf si la solution est montrée (le score suit la solution)
+      poids: poidsDansMap(poidsParChamp, c.champ), // statique (RAPPORT §17) : le dénominateur « points possibles » exige TOUS les champs, y compris les écrans pas encore servis
       revele: vue.revele,
       // `verrouille` pour le client = « ne peut plus être modifié » ; sous retour en arrière un écran répondu reste modifiable (`modifiable`).
       verrouille: (c.verrouille && !c.modifiable) || anterieure,

@@ -1669,9 +1669,13 @@ async function scenarioGen7Coupe(navigateur: any, base: string, largeur: number)
   verifier(symboles >= 3 && annotations.every((t: string) => !/\d/.test(t.replace(/x_[12]/, "x_"))), `${l} gen7 coupé : le tableau montre x_1, x_S, x_2 (${symboles}) et aucune valeur numérique de x (${JSON.stringify(annotations)})`);
   verifier((await sansVerdict()) && (await page.locator(".moteur-rappel-marque-neutre").count()) === 7 && (await page.locator(".moteur-rappel-marque-correct, .moteur-rappel-marque-not_equivalent, .moteur-rappel-marque-parse_error").count()) === 0, `${l} gen7 coupé : toujours ni verdict ni coche devant le tableau : 7 lignes neutres`);
   await page.screenshot({ path: join(CAPTURES, `${l}-gen7-coupe-tableau-symbolique.png`), fullPage: true });
+  verifier((await page.locator(".moteur-rappel-score, .moteur-rappel-total, .moteur-recap").count()) === 0, `${l} gen7 coupé : aucun score pendant la résolution (le score suit la solution)`);
   await repondreGen7(page, ex, "tableauSignes");
   await passer("tableauSignes", true);
   await page.waitForSelector(".moteur-fin");
+  // La tâche ENTIÈRE est terminée : tout est révélé d'un coup, scores compris (tableau final seulement : le rappel n'existe plus).
+  const rangeesCoupe: string[] = await page.locator(".moteur-fin .moteur-recap-table tbody tr").allInnerTexts();
+  verifier(rangeesCoupe.length === 9 && /^Total\s/.test(rangeesCoupe[8]!) && /^Factorisation\s+0 \/ 1 pt$/.test(rangeesCoupe.find((r) => /^Factorisation/.test(r)) ?? "") && /^Racines\s+1 \/ 1 pt$/.test(rangeesCoupe.find((r) => /^Racines/.test(r)) ?? "") && /^Total\s+7 \/ 8 pts$/.test(rangeesCoupe[8]!), `${l} gen7 coupé : à la fin de la tâche, le tableau final révèle les scores (8 écrans + total), la factorisation fausse vaut 0, « Racines » (méthode juste sur la donnée de l'élève) vaut 1, total 7 / 8 (${JSON.stringify(rangeesCoupe)})`);
   await page.getByRole("button", { name: "Terminer" }).click();
   await page.waitForSelector("#tableau-de-bord:not([hidden])");
   const rep = s.base.table("reponses");
@@ -2103,10 +2107,19 @@ async function repondreMD(page: any, ex: ExerciceMotifDelta, champ: string): Pro
  */
 async function scenarioGen7MotifDelta(navigateur: any, base: string, largeur: number) {
   const l = `${largeur}`;
+  /** « Besoin d'un indice ? » : avec une pénalité, un premier clic demande confirmation (« Confirmer : l'indice réduit ton score de 10 % »), un second sert l'indice. */
+  const demanderIndice = async (courant: any) => {
+    const bouton = courant.locator(".moteur-aide button");
+    await bouton.click();
+    if (/^Confirmer/.test(await bouton.innerText())) await bouton.click();
+  };
   for (const [i, fam] of FAMILLES.entries()) {
     const s: Scenario = creerScenario();
     installerBase(s.base);
-    const tacheId = creerTache(s, { nom: `md ${fam.numero}`, variantes: [{ variante_id: fam.id, nombre_exercices: 1 }], aide_activee: true });
+    // RAPPORT §50 : le score suit la solution. La 1re sous-variante est jouée AVEC « Afficher la réponse attendue » et une pénalité d'indice de 10 % (scores visibles) ;
+    // les neuf autres SANS la case (verdict seul : aucun score, ni ligne, ni total, ni tableau final).
+    const avecScores = i === 0;
+    const tacheId = creerTache(s, { nom: `md ${fam.numero}`, variantes: [{ variante_id: fam.id, nombre_exercices: 1 }], aide_activee: true, reponse_visible: avecScores, aide_penalite_pourcent: avecScores ? 10 : 0 });
     const origine = Math.random;
     Math.random = () => (7001 + 13 * i) / 2 ** 32;
     try {
@@ -2129,6 +2142,15 @@ async function scenarioGen7MotifDelta(navigateur: any, base: string, largeur: nu
       verifier(consigne.startsWith("Étudie la fonction suivante") && (await courant.locator(".moteur-consigne .katex").count()) >= 1 && (await page.locator(".moteur-math-source").count()) === 0, `${e} / ${champ} : énoncé rendu par KaTeX, aucun repli en source (« ${consigne.slice(0, 50)} »)`);
       verifier((await page.locator(".moteur-question-titre").innerText()) === `Question ${k + 1} sur 6` && (await page.locator(".moteur-rappel-ligne-correct").count()) === k, `${e} / ${champ} : « Question ${k + 1} sur 6 », ${k} ligne(s) de rappel validée(s)`);
       if (champ === "coefficients") await page.screenshot({ path: cap("01-coefficients"), fullPage: true });
+      // Scores (RAPPORT §50) : une valeur par ligne répondue et un total UNIQUEMENT quand la solution est montrée ; sinon rien, sur aucun écran.
+      const nbScores = await page.locator(".moteur-rappel-score").count();
+      if (avecScores) {
+        verifier(nbScores === k && (await page.locator(".moteur-rappel-total").count()) === (k === 0 ? 0 : 1), `${e} / ${champ} : ${k} valeur(s) de score dans le rappel et ${k === 0 ? "pas de" : "une ligne de"} total (${nbScores})`);
+        if (k === 2) verifier(JSON.stringify(await page.locator(".moteur-rappel-score").allInnerTexts()) === JSON.stringify(["1 / 1 pt", "0,9 / 1 pt"]) && (await page.locator(".moteur-rappel-total-points").innerText()) === "1,9 / 10 pts", `${e} : l'indice demandé sur l'allure coûte 10 % (« 0,9 / 1 pt ») et le total est la somme des lignes sur les 10 points de TOUS les écrans`);
+        if (k === 5) verifier((await page.locator(".moteur-rappel-total-points").innerText()) === "6,9 / 10 pts", `${e} : total avant le tableau « 6,9 / 10 pts » (${await page.locator(".moteur-rappel-total-points").innerText()})`);
+      } else {
+        verifier(nbScores === 0 && (await page.locator(".moteur-rappel-total, .moteur-recap").count()) === 0, `${e} / ${champ} : sans « Afficher la réponse attendue », aucun score`);
+      }
 
       if (champ === "allure") {
         // Deux réglages réactifs : un seul dessin, deux commandes indépendantes.
@@ -2149,7 +2171,7 @@ async function scenarioGen7MotifDelta(navigateur: any, base: string, largeur: nu
         verifier(initial.courbe !== gauche.courbe && initial.label !== gauche.label, `${e} : avant tout choix, le croquis est neutre`);
         // aide combinée : un seul bouton, un seul texte qui couvre les deux questions
         verifier((await courant.locator(".moteur-aide button").count()) === 1, `${e} : une seule aide sur l'écran d'allure`);
-        await courant.locator(".moteur-aide button").click();
+        await demanderIndice(courant);
         await page.waitForSelector(".moteur-ecran-courant .moteur-aide-texte:not([hidden])");
         const aide: string = await courant.locator(".moteur-aide-texte").innerText();
         verifier(/parabole/.test(aide) && (await courant.locator(".moteur-aide-texte .katex").count()) >= 2, `${e} : l'aide d'allure (sens ET position) est rendue par KaTeX`);
@@ -2174,7 +2196,7 @@ async function scenarioGen7MotifDelta(navigateur: any, base: string, largeur: nu
         verifier(symboles.length >= (n === 7 ? 3 : 1) && (await courant.locator(".moteur-table-structure .moteur-math-source").count()) === 0, `${e} : valeurs de x symboliques rendues par KaTeX (${symboles.join(",")})`);
         const noms: string[] = await page.locator(".moteur-rappel-ligne-correct .moteur-rappel-nom").allInnerTexts();
         verifier(noms.length === 5 && noms[0]!.startsWith("Coefficients") && noms.some((x) => x.startsWith("Racines")), `${e} : le rappel liste les 5 écrans précédents (${noms.join(" | ")})`);
-        await courant.locator(".moteur-aide button").click();
+        await demanderIndice(courant);
         await page.waitForSelector(".moteur-ecran-courant .moteur-aide-texte svg");
         verifier((await courant.locator(".moteur-aide-texte svg").count()) >= 1 && (await courant.locator(".moteur-aide-texte .moteur-math-source").count()) === 0, `${e} : l'aide du tableau est un croquis de parabole (coefficients réels)`);
         await verifierPleinBord(page, `${e} : tableau`, largeur);
@@ -2185,6 +2207,13 @@ async function scenarioGen7MotifDelta(navigateur: any, base: string, largeur: nu
       await validerEtSuivreGen7(page);
     }
     await page.waitForSelector(".moteur-fin");
+    if (avecScores) {
+      const rangees: string[] = await page.locator(".moteur-fin .moteur-recap-table tbody tr").allInnerTexts();
+      verifier(rangees.length === 7 && /Total\s+9,6 \/ 10 pts/.test(rangees[6]!) && /Tableau de signes\s+2,7 \/ 3 pts/.test(rangees[5]!) && /Allure\s+0,9 \/ 1 pt/.test(rangees[1]!), `${e} : tableau final : 6 écrans + total « 9,6 / 10 pts » (${JSON.stringify(rangees)})`);
+      await page.screenshot({ path: cap("07-fin-resultat"), fullPage: true });
+    } else {
+      verifier((await page.locator(".moteur-recap").count()) === 0, `${e} : pas de tableau final sans « Afficher la réponse attendue »`);
+    }
     await page.getByRole("button", { name: "Terminer" }).click();
     await page.waitForSelector("#tableau-de-bord:not([hidden])");
     const lignes = s.base.table("reponses");

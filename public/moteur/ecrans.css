@@ -226,6 +226,99 @@
   color: var(--text-muted);
 }
 
+/* ── Scores (RAPPORT §50) : docs/reference/scores.html. Le score suit la solution (le serveur n'envoie rien sinon) ; AUCUNE couleur de verdict (la marque porte déjà le
+   verdict) : la valeur est en `--violet`, comme la marque neutre. Chiffres tabulaires : les valeurs s'alignent d'une ligne à l'autre. ── */
+.moteur-rappel-score {
+  flex: none;
+  margin-left: auto;
+  font-size: 0.8125em;
+  font-weight: 700;
+  color: var(--violet);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.moteur-rappel-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: calc(var(--espace-2)*1.25); /* 10px */
+  padding-top: calc(var(--espace-2)*1.25);
+  border-top: 1px solid var(--border);
+}
+
+.moteur-rappel-total-nom {
+  font-size: 0.8125em;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.moteur-rappel-total-points {
+  font-size: 0.875em;
+  font-weight: 700;
+  color: var(--violet);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Tableau final (bloc de fin) : même encadré gris en retrait que le rappel. */
+.moteur-recap {
+  margin: 0;
+  padding: calc(var(--espace-3)*0.875) var(--espace-3); /* 14px 16px */
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.moteur-recap-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.moteur-recap-titre {
+  caption-side: top;
+  margin: 0 0 calc(var(--espace-2)*1.25);
+  padding: 0;
+  text-align: left;
+  font-size: 0.75em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.moteur-recap-table th,
+.moteur-recap-table td {
+  padding: var(--espace-1) 0;
+  text-align: left;
+  vertical-align: baseline;
+}
+
+.moteur-recap-nom {
+  font-size: 0.8125em;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.moteur-recap-table .moteur-recap-points {
+  text-align: right;
+  font-size: 0.8125em;
+  font-weight: 700;
+  color: var(--violet);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.moteur-recap-total th,
+.moteur-recap-total td {
+  padding-top: var(--espace-2);
+  border-top: 1px solid var(--border);
+}
+
+.moteur-recap-total .moteur-recap-nom,
+.moteur-recap-table .moteur-recap-total .moteur-recap-points {
+  font-size: 0.875em;
+}
+
 /* Spécificité (0,2,0) : la solution d'une ligne du rappel est du texte discret, pas le bandeau violet de `.moteur-solution` (défini plus bas). */
 .moteur-rappel .moteur-rappel-solution {
   flex-basis: 100%;
