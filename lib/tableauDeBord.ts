@@ -26,6 +26,12 @@ export interface ChampVue {
   statut: StatutVerification | null;
   solution_attendue: string | null;
   /**
+   * Score de l'écran (0 à 100 : essais ratés, score partiel, pénalité d'indice — `EtatChampTentatives.score`), RAPPORT §50. **Le score suit la solution** : `null` sauf si
+   * la solution est montrée (`solutionMontreeEnCours`, ou révélation forcée) ET le champ est terminé. Exception ASSUMÉE à « `fractionCorrecte` ne sort jamais d'une réponse
+   * HTTP » (RAPPORT §16) : un score partiel révèle la fraction ; elle n'est donc exposée que là où le verdict l'est déjà, jamais sous correction coupée avant la fin de la tâche.
+   */
+  score: number | null;
+  /**
    * Prompt "Tentatives, aide, récapitulatif" (3/3), Étape 2/3 : vrai si `tentativesMax` tentatives
    * ont été ratées sans succès sur ce champ — le champ est alors verrouillé côté client (même
    * mécanisme que `statut === "correct"`, jamais une 2e logique de verrouillage). Ce booléen seul
@@ -156,6 +162,8 @@ export function construireChampVue(
   // échec ne doit pas être plus visible qu'une réussite (ni `revele`, ni statut, ni solution) tant que
   // la tâche n'est pas terminée. Le verrouillage du champ, lui, est le même que l'on ait réussi ou non.
   const revele = etatTentatives.revelee && (solutionMontreeEnCours(reglagesEffectifs) || revelerSansReponse);
+  // RAPPORT §50 : le score suit la solution (même condition que `revele`, sans exiger l'épuisement) ; un champ non terminé n'a pas de note.
+  const score = etatTentatives.terminee && (solutionMontreeEnCours(reglagesEffectifs) || revelerSansReponse) ? etatTentatives.score : null;
   if (!derniereReponse) {
     // Phase 2 : un champ RÉVÉLÉ sans aucune réponse (chrono écoulé avant toute soumission,
     // `calculerEtatChampTentatives(…, chronoExpire=true)`) est verrouillé exactement comme un champ aux
@@ -166,6 +174,7 @@ export function construireChampVue(
       valeur_saisie: null,
       statut: null,
       solution_attendue: revelerSansReponse || revele ? solutionAttendueTexte : null,
+      score,
       revele,
     };
   }
@@ -191,6 +200,7 @@ export function construireChampVue(
     valeur_saisie: derniereReponse.valeur_saisie,
     statut: vue.statut ?? null,
     solution_attendue: vue.solution_attendue ?? null,
+    score,
     revele,
   };
 }

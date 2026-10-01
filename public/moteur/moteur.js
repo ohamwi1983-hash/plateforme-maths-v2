@@ -14,6 +14,7 @@ import { COMPOSANTS_ECRAN } from "./ecrans/index.js";
 import { AIDES_TYPEES } from "./aides/index.js";
 import { rendreTexte } from "./rendreTexte.js";
 import { versTexteBrut } from "./texteMath.js";
+import { formaterScore, pointsParChamp, totalPoints } from "./pointsEcran.js";
 
 const LIBELLES_STATUT = {
   correct: "Bonne réponse",
@@ -179,6 +180,8 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
     if (exercice.exercice_termine && exercice.saisie_possible) {
       const fin = creer("div", "moteur-fin");
       fin.appendChild(creer("p", "moteur-message moteur-message-succes", "Exercice terminé."));
+      const recap = construireRecapScores(exercice, ecransParChamp);
+      if (recap) fin.appendChild(recap);
       const suite = creer("button", "moteur-bouton moteur-bouton-principal", "Terminer");
       suite.type = "button";
       suite.addEventListener("click", () => {
@@ -190,6 +193,34 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
     }
     conteneur.replaceChildren(racine);
     if (carteCourante) await activerEcranCourant(exercice, carteCourante);
+  }
+
+  /**
+   * « Résultat de l'exercice » (RAPPORT §50) : une ligne par écran (points / poids) et le total. N'existe que si le serveur a envoyé des scores (le score suit la solution) ;
+   * l'attendu d'un écran sans score s'affiche « — » (jamais 0 : un score absent n'est pas un score nul).
+   */
+  function construireRecapScores(exercice, ecransParChamp) {
+    const total = totalPoints(exercice.champs);
+    if (!total.visible) return null;
+    const bloc = creer("section", "moteur-recap");
+    const table = creer("table", "moteur-recap-table");
+    table.appendChild(creer("caption", "moteur-recap-titre", "RÉSULTAT DE L'EXERCICE"));
+    const corps = creer("tbody");
+    const ligneDe = (nom, valeur, classe) => {
+      const tr = creer("tr", classe);
+      const th = creer("th", "moteur-recap-nom");
+      th.scope = "row";
+      rendreTexte(th, nom, { math: true });
+      tr.append(th, creer("td", "moteur-recap-points", valeur));
+      return tr;
+    };
+    pointsParChamp(exercice.champs).forEach((p, i) => {
+      corps.appendChild(ligneDe(nomDe(ecransParChamp.get(p.champ), i + 1), p.obtenus === null ? "—" : formaterScore(p.obtenus, p.possibles)));
+    });
+    corps.appendChild(ligneDe("Total", formaterScore(total.obtenus, total.possibles), "moteur-recap-total"));
+    table.appendChild(corps);
+    bloc.appendChild(table);
+    return bloc;
   }
 
   /** Lien « Mes tâches », surtitre « Exercice i sur m · tâche » et titre « Question k sur N » (RAPPORT §43). */
@@ -247,6 +278,8 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
     });
     bloc.append(etiquette, piste, creer("p", "moteur-rappel-titre", "CE QU'ON SAIT DÉJÀ"));
 
+    // Scores (RAPPORT §50) : le serveur n'envoie un score que là où la solution est montrée (`score === null` sinon) ; ici, de l'arithmétique sur ce qu'il envoie, jamais un verdict.
+    const pointsChamps = pointsParChamp(champs);
     const liste = creer("ol", "moteur-rappel-liste");
     champs.forEach((c, i) => {
       const ecran = ecransParChamp.get(c.champ);
@@ -262,13 +295,19 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
         return;
       }
       if (!repondu(c)) return;
-      liste.appendChild(ligneFaite(exercice, c, ecran, nom, retour));
+      liste.appendChild(ligneFaite(exercice, c, ecran, nom, retour, pointsChamps[i]));
     });
     bloc.appendChild(liste);
+    const total = totalPoints(champs);
+    if (total.visible) {
+      const ligneTotal = creer("div", "moteur-rappel-total");
+      ligneTotal.append(creer("span", "moteur-rappel-total-nom", "Score"), creer("span", "moteur-rappel-total-points", formaterScore(total.obtenus, total.possibles)));
+      bloc.appendChild(ligneTotal);
+    }
     return bloc;
   }
 
-  function ligneFaite(exercice, info, ecran, nom, retour) {
+  function ligneFaite(exercice, info, ecran, nom, retour, points) {
     const marque = MARQUES_RAPPEL[info.statut] ?? MARQUES_RAPPEL.neutre;
     const ligne = creer("li", "moteur-rappel-ligne moteur-rappel-ligne-" + marque.etat);
     const pastille = creer("span", "moteur-rappel-marque moteur-rappel-marque-" + marque.etat, marque.glyphe);
@@ -286,6 +325,7 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
     // Une réponse juste n'a pas besoin de « Réponse attendue » (elle lui est identique) : la solution n'est rappelée que pour un écran non réussi.
     if (info.solution_attendue !== null && info.statut !== "correct") corps.appendChild(creer("p", "moteur-rappel-solution moteur-solution", "Réponse attendue : " + info.solution_attendue, { math: true }));
     ligne.append(pastille, corps);
+    if (points && points.obtenus !== null) ligne.appendChild(creer("span", "moteur-rappel-score", formaterScore(points.obtenus, points.possibles)));
     if (retour && info.modifiable === true) {
       // Retour en arrière : la réponse actuelle (dernière réponse valide) est affichée ; le crayon, à droite de la ligne, rouvre l'écran (RAPPORT §48).
       ligne.classList.add("moteur-rappel-ligne-modifiable");

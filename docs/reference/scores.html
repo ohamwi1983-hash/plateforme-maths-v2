@@ -1,0 +1,71 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Référence — scores par écran, total, tableau final (RAPPORT §50)</title>
+<!-- RÉFÉRENCE des SCORES de l'enveloppe d'un exercice : (1) une valeur « 2 / 2 pts » à droite de chaque ligne répondue du rappel gris « Ce qu'on sait déjà »,
+     (2) la ligne de total « Score 4,8 / 11 pts » en bas du rappel, (3) le panneau « Résultat de l'exercice » du bloc de fin (une ligne par écran + total).
+     Exprimée UNIQUEMENT avec les valeurs des tokens de `:root` (public/style.css) : aucune valeur nouvelle. scripts/chromium-fidelite-design.ts rend ce fichier et
+     l'application à 390 et 1280 px et compare les styles CALCULÉS.
+     Règles de fond (voir CLAUDE.md « Scores par écran ») :
+       - le SCORE SUIT LA SOLUTION : il n'existe que là où le serveur montre la solution (correction immédiate ET « Afficher la réponse attendue », tâche antérieure,
+         fin de tâche sous correction coupée) ; jamais sous correction immédiate sans la case ;
+       - aucune couleur de verdict : un score faible n'est pas rouge (la marque de la ligne porte déjà le verdict) — la valeur est en `--violet`, comme la marque neutre ;
+       - points = poids × score / 100, arrondi à 1 décimale ; le total est la SOMME DES LIGNES AFFICHÉES ; le dénominateur est la somme des poids de TOUS les écrans. -->
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #FAF9FC; font-family: 'Inter', sans-serif; color: #1C1730; line-height: 1.5; }
+  .env { max-width: 688px; display: flex; flex-direction: column; gap: 16px; }
+  .panneau { background: #F6F3FB; border: 1px solid #E9E4F3; border-radius: 13px; padding: 14px 16px; margin: 0; }
+  .liste { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .ligne { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+  .marque { flex: none; width: 20px; height: 20px; border-radius: 50%; color: #FFFFFF; font-size: 12px; font-weight: 700; line-height: 1; display: flex; align-items: center; justify-content: center; }
+  .corps { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; min-width: 0; }
+  .nom { font-size: 13px; font-weight: 700; color: #1C1730; }
+  .valeur { font-family: 'Fraunces', serif; font-size: 14px; color: #1C1730; }
+  .points { flex: none; margin-left: auto; font-size: 13px; font-weight: 700; color: #3B1470; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .total { display: flex; justify-content: space-between; align-items: baseline; margin-top: 10px; padding-top: 10px; border-top: 1px solid #E9E4F3; }
+  .total-nom { font-size: 13px; font-weight: 700; color: #1C1730; }
+  .total-points { font-size: 14px; font-weight: 700; color: #3B1470; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .recap-titre { caption-side: top; text-align: left; margin: 0 0 10px; padding: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; color: #6E6785; }
+  table { width: 100%; border-collapse: collapse; }
+  td, th { padding: 4px 0; text-align: left; font-weight: inherit; vertical-align: baseline; }
+  .recap-points { text-align: right; font-size: 13px; font-weight: 700; color: #3B1470; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .recap-total td, .recap-total th { padding-top: 8px; border-top: 1px solid #E9E4F3; }
+  .recap-total .recap-nom { font-size: 14px; }
+  .recap-total .recap-points { font-size: 14px; }
+</style>
+<body>
+<div class="env">
+  <div data-ref="rappel" class="panneau">
+    <ol data-ref="rappel-liste" class="liste">
+      <li data-ref="ligne" class="ligne">
+        <span class="marque" style="background:#16A34A;">✓</span>
+        <span data-ref="corps" class="corps"><span data-ref="nom" class="nom">Coefficients :</span><span class="valeur">a = 1 ; b = 0 ; c = 4</span></span>
+        <span data-ref="points" class="points">1 / 1 pt</span>
+      </li>
+      <li class="ligne">
+        <span class="marque" style="background:#B3261E;">✕</span>
+        <span class="corps"><span class="nom">Allure :</span><span class="valeur">vers le bas</span></span>
+        <span class="points">0 / 1 pt</span>
+      </li>
+      <li class="ligne">
+        <span class="marque" style="background:#16A34A;">✓</span>
+        <span class="corps"><span class="nom">Sommet :</span><span class="valeur">x = 0 ; y_S = 4</span></span>
+        <span class="points">1,8 / 2 pts</span>
+      </li>
+    </ol>
+    <div data-ref="total" class="total"><span data-ref="total-nom" class="total-nom">Score</span><span data-ref="total-points" class="total-points">2,8 / 11 pts</span></div>
+  </div>
+
+  <div data-ref="recap" class="panneau">
+    <table data-ref="recap-table">
+      <caption data-ref="recap-titre" class="recap-titre">RÉSULTAT DE L'EXERCICE</caption>
+      <tbody>
+        <tr data-ref="recap-ligne"><th data-ref="recap-nom" scope="row" class="nom">Coefficients</th><td data-ref="recap-points" class="recap-points">1 / 1 pt</td></tr>
+        <tr><th scope="row" class="nom">Allure</th><td class="recap-points">0 / 1 pt</td></tr>
+        <tr><th scope="row" class="nom">Sommet</th><td class="recap-points">1,8 / 2 pts</td></tr>
+        <tr data-ref="recap-total" class="recap-total"><th data-ref="recap-total-nom" scope="row" class="nom recap-nom">Total</th><td data-ref="recap-total-points" class="recap-points">2,8 / 4 pts</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+</body>
