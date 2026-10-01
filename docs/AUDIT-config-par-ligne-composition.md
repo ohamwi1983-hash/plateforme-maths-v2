@@ -313,7 +313,27 @@ La décision 1 de la section 7 est tranchée par l'affirmative. Conséquences, p
    après un refus (pas de ligne `taches` orpheline : la tâche est insérée avant la composition, `taches.ts:240-271`, donc la validation doit précéder toute écriture, ce qui est déjà le cas
    à `taches.ts:231`).
 
+### Décisions confirmées ensuite
+
+**C) Doublons exacts : fusionnés en additionnant les `nombre_exercices` — confirmé.**
+- Point d'implémentation unique : `validerComposition` (`lib/validationCorpsTaches.ts:114-128`), donc les trois routes d'écriture (`taches.ts:231`, `taches/[id].ts:42`,
+  `taches-apercu.ts:106`) reçoivent la même composition normalisée. L'interface peut prévenir (« cette ligne existe déjà, les nombres seront additionnés »), jamais décider.
+- **Clé de fusion = `(variante_id, configuration canonique, chrono_duree_secondes)`** (**HYPOTHÈSE de ma part, à confirmer**). Raison : deux lignes identiques par variante et
+  configuration mais de durées de chrono **différentes** ne sont pas des doublons exacts ; les fusionner en silence perdrait l'une des deux durées, exactement le défaut
+  « première valeur non nulle » qu'on cherche à supprimer (A.2). Elles restent donc deux lignes. Si vous préférez fusionner quand même, il faut une règle de choix de la durée
+  (non proposée : toute règle serait arbitraire).
+- La fusion se fait **avant** l'écriture et avant le filtre des lignes à 0 déjà fait par `validerComposition` ; l'ordre des lignes restantes est celui de la première occurrence.
+- Test à prévoir : deux lignes identiques → une ligne (somme) ; mêmes variante et configuration avec durées différentes → deux lignes ; configurations différentes → deux lignes.
+
+**D) Défaut d'une nouvelle ligne : VIDE, jamais pré-cochée — confirmé.**
+- Conséquence directe de B : une ligne neuve est refusée à l'enregistrement tant que le professeur n'a rien choisi ; aucune sélection implicite n'est jamais enregistrée.
+- **Cela supprime la notion de « configuration par défaut » côté API** pour un générateur qui déclare une configuration : une ligne **sans** `configuration`, ou à configuration vide, est refusée
+  (`400`), jamais complétée par un défaut. Cela corrige deux formulations de ce document : la section 4.3 (point 3) parle de configuration « résolue, défauts inclus » et la section 7 (décision 2) d'un
+  « défaut explicite ». À lire désormais : **la forme canonique ne fait que normaliser** (clés triées, doublons retirés, valeurs reconnues) ; elle ne choisit jamais à la place du professeur.
+- Pour les générateurs **sans** configuration (gen7, témoin), rien ne change : `configuration = null`, jamais lue, ligne acceptée sans choix.
+- Le contrat n'a donc pas besoin d'un `configurationParDefaut` : seul `validerConfiguration` est requis.
+- Interface : le contrôle d'une ligne neuve s'affiche vide ; le bouton d'enregistrement reste bloqué avec le message de B.4 tant qu'une ligne de configuration est vide.
+
 ### Reste ouvert
 
-- Confirmer la fusion des doublons exacts (A.4).
-- Défaut de configuration quand le professeur n'a encore rien choisi dans une nouvelle ligne : **vide** (donc refusé à l'enregistrement, B) ou pré-cochée ? Décision produit propre à gen8, non anticipée ici.
+- Confirmer la clé de fusion de C (la durée de chrono en fait partie).
