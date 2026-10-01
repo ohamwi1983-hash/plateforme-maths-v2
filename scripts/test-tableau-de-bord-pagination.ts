@@ -105,14 +105,14 @@ async function appeler(): Promise<any> {
 async function main() {
   tables.taches.push({ id: TACHE_ID, prof_id: PROF_ID, nom: "Tâche à gros volume", est_apercu: false });
 
-  // 1200 exercices_assignes (> 1000 = la limite PostgREST), tous af_mise_en_evidence, chacun avec
+  // 1200 exercices_assignes (> 1000 = la limite PostgREST), tous af_delta_aucune_racine, chacun avec
   // exactly 1 réponse chronométrée -> 1200 réponses aussi (> 1000). Si l'une des 2 requêtes
   // (exercices_assignes OU reponses) n'était pas paginée, l'agrégation finale serait tronquée à
   // 1000 (ou moins, selon quelle requête tronque), pas 1200.
   const NB_EXERCICES = 1200;
   for (let i = 0; i < NB_EXERCICES; i++) {
     const id = `ex-${i}`;
-    tables.exercices_assignes.push({ id, tache_id: TACHE_ID, eleve_id: "eleve-1", variante_id: "af_mise_en_evidence" });
+    tables.exercices_assignes.push({ id, tache_id: TACHE_ID, eleve_id: "eleve-1", variante_id: "af_delta_aucune_racine" });
     tables.reponses.push({
       id: `r-${i}`,
       exercice_assigne_id: id,
@@ -126,10 +126,10 @@ async function main() {
   console.log(`Fixture : ${tables.exercices_assignes.length} exercices_assignes, ${tables.reponses.length} reponses (les deux > limite PostgREST de ${LIMITE_POSTGREST}).`);
 
   const corps = await appeler();
-  const entree = (corps.tempsParVariante as any[]).find((e) => e.variante_id === "af_mise_en_evidence");
+  const entree = (corps.tempsParVariante as any[]).find((e) => e.variante_id === "af_delta_aucune_racine");
 
   if (!entree) {
-    throw new Error(`Attendu : "af_mise_en_evidence" présente avec ${NB_EXERCICES} occurrences. Obtenu : absente -> ${JSON.stringify(corps.tempsParVariante)}`);
+    throw new Error(`Attendu : "af_delta_aucune_racine" présente avec ${NB_EXERCICES} occurrences. Obtenu : absente -> ${JSON.stringify(corps.tempsParVariante)}`);
   }
   if (entree.occurrences !== NB_EXERCICES) {
     throw new Error(

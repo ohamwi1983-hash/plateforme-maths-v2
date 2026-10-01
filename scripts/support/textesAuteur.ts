@@ -17,6 +17,7 @@ export function textesAuteurDe(e: EcranDeclare): string[] {
       else if (s.placeholder) t.push(s.placeholder);
     }
   }
+  if (e.type === "intervalle" && e.apercu) t.push(e.apercu.libelle);
   if (e.type === "liste_valeurs") t.push(e.etiquetteAjout, ...(e.etiquetteAucune ? [e.etiquetteAucune] : []), ...(e.etiquetteAuMoinsUne ? [e.etiquetteAuMoinsUne] : []));
   if (e.type === "tableau_signes") {
     if (e.titre) t.push(e.titre);

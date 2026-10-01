@@ -1,12 +1,10 @@
-import type { ColonneTableauSignes, EcranTableauSignes, ResultatVerification } from "../../../lib/contratGenerateur";
+import type { ColonneTableauSignes, EcranTableauSignes, LigneTableauSignes, ResultatVerification } from "../../../lib/contratGenerateur";
 import { decoderTableauSignes, type CasesTableauSignes } from "../../../lib/reponsesEcran";
 import { comparerCasesTableau, resoudreRangees, SIGNE_MOINS, SIGNE_PLUS, SIGNE_ZERO, type RangeeResolue } from "../../../lib/structureTableau";
-import { LIGNES_TABLEAU, type AffichageColonnes } from "../analyseFonction/tableauSignes";
 import { CODE_TABLEAU_CONCAVITE_INCORRECTE, CODE_TABLEAU_SIGNE_INVERSE, CODE_TABLEAU_SIGNE_PARTIEL, CODE_TABLEAU_VARIATION_PARTIEL } from "./codes";
 import { comparer, evaluerPolynome, exactDepuisRat, foisRat, latexExact, plus, exactDepuisEntier, signe, type Exact } from "./exact/nombreExact";
 import { rat } from "./exact/rationnel";
-import { CHAMP_TABLEAU_SIGNES } from "../analyseFonction/types";
-import type { FonctionExacte } from "./types";
+import { CHAMP_TABLEAU_SIGNES, type AffichageColonnes, type FonctionExacte } from "./types";
 
 /**
  * Écran `tableauSignes` de gen7 « motif / delta » (RAPPORT §49) : signe de `f` puis variations, UNE tentative pour les deux lignes, sur le contrat de tableau STRUCTURÉ (RAPPORT §30 :
@@ -30,8 +28,14 @@ interface Point {
   sommet: boolean;
 }
 
-const ID_LIGNE_SIGNE = LIGNES_TABLEAU[0]!.id;
-const ID_LIGNE_VARIATION = LIGNES_TABLEAU[1]!.id;
+const ID_LIGNE_SIGNE = "signe";
+const ID_LIGNE_VARIATION = "variation";
+
+/** Les deux lignes du tableau : signes de f(x), puis variations. */
+const LIGNES_TABLEAU: LigneTableauSignes[] = [
+  { id: ID_LIGNE_SIGNE, libelle: "SIGNE DE $f(x)$" },
+  { id: ID_LIGNE_VARIATION, libelle: "VARIATIONS", nature: "variation" },
+];
 
 function points(f: FonctionExacte): Point[] {
   if (f.racines.length === 0) return [{ x: f.xS, symbole: "$x_S$", racine: false, sommet: true }];

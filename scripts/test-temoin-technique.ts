@@ -101,13 +101,12 @@ async function main() {
 
   // ── 3. Registre : cohérence + échec bruyant ───────────────────────────────────────────────────
   const { verifierCoherenceRegistre, verifierAvecControle, chercherGenerateur, REGISTRE_GENERATEURS, variantesCatalogueSansGenerateur } = require("../lib/registreGenerateurs");
-  const { CATALOGUE_GENERATEURS, VARIANTES_RETIREES } = require("../lib/catalogueGenerateurs");
+  const { CATALOGUE_GENERATEURS } = require("../lib/catalogueGenerateurs");
   const { DICTIONNAIRE_COMPETENCES } = require("../lib/dictionnaireCompetences");
-  verifier(verifierCoherenceRegistre(REGISTRE_GENERATEURS, CATALOGUE_GENERATEURS, DICTIONNAIRE_COMPETENCES, VARIANTES_RETIREES).length === 0, "le registre réel devrait être cohérent");
+  verifier(verifierCoherenceRegistre(REGISTRE_GENERATEURS, CATALOGUE_GENERATEURS, DICTIONNAIRE_COMPETENCES).length === 0, "le registre réel devrait être cohérent");
   verifier(chercherGenerateur(VARIANTE_TEMOIN) === temoin, "chercherGenerateur(témoin)");
-  // Depuis la 3b-3 les 4 variantes gen7 « catégories » sont au registre (RETIRÉES du catalogue en RAPPORT §49, toujours exécutables : scripts/test-generation-gen7.ts, scripts/test-route-gen7.ts) ;
-  // les dix variantes « motif / delta » (RAPPORT §49) sont les variantes actives (scripts/test-catalogue-motif-delta.ts).
-  verifier(["af_mise_en_evidence", "af_binome_conjugue", "af_produit_remarquable", "af_irreductible"].every((v) => chercherGenerateur(v)?.generateur_id === "gen7"), "les 4 variantes gen7 historiques doivent rester au registre (exécutables, retirées du catalogue)");
+  // Les dix variantes gen7 « motif / delta » (RAPPORT §49) sont les seules variantes gen7 (scripts/test-catalogue-motif-delta.ts) ; les quatre anciennes ont été supprimées (RAPPORT §51).
+  verifier(REGISTRE_GENERATEURS.filter((g: { generateur_id: string }) => g.generateur_id === "gen7").length === 10 && ["af_mise_en_evidence", "af_binome_conjugue", "af_produit_remarquable", "af_irreductible"].every((v) => chercherGenerateur(v) === null), "gen7 : dix variantes au registre, les quatre anciennes n'existent plus");
   verifier(variantesCatalogueSansGenerateur().length === 0 && variantesCatalogueSansGenerateur(REGISTRE_GENERATEURS.filter((g: { variante_id: string }) => g.variante_id !== "af_delta_aucune_racine")).join() === "af_delta_aucune_racine", `aucune variante cataloguée sans générateur attendue, et une variante retirée du registre doit être nommée (obtenu ${variantesCatalogueSansGenerateur().join(",")})`);
   const cat = [{ generateur_id: "gX", variante_id: "x1" }];
   const base = { ...temoin, curriculaire: true, generateur_id: "gX", variante_id: "x1", codesCompetenceDeclares: [] as string[] };
@@ -156,10 +155,10 @@ async function main() {
   verifier((await appeler("assignations", "POST", { jeton: `prof:${s.autreProfId}`, corps: { tache_id: tacheId, classe_id: s.classeId } })).statut === 404, "un autre prof ne doit pas pouvoir assigner");
   verifier(s.base.table("exercices_assignes").length === 0, "des exercices ont été créés malgré des rejets");
 
-  const tacheGen7 = creerTache(s, { nom: "gen7", variantes: [{ variante_id: "af_mise_en_evidence", nombre_exercices: 1 }] });
-  // Le catalogue n'a plus de variante sans générateur : on RETIRE un instant `af_mise_en_evidence` du registre pour exercer le 409 (puis on le remet).
+  const tacheGen7 = creerTache(s, { nom: "gen7", variantes: [{ variante_id: "af_delta_aucune_racine", nombre_exercices: 1 }] });
+  // Le catalogue n'a plus de variante sans générateur : on RETIRE un instant `af_delta_aucune_racine` du registre pour exercer le 409 (puis on le remet).
   const { REGISTRE_GENERATEURS: registreVivant } = require("../lib/registreGenerateurs") as { REGISTRE_GENERATEURS: { variante_id: string }[] };
-  const indiceGen7 = registreVivant.findIndex((g) => g.variante_id === "af_mise_en_evidence");
+  const indiceGen7 = registreVivant.findIndex((g) => g.variante_id === "af_delta_aucune_racine");
   const [retire] = registreVivant.splice(indiceGen7, 1);
   let rejetGen7;
   try {
@@ -167,7 +166,7 @@ async function main() {
   } finally {
     registreVivant.splice(indiceGen7, 0, retire as { variante_id: string });
   }
-  verifier(rejetGen7.statut === 409 && rejetGen7.corps.variantes_indisponibles?.[0] === "af_mise_en_evidence", `variante sans générateur : 409 attendu, obtenu ${rejetGen7.statut}`);
+  verifier(rejetGen7.statut === 409 && rejetGen7.corps.variantes_indisponibles?.[0] === "af_delta_aucune_racine", `variante sans générateur : 409 attendu, obtenu ${rejetGen7.statut}`);
   verifier(s.base.table("exercices_assignes").length === 0 && s.base.table("taches_assignations").length === 0, "écriture malgré le 409 (doit échouer AVANT toute écriture)");
 
   const ok = await appeler("assignations", "POST", { jeton: jetonProf, corps: { tache_id: tacheId, classe_id: s.classeId } });

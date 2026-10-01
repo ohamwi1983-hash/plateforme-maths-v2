@@ -1,5 +1,4 @@
 import type { EcranDeclare } from "../../../lib/contratGenerateur";
-import { CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE, CHAMP_TABLEAU_SIGNES } from "../analyseFonction/types";
 import { AIDE_ALLURE, AIDE_AXE_SOMMET, aideFormuleColoreeMD } from "./aides";
 import { SOUS_CHAMPS_ALLURE_MD } from "./allure";
 import { SOUS_CHAMPS_AXE_SOMMET_MD } from "./axeSommet";
@@ -11,7 +10,7 @@ import { ecranTableauMD } from "./tableauSignes";
 import { approx } from "./exact/nombreExact";
 import { latexPolynomeMD, ordreAffichage } from "./formatage";
 import { rat, versNombreR } from "./exact/rationnel";
-import { CHAMP_RACINES, coefVersExact, fonctionEffective, type ExerciceMotifDelta } from "./types";
+import { CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE, CHAMP_RACINES, CHAMP_TABLEAU_SIGNES, coefVersExact, fonctionEffective, type ExerciceMotifDelta } from "./types";
 
 /**
  * Les écrans de gen7 « motif / delta » (RAPPORT §49), dans l'ordre, IDENTIQUES pour les dix sous-variantes :

@@ -25,15 +25,13 @@ import {
   generateurTemoinTechnique as temoin, graineDeProfil, reponseBruteCorrecte, VARIANTE_TEMOIN, type ExerciceEtendu, type ExerciceTemoin,
 } from "../src/generateurs/_temoinTechnique";
 
-import {
-  champsAnalyseFonction, factorisationVersLatex, fonctionEffective, genererExercice as genererGen7, projeterAnalyseFonction as projeterGen7, rangeesTableau, solutionTableau as solutionTableauGen7, reponseBruteCorrecteAnalyseFonction as reponseGen7, type CategorieAnalyseFonction, type ExerciceAnalyseFonction,
-} from "../src/generateurs/analyseFonction";
-
 import { FAMILLES } from "../src/generateurs/analyseFonctionMotifDelta/familles";
 import { genererExerciceMD } from "../src/generateurs/analyseFonctionMotifDelta/exercice";
 import { reponseBruteCorrecteMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/solutions";
 import { rangeesTableauMD } from "../src/generateurs/analyseFonctionMotifDelta/tableauSignes";
-import { fonctionVraie, type ExerciceMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/types";
+import { projeterMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/cascade";
+import { champsMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/ecrans";
+import { fonctionEffective, fonctionVraie, type ExerciceMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/types";
 
 const RACINE = join(__dirname, "..");
 const CAPTURES = process.env.CAPTURES_DIR ?? join(RACINE, "captures-chromium");
@@ -1464,66 +1462,9 @@ async function scenarioPoids(navigateur: any, base: string, largeur: number) {
 }
 
 
-// ══ gen7 « Analyse d'une fonction du second degré » (RAPPORT §33) : le VRAI registre, les 4 variantes af_*, joués dans le navigateur ══
+// ══ gen7 « motif / delta » : aides communes aux scénarios (le VRAI registre, joué dans le navigateur) ══
 
-const CATEGORIES_GEN7: CategorieAnalyseFonction[] = ["mise_en_evidence", "binome_conjugue", "produit_remarquable", "irreductible"];
 const NOMS_SYMBOLES_GEN7: Record<string, string> = { "⌣": "minimum (en creux)", "⌢": "maximum (en bosse)", "↗": "croissante", "↘": "décroissante" };
-
-/** Répond à l'écran COURANT de gen7 avec la bonne réponse, en n'utilisant que des gestes d'élève (clics, saisie). */
-async function repondreGen7(page: any, ex: ExerciceAnalyseFonction, champ: string): Promise<void> {
-  const courant = page.locator(".moteur-ecran-courant");
-  const brute = reponseGen7(ex, champ);
-  if (champ === "coefficients") {
-    const v = JSON.parse(brute);
-    for (const k of ["a", "b", "c"]) await courant.locator(`#mc-coefficients-${k}`).fill(v[k]);
-  } else if (champ === "allure") {
-    for (const [id, valeur] of Object.entries(JSON.parse(brute))) await courant.locator(`.moteur-choix:has(input[name="mc-allure-${id}"][value="${valeur}"])`).click();
-  } else if (champ === "axeSommet") {
-    const v = JSON.parse(brute);
-    await courant.locator("#mc-axeSommet-axeTexte").fill(v.axeTexte);
-    await courant.locator("#mc-axeSommet-xS").fill(v.xS);
-    await courant.locator("#mc-axeSommet-yS").fill(v.yS);
-  } else if (champ === "domaineImage") {
-    const v = JSON.parse(brute);
-    const ligne = courant.locator(".moteur-intervalle-ligne");
-    for (const [cote, crochet] of [["gauche", v.crochetGauche], ["droite", v.crochetDroit]]) {
-      const bouton = ligne.getByRole("button", { name: new RegExp(`Crochet de ${cote}`) });
-      for (let k = 0; k < 2 && (await bouton.textContent()) !== crochet; k++) await bouton.click();
-    }
-    if (v.borneGauche === "-inf") await ligne.getByRole("button", { name: "Borne de gauche : moins l'infini" }).click();
-    else await ligne.getByLabel("Borne de gauche", { exact: true }).fill(v.borneGauche);
-    if (v.borneDroite === "+inf") await ligne.getByRole("button", { name: "Borne de droite : plus l'infini" }).click();
-    else await ligne.getByLabel("Borne de droite", { exact: true }).fill(v.borneDroite);
-  } else if (champ === "racinesReconnaissance") {
-    await courant.locator(`.moteur-choix:has(input[value="${brute}"])`).click();
-  } else if (champ === "racinesChamp1") {
-    await courant.locator(".moteur-champ").first().fill(brute);
-  } else if (champ === "racinesChamp2") {
-    const valeurs = JSON.parse(brute) as string[];
-    await courant.getByRole("radio", { name: "Au moins une racine" }).click();
-    for (const [i, valeur] of valeurs.entries()) {
-      if ((await courant.locator(".moteur-liste-ligne").count()) <= i) await courant.locator(".moteur-liste-zone > .moteur-bouton-secondaire").click();
-      await courant.locator(".moteur-liste-ligne .moteur-champ").nth(i).fill(valeur);
-    }
-  } else if (champ === "tableauSignes") {
-    await remplirTableauGen7(page, ex, JSON.parse(brute));
-  } else {
-    throw new Error(`champ gen7 inconnu « ${champ} »`);
-  }
-}
-
-async function remplirTableauGen7(page: any, ex: ExerciceAnalyseFonction, sol: Record<string, Record<string, string>>): Promise<void> {
-  const lignes = page.locator(".moteur-ecran-courant .moteur-ligne-tableau");
-  const rangees = rangeesTableau(ex.fonction);
-  for (const [i, rangee] of rangees.entries()) {
-    const boutons = lignes.nth(i).locator("td button");
-    for (const [c, cellule] of rangee.cellules.entries()) {
-      const attendu = (sol[rangee.ligne] as Record<string, string>)[cellule.ancre] as string;
-      const nom = Object.hasOwn(NOMS_SYMBOLES_GEN7, attendu) ? NOMS_SYMBOLES_GEN7[attendu] : attendu;
-      for (let k = 0; k < 6 && (await valeurDeCase(boutons.nth(c))) !== nom; k++) await boutons.nth(c).click();
-    }
-  }
-}
 
 /** Consigne de l'écran courant, KaTeX remplacé par sa source LaTeX (`$…$`) : comparable au texte d'auteur (l'innerText de KaTeX répète chaque formule en MathML). */
 async function lireConsigneGen7(page: any): Promise<string> {
@@ -1557,147 +1498,94 @@ async function ouvrirTacheGen7(navigateur: any, base: string, largeur: number, s
   return ctx;
 }
 
-/** Assigne (API réelle) une tâche d'UNE variante gen7 avec la graine voulue ; renvoie l'exercice régénéré. */
-async function assignerGen7(s: Scenario, categorie: CategorieAnalyseFonction, graine: number, options: { feedback?: boolean; tentatives?: number; retour?: boolean; visible?: boolean } = {}): Promise<{ ex: ExerciceAnalyseFonction; tacheId: string }> {
-  const tacheId = creerTache(s, { nom: `gen7 ${categorie}`, autoriser_retour_arriere: options.retour ?? false, feedback_immediat: options.feedback ?? true, tentatives_supplementaires: options.tentatives ?? 0, reponse_visible: options.visible ?? true, variantes: [{ variante_id: `af_${categorie}`, nombre_exercices: 1 }] });
+/**
+ * Assigne (API réelle) une tâche d'UNE variante gen7 « motif / delta » avec la graine voulue ; renvoie l'exercice régénéré. Le profil d'assignation du témoin est remis à
+ * « aléatoire » : sinon le harnais remplacerait `Math.random` et la graine demandée serait ignorée.
+ */
+async function assignerMD(s: Scenario, variante: string, graine: number, options: { feedback?: boolean; tentatives?: number; retour?: boolean; visible?: boolean } = {}): Promise<{ ex: ExerciceMotifDelta; tacheId: string }> {
+  imposerProfilAssignation("aleatoire");
+  const tacheId = creerTache(s, { nom: `gen7 ${variante}`, autoriser_retour_arriere: options.retour ?? false, feedback_immediat: options.feedback ?? true, tentatives_supplementaires: options.tentatives ?? 0, reponse_visible: options.visible ?? false, variantes: [{ variante_id: variante, nombre_exercices: 1 }] });
   const origine = Math.random;
   Math.random = () => graine / 2 ** 32;
   try {
     const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tacheId, eleve_ids: ["eleve-1"] } });
-    verifier(a.statut === 201, `gen7 ${categorie} : assignation : ${a.statut} ${JSON.stringify(a.corps)}`);
+    verifier(a.statut === 201, `gen7 ${variante} : assignation : ${a.statut} ${JSON.stringify(a.corps)}`);
   } finally {
     Math.random = origine;
   }
   const ligne = s.base.table("exercices_assignes").find((x) => x.tache_id === tacheId)!;
-  return { ex: genererGen7(categorie, Number(ligne.graine)), tacheId };
+  return { ex: genererExerciceMD(variante as ExerciceMotifDelta["famille"], Number(ligne.graine)), tacheId };
 }
 
-/**
- * Une partie COMPLÈTE par catégorie, au clic : 8 écrans (6 pour af_irreductible), mathématiques rendues par KaTeX, rappel
- * « Ce qu'on sait déjà » et progression en correction immédiate, tableau à 7 ou 3 colonnes avec valeurs numériques, fin de tâche.
- */
-async function scenarioGen7Parties(navigateur: any, base: string, largeur: number) {
-  const l = `${largeur}`;
-  for (const categorie of CATEGORIES_GEN7) {
-    const s: Scenario = creerScenario();
-    installerBase(s.base);
-    const { ex } = await assignerGen7(s, categorie, 12345 + CATEGORIES_GEN7.indexOf(categorie));
-    const champs = champsAnalyseFonction(categorie);
-    const e = `${l} gen7 ${categorie}`;
-    const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
-    const courant = page.locator(".moteur-ecran-courant");
-    const cap = (nom: string) => join(CAPTURES, `${l}-gen7-${categorie}-${nom}.png`);
-    let vusPanneau = 0;
-    for (const [i, champ] of champs.entries()) {
-      await page.waitForFunction(`document.querySelectorAll(".moteur-ecran-courant").length === 1`);
-      const consigne: string = await lireConsigneGen7(page);
-      verifier(await courant.locator(".moteur-consigne .katex").count() >= 1 && (await page.locator(".moteur-math-source").count()) === 0, `${e} / ${champ} : la consigne est rendue par KaTeX (aucun repli en source)`);
-      if (!["racinesChamp1", "racinesChamp2", "racinesReconnaissance"].includes(champ)) verifier(consigne.startsWith("Étudie la fonction suivante"), `${e} / ${champ} : l'énoncé de la fonction est répété (« ${consigne.slice(0, 50)} »)`);
-      // RAPPORT §43 : « Ce qu'on sait déjà » est le rappel du moteur (une ligne par écran répondu, marque ✓ sous correction immédiate), plus une ligne de consigne.
-      verifier(!consigne.includes("Ce que tu sais déjà"), `${e} / ${champ} : plus de ligne « Ce que tu sais déjà » dans la consigne`);
-      verifier((await page.locator(".moteur-question-titre").innerText()) === `Question ${i + 1} sur ${champs.length}` && (await page.locator(".moteur-rappel-ligne-correct").count()) === i && (await page.locator(".moteur-rappel-ligne-courant").count()) === 1, `${e} / ${champ} : « Question ${i + 1} sur ${champs.length} », ${i} ligne(s) répondue(s) juste, 1 ligne en cours`);
-      verifier((await page.locator(".moteur-progression-etiquette").innerText()).includes(`${Math.round((i / champs.length) * 100)} %`), `${e} / ${champ} : progression ${Math.round((i / champs.length) * 100)} %`);
-      if (i === 0) {
-        await page.screenshot({ path: cap("01-coefficients"), fullPage: true });
-      } else if (champ === "allure" || champ === "axeSommet" || champ === "domaineImage") {
-        verifier((await page.locator(".moteur-rappel-ligne-correct .moteur-rappel-nom").first().innerText()).startsWith("Coefficients"), `${e} / ${champ} : le rappel commence par « Coefficients » avec sa valeur`);
-        vusPanneau++;
-      }
-      if (champ === "tableauSignes") {
-        const n = categorie === "irreductible" || categorie === "produit_remarquable" ? 3 : 7;
-        verifier((await courant.locator(".moteur-rangee-signe td button, .moteur-ligne-tableau tr:first-child td button").count()) === n, `${e} : la ligne de signe compte ${n} cases`);
-        const valeurs = await courant.locator(".moteur-table-structure .katex").count();
-        verifier(valeurs >= n, `${e} : les valeurs de x et symboles du tableau sont rendus par KaTeX (${valeurs})`);
-        const noms: string[] = await page.locator(".moteur-rappel-ligne-correct .moteur-rappel-nom").allInnerTexts();
-        verifier(noms.length === champs.length - 1 && noms[0]!.startsWith("Coefficients"), `${e} : le rappel liste les ${champs.length - 1} écrans précédents (${noms.join(" | ")})`);
-        if (categorie !== "irreductible") verifier(noms.some((x) => x.startsWith("Racines")), `${e} : les racines figurent dans le rappel avant le tableau`);
-        else verifier(!noms.some((x) => x.startsWith("Racines")), `${e} : aucune ligne « Racines » dans le rappel d'af_irreductible`);
-        await verifierPleinBord(page, `${e} : tableau`, largeur);
-      }
-      if (champ === "racinesChamp2") verifier(/D'après ta factorisation/.test(consigne), `${e} : l'équation de racinesChamp2 est celle de la factorisation confirmée`);
-      await repondreGen7(page, ex, champ);
-      if (["coefficients", "tableauSignes", "racinesChamp2"].includes(champ)) await page.screenshot({ path: cap(`${String(i + 2).padStart(2, "0")}-${champ}`), fullPage: true });
-      await validerEtSuivreGen7(page);
-    }
-    await page.waitForSelector(".moteur-fin");
-    verifier(vusPanneau === 3, `${e} : panneau vu sur les 3 écrans qui le suivent en premier (${vusPanneau})`);
-    if (categorie === "irreductible") verifier((await page.locator(".moteur-liste-valeurs").count()) === 0, `${e} : aucun écran de liste (pas de racines)`);
-    await page.getByRole("button", { name: "Terminer" }).click();
-    await page.waitForSelector("#tableau-de-bord:not([hidden])");
-    const lignes = s.base.table("reponses");
-    verifier(lignes.length === champs.length && lignes.every((r) => r.statut === "correct"), `${e} : ${champs.length} réponses enregistrées, toutes correctes (${lignes.map((r) => r.statut).join()})`);
-    verifier(journal.pageerrors.length === 0, `${e} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
-    verifier(journal.erreursConsole.filter((m) => !/fonts\.g|net::ERR_FAILED/.test(m)).length === 0, `${e} : erreurs console : ${journal.erreursConsole.join(" | ")}`);
-    await contexte.close();
-  }
-}
+// f(x) = x² + 3x − 4 (af_delta_racines_rationnelles, graine 4242) : racines −4 et 1, sommet (−3/2 ; −25/4). Coefficients FAUX confirmés a = −1, b = 3, c = 4 : f_élève(x) = −x² + 3x + 4,
+// racines −1 et 4, sommet (3/2 ; 25/4), parabole vers le bas, sommet à droite de l'axe Oy.
+const VARIANTE_REPERE = "af_delta_racines_rationnelles";
+const GRAINE_REPERE = 4242;
+const COEF_FAUX_REPERE = { a: "-1", b: "3", c: "4" };
+/** L'exercice tel que l'élève le voit après avoir confirmé de faux coefficients : ses réponses justes pour SA fonction s'obtiennent par `reponseBruteCorrecteMotifDelta`. */
+const exerciceDeLEleve = (ex: ExerciceMotifDelta): ExerciceMotifDelta =>
+  projeterMotifDelta(ex, [{ champ: "coefficients", reponseBrute: JSON.stringify(COEF_FAUX_REPERE), statut: "not_equivalent" }], { correctionImmediate: false, solutionMontree: false });
 
 /**
- * Correction COUPÉE et cascade : une factorisation FAUSSE mais exploitable devient l'équation de racinesChamp2 (méthode juste sur donnée
- * fausse = réussite), le tableau montre x₁, x_S, x₂ sans valeur numérique, et RIEN n'est révélé (ni verdict, ni panneau) avant la fin.
+ * Correction COUPÉE et cascade : de FAUX coefficients confirmés deviennent la fonction de tous les écrans suivants (méthode juste sur donnée fausse = réussite), le tableau
+ * montre x₁, x_S, x₂ sans valeur numérique, et RIEN n'est révélé (ni verdict, ni panneau, ni score) avant la fin ; à la fin de la TÂCHE, tout l'est d'un coup.
  */
 async function scenarioGen7Coupe(navigateur: any, base: string, largeur: number) {
   const l = `${largeur}`;
   const s: Scenario = creerScenario();
   installerBase(s.base);
-  const { ex } = await assignerGen7(s, "mise_en_evidence", 12345, { feedback: false }); // f = 4x² + 8x
+  const { ex } = await assignerMD(s, VARIANTE_REPERE, GRAINE_REPERE, { feedback: false });
+  const exEleve = exerciceDeLEleve(ex);
   const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
   const courant = page.locator(".moteur-ecran-courant");
   const sansVerdict = async () => (await page.locator(".moteur-statut-correct, .moteur-statut-not_equivalent, .moteur-statut-parse_error, .moteur-solution").count()) === 0;
   // Entre « Valider » et « Question suivante » : la réponse est enregistrée, mais ni verdict ni solution ne sont visibles — sauf pour la
   // réponse qui TERMINE la tâche (`derniere`), qui la révèle (règle de révélation, CLAUDE.md).
   const passer = (etape: string, derniere = false) =>
-    validerEtSuivreGen7(page, { verdict: false, entre: async () => void verifier(derniere ? !(await sansVerdict()) : await sansVerdict(), `${l} gen7 coupé / ${etape} : ${derniere ? "la réponse qui termine la tâche la révèle" : "aucun verdict ni solution affichés après « Valider »"}`) });
-  for (const champ of ["coefficients", "allure", "axeSommet", "domaineImage", "racinesReconnaissance"]) {
-    verifier(!(await lireConsigneGen7(page)).includes("Ce que tu sais déjà") && (await page.locator(".moteur-rappel-marque-correct, .moteur-rappel-marque-not_equivalent, .moteur-rappel-marque-parse_error").count()) === 0, `${l} gen7 coupé / ${champ} : le rappel n'a que des marques neutres, jamais une coche ni une couleur de verdict`);
-    await repondreGen7(page, ex, champ);
+    validerEtSuivreGen7(page, { verdict: false, entre: async () => void verifier(derniere ? !(await sansVerdict()) : await sansVerdict(), `${l} gen7 coupé / ${etape} : ${derniere ? "la réponse qui termine la tâche la révèle" : "aucun verdict ni solution affiché"}`) });
+  const marquesDeVerdict = ".moteur-rappel-marque-correct, .moteur-rappel-marque-not_equivalent, .moteur-rappel-marque-parse_error, .moteur-rappel-score, .moteur-rappel-total, .moteur-recap";
+  for (const k of ["a", "b", "c"] as const) await courant.locator(`#mc-coefficients-${k}`).fill(COEF_FAUX_REPERE[k]);
+  await passer("coefficients");
+  for (const champ of ["allure", "axeSommet", "domaineImage", "racines"]) {
+    const consigne = await lireConsigneGen7(page);
+    verifier(consigne.includes("d'après les coefficients que tu as donnés") && /-\s?x\^2/.test(consigne), `${l} gen7 coupé / ${champ} : l'énoncé est celui de la fonction de l'élève, et rien de plus (« ${consigne.slice(0, 110)} »)`);
+    verifier((await page.locator(marquesDeVerdict).count()) === 0, `${l} gen7 coupé / ${champ} : le rappel ne porte aucune marque de verdict ni aucun score`);
+    await repondreMD(page, exEleve, champ);
     await passer(champ);
   }
-  await courant.locator(".moteur-champ").first().fill("3x(x-2)"); // fausse, mais exploitable
-  await passer("racinesChamp1");
-  const consigne2 = await lireConsigneGen7(page);
-  verifier(consigne2.includes("D'après ta factorisation") && consigne2.includes("$3x(x - 2) = 0$") && !consigne2.includes("(x + 2)") && (await courant.locator(".moteur-consigne .katex").count()) >= 1, `${l} gen7 coupé : racinesChamp2 est bâti sur la factorisation de l'élève, sans fuite de la vraie (« ${consigne2.replace(/\n/g, " / ").slice(0, 110)} »)`);
-  await page.screenshot({ path: join(CAPTURES, `${l}-gen7-coupe-cascade-racinesChamp2.png`), fullPage: true });
-  await courant.getByRole("radio", { name: "Au moins une racine" }).click();
-  await courant.locator(".moteur-liste-ligne .moteur-champ").first().fill("0");
-  await courant.locator(".moteur-liste-zone > .moteur-bouton-secondaire").click();
-  await courant.locator(".moteur-liste-ligne .moteur-champ").nth(1).fill("2");
-  await passer("racinesChamp2");
   await page.waitForSelector(".moteur-table-structure");
   const annotations = (await courant.locator(".moteur-table-structure .katex-mathml annotation").allTextContents()).map((t: string) => t.trim());
   const symboles = annotations.filter((t: string) => /^x_(1|2|S)$/.test(t)).length;
   verifier(symboles >= 3 && annotations.every((t: string) => !/\d/.test(t.replace(/x_[12]/, "x_"))), `${l} gen7 coupé : le tableau montre x_1, x_S, x_2 (${symboles}) et aucune valeur numérique de x (${JSON.stringify(annotations)})`);
-  verifier((await sansVerdict()) && (await page.locator(".moteur-rappel-marque-neutre").count()) === 7 && (await page.locator(".moteur-rappel-marque-correct, .moteur-rappel-marque-not_equivalent, .moteur-rappel-marque-parse_error").count()) === 0, `${l} gen7 coupé : toujours ni verdict ni coche devant le tableau : 7 lignes neutres`);
+  verifier((await sansVerdict()) && (await page.locator(".moteur-rappel-marque-neutre").count()) === 5 && (await page.locator(marquesDeVerdict).count()) === 0, `${l} gen7 coupé : rappel neutre (5 marques •), aucun verdict ni score avant la fin`);
   await page.screenshot({ path: join(CAPTURES, `${l}-gen7-coupe-tableau-symbolique.png`), fullPage: true });
-  verifier((await page.locator(".moteur-rappel-score, .moteur-rappel-total, .moteur-recap").count()) === 0, `${l} gen7 coupé : aucun score pendant la résolution (le score suit la solution)`);
-  await repondreGen7(page, ex, "tableauSignes");
+  await repondreMD(page, exEleve, "tableauSignes");
   await passer("tableauSignes", true);
   await page.waitForSelector(".moteur-fin");
   // La tâche ENTIÈRE est terminée : tout est révélé d'un coup, scores compris (tableau final seulement : le rappel n'existe plus).
-  const rangeesCoupe: string[] = await page.locator(".moteur-fin .moteur-recap-table tbody tr").allInnerTexts();
-  verifier(rangeesCoupe.length === 9 && /^Total\s/.test(rangeesCoupe[8]!) && /^Factorisation\s+0 \/ 1 pt$/.test(rangeesCoupe.find((r) => /^Factorisation/.test(r)) ?? "") && /^Racines\s+1 \/ 1 pt$/.test(rangeesCoupe.find((r) => /^Racines/.test(r)) ?? "") && /^Total\s+7 \/ 8 pts$/.test(rangeesCoupe[8]!), `${l} gen7 coupé : à la fin de la tâche, le tableau final révèle les scores (8 écrans + total), la factorisation fausse vaut 0, « Racines » (méthode juste sur la donnée de l'élève) vaut 1, total 7 / 8 (${JSON.stringify(rangeesCoupe)})`);
+  const rangees: string[] = await page.locator(".moteur-fin .moteur-recap-table tbody tr").allInnerTexts();
+  verifier(rangees.length === 7 && /^Coefficients\s+0 \/ 1 pt$/.test(rangees[0]!) && /^Total\s+10 \/ 11 pts$/.test(rangees[6]!), `${l} gen7 coupé : à la fin de la tâche, le tableau final révèle les scores : coefficients faux = 0, le reste juste pour SA fonction, total 10 / 11 (${JSON.stringify(rangees)})`);
   await page.getByRole("button", { name: "Terminer" }).click();
   await page.waitForSelector("#tableau-de-bord:not([hidden])");
   const rep = s.base.table("reponses");
-  const ligne2 = rep.find((r) => r.champ === "racinesChamp2");
-  verifier(ligne2?.statut === "correct", `${l} gen7 coupé : « 0 ; 2 » est correct pour l'équation de l'élève (${ligne2?.statut})`);
-  verifier(rep.find((r) => r.champ === "racinesChamp1")?.statut === "not_equivalent", `${l} gen7 coupé : la factorisation fausse est enregistrée comme fausse (côté serveur seulement)`);
+  verifier(rep.find((r) => r.champ === "coefficients")?.statut === "not_equivalent", `${l} gen7 coupé : les coefficients faux sont enregistrés comme faux (côté serveur seulement)`);
+  verifier(["allure", "axeSommet", "domaineImage", "racines", "tableauSignes"].every((c) => rep.find((r) => r.champ === c)?.statut === "correct"), `${l} gen7 coupé : tout le reste est correct pour la fonction de l'élève (${rep.map((r) => `${r.champ}:${r.statut}`).join()})`);
   verifier(journal.pageerrors.length === 0, `${l} gen7 coupé : erreurs JS : ${journal.pageerrors.join(" | ")}`);
   await contexte.close();
 }
 
 /**
- * Cascade des coefficients (RAPPORT §38), jouée dans le navigateur dans les DEUX régimes : le scénario signalé par le propriétaire
- * (f = 4x² + 8x ; a = 5, b = 4, c = −4 confirmés ; xS = −2/5, yS = 0 ; image [0 ; +∞[). Les écrans suivants affichent SA fonction et
- * SON ordonnée du sommet, et [0 ; +∞[ est accepté (verdict « Bonne réponse » sous correction immédiate, rien de visible sous correction coupée).
+ * Cascade des coefficients (RAPPORT §38), jouée dans le navigateur dans les DEUX régimes (immédiat sans « Afficher la réponse attendue », et coupé) : de faux coefficients confirmés,
+ * puis une ordonnée du sommet fausse (0) : les écrans suivants affichent SA fonction et SON ordonnée, et l'ensemble-image ]−∞ ; 0] est accepté (verdict « Bonne réponse » sous
+ * correction immédiate, rien de visible sous correction coupée). Avec la case cochée, c'est §45 qui s'applique (`scripts/test-cascade-revelee.ts`).
  */
 async function scenarioGen7Cascade(navigateur: any, base: string, largeur: number) {
-  // RAPPORT §45 : la cascade sur la réponse FAUSSE de l'élève ne vit que là où rien n'a été montré : immédiate SANS « Afficher la réponse attendue », et coupée.
   for (const feedback of [true, false]) {
     const l = `${largeur} gen7 cascade ${feedback ? "immédiat" : "coupé"}`;
     const s: Scenario = creerScenario();
     installerBase(s.base);
-    const { ex } = await assignerGen7(s, "mise_en_evidence", 12345, { feedback, visible: false });
+    const { ex } = await assignerMD(s, VARIANTE_REPERE, GRAINE_REPERE, { feedback, visible: false });
+    const exEleve = exerciceDeLEleve(ex);
     const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
     const courant = page.locator(".moteur-ecran-courant");
     /** « Valider », attend le retour serveur, puis renvoie le geste « suite » (à appeler pour passer à l'écran suivant). */
@@ -1711,51 +1599,52 @@ async function scenarioGen7Cascade(navigateur: any, base: string, largeur: numbe
       };
     };
     // 1. coefficients FAUX
-    for (const [k, v] of [["a", "5"], ["b", "4"], ["c", "-4"]]) await courant.locator(`#mc-coefficients-${k}`).fill(v);
+    for (const k of ["a", "b", "c"] as const) await courant.locator(`#mc-coefficients-${k}`).fill(COEF_FAUX_REPERE[k]);
     await (await valider())();
-    // 2. allure (a = 5 > 0, ab = 20 > 0) : la consigne annonce SA fonction
+    // 2. allure (vers le bas, sommet à droite) : la consigne annonce SA fonction
     const consigneAllure = await lireConsigneGen7(page);
-    verifier(consigneAllure.includes("d'après les coefficients que tu as donnés") && consigneAllure.includes("$f(x) = 5x^2 + 4x - 4$"), `${l} : l'écran allure affiche SA fonction (« ${consigneAllure.slice(0, 110)} »)`);
-    await repondreGen7(page, ex, "allure");
+    verifier(consigneAllure.includes("d'après les coefficients que tu as donnés") && /-\s?x\^2/.test(consigneAllure) && consigneAllure.includes("3x"), `${l} : l'écran allure affiche SA fonction (« ${consigneAllure.slice(0, 110)} »)`);
+    await repondreMD(page, exEleve, "allure");
     await (await valider())();
-    // 3. axeSommet : xS = −2/5 cohérent, yS = 0 faux même pour ses coefficients
-    await courant.locator("#mc-axeSommet-axeTexte").fill("x = -2/5");
-    await courant.locator("#mc-axeSommet-xS").fill("-2/5");
+    // 3. axeSommet : xS = 3/2 cohérent, yS = 0 faux même pour ses coefficients (vrai : 25/4)
+    await courant.locator("#mc-axeSommet-axeTexte").fill("x = 3/2");
+    await courant.locator("#mc-axeSommet-xS").fill("3/2");
     await courant.locator("#mc-axeSommet-yS").fill("0");
     await (await valider())();
-    // 4. domaineImage : [0 ; +∞[
+    // 4. domaineImage : ]−∞ ; 0]
     const consigneImage = await lireConsigneGen7(page);
-    verifier(consigneImage.includes("$f(x) = 5x^2 + 4x - 4$") && consigneImage.includes("$y_S = 0$"), `${l} : domaineImage rappelle SA fonction et SON ordonnée du sommet (« ${consigneImage.slice(0, 200).replace(/\n/g, " / ")} »)`);
+    verifier(/-\s?x\^2/.test(consigneImage) && consigneImage.includes("y_S = 0"), `${l} : domaineImage rappelle SA fonction et SON ordonnée du sommet (« ${consigneImage.slice(0, 200).replace(/\n/g, " / ")} »)`);
     const ligne = courant.locator(".moteur-intervalle-ligne");
-    for (const [cote, crochet] of [["gauche", "["], ["droite", "["]]) {
+    for (const cote of ["gauche", "droite"]) {
       const bouton = ligne.getByRole("button", { name: new RegExp(`Crochet de ${cote}`) });
-      for (let k = 0; k < 2 && (await bouton.textContent()) !== crochet; k++) await bouton.click();
+      for (let k = 0; k < 2 && (await bouton.textContent()) !== "]"; k++) await bouton.click();
     }
-    await ligne.getByLabel("Borne de gauche", { exact: true }).fill("0");
-    await ligne.getByRole("button", { name: "Borne de droite : plus l'infini" }).click();
+    await ligne.getByRole("button", { name: "Borne de gauche : moins l'infini" }).click();
+    await ligne.getByLabel("Borne de droite", { exact: true }).fill("0");
     await valider();
-    if (feedback) verifier((await courant.locator(".moteur-statut-correct").count()) === 1, `${l} : [0 ; +∞[ est accepté (« Bonne réponse »)`);
+    if (feedback) verifier((await courant.locator(".moteur-statut-correct").count()) === 1, `${l} : ]−∞ ; 0] est accepté (« Bonne réponse »)`);
     else verifier((await courant.locator(".moteur-statut-correct, .moteur-statut-not_equivalent, .moteur-solution").count()) === 0, `${l} : aucun verdict visible avant la fin de la tâche`);
+    verifier((await page.locator(".moteur-rappel-score, .moteur-rappel-total").count()) === 0, `${l} : aucun score (le score suit la solution, absente ici)`);
     await page.screenshot({ path: join(CAPTURES, `${largeur}-gen7-cascade-${feedback ? "immediat" : "coupe"}-image.png`), fullPage: true });
     const rep = s.base.table("reponses");
     const statut = (champ: string) => rep.find((r) => r.champ === champ)?.statut;
-    verifier(statut("coefficients") === "not_equivalent" && statut("allure") === "correct" && statut("axeSommet") === "not_equivalent" && statut("domaineImage") === "correct", `${l} : statuts enregistrés (${["coefficients", "allure", "axeSommet", "domaineImage"].map((c) => `${c}=${statut(c)}`).join(", ")})`);
+    verifier(statut("coefficients") === "not_equivalent" && statut("allure") === "correct" && statut("axeSommet") === "not_equivalent" && statut("domaineImage") === "correct", `${l} : statuts enregistrés (${["coefficients", "allure", "axeSommet", "domaineImage"].map((c) => statut(c)).join()})`);
     verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
     await contexte.close();
   }
 }
 
 /**
- * Retour en arrière (RAPPORT §37), joué dans le navigateur sur gen7 (cascade racinesChamp1 -> racinesChamp2 -> tableau) :
- * « Modifier ma réponse » sur chaque écran (les SIX composants pré-remplis, aller-retour sans altération : re-valider sans changer
- * = « inchangée », aucune ligne écrite), modification de racinesChamp1 qui périme racinesChamp2 ET le tableau, remise explicite,
+ * Retour en arrière (RAPPORT §37), joué dans le navigateur sur gen7 « motif / delta » (cascade axeSommet -> domaineImage / tableau) :
+ * « Modifier ma réponse » sur chaque écran (champs multiples, intervalle, liste, tableau pré-remplis ; qcm et champ texte : `scenarioRetourArriereTemoin`, aller-retour sans altération : re-valider sans changer
+ * = « inchangée », aucune ligne écrite), modification de axeSommet qui périme domaineImage ET le tableau, remise explicite,
  * révélation d'un coup APRÈS la remise seulement ; et le réglage sans effet sous correction immédiate.
  */
 async function scenarioRetourArriere(navigateur: any, base: string, largeur: number) {
   const l = `${largeur} retour`;
   const s: Scenario = creerScenario();
   installerBase(s.base);
-  const { ex, tacheId } = await assignerGen7(s, "mise_en_evidence", 12345, { feedback: false, retour: true }); // f = 4x² + 8x
+  const { ex, tacheId } = await assignerMD(s, VARIANTE_REPERE, GRAINE_REPERE, { feedback: false, retour: true }); // f = x² + 3x − 4
   const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
   const courant = page.locator(".moteur-ecran-courant");
   const lignes = () => s.base.table("reponses").length;
@@ -1769,20 +1658,20 @@ async function scenarioRetourArriere(navigateur: any, base: string, largeur: num
     return message;
   };
   const carte = (champ: string) => page.locator(`.moteur-ecran:has(.moteur-consigne)`).nth(ORDRE_GEN7.indexOf(champ));
-  const ORDRE_GEN7 = champsAnalyseFonction("mise_en_evidence");
+  const ORDRE_GEN7 = champsMotifDelta();
 
-  // ── Parcours des 8 écrans ; jamais de verdict, jamais de « Question suivante » : un écran répondu reste modifiable ──
+  // ── Parcours des 6 écrans ; jamais de verdict, jamais de « Question suivante » : un écran répondu reste modifiable ──
   for (const [i, champ] of ORDRE_GEN7.entries()) {
     await page.waitForFunction(`document.querySelectorAll(".moteur-ecran-courant").length === 1`);
-    await repondreGen7(page, ex, champ);
+    await repondreMD(page, ex, champ);
     const message = await validerRetour(i === ORDRE_GEN7.length - 1 ? /Revoir mes réponses/ : /Écran suivant/);
     verifier(message === "Réponse enregistrée.", `${l} / ${champ} : message neutre (« ${message} »)`);
     verifier(await sansVerdict(), `${l} / ${champ} : aucun verdict ni solution`);
   }
   await page.waitForSelector(".moteur-remise");
-  verifier((await page.getByRole("button", { name: "Modifier ma réponse" }).count()) === 8, `${l} : « Modifier ma réponse » sur chacun des 8 écrans`);
+  verifier((await page.getByRole("button", { name: "Modifier ma réponse" }).count()) === 6, `${l} : « Modifier ma réponse » sur chacun des 6 écrans`);
   await verifierCrayons(page, `${l} relecture`, largeur, "relecture");
-  verifier((await page.locator(".moteur-ecran-termine .moteur-crayon").count()) === 8, `${l} relecture : un crayon par carte (8)`);
+  verifier((await page.locator(".moteur-ecran-termine .moteur-crayon").count()) === 6, `${l} relecture : un crayon par carte (6)`);
   verifier(/crayon/i.test((await page.locator(".moteur-remise .moteur-message").innerText()) ?? ""), `${l} : le panneau de remise parle du CRAYON, plus d'un bouton « Modifier ma réponse »`);
   // Clavier : Entrée sur le crayon (vrai <button>) rouvre l'écran, comme un clic.
   await page.locator(".moteur-ecran-termine .moteur-crayon").first().focus();
@@ -1803,26 +1692,25 @@ async function scenarioRetourArriere(navigateur: any, base: string, largeur: num
     const valider = courant.getByRole("button", { name: "Valider", exact: true });
     verifier(await valider.isEnabled(), `${l} / ${champ} : l'écran s'ouvre pré-rempli (« Valider » actif sans rien toucher)`);
     if (champ === "coefficients") {
-      const attendu = JSON.parse(reponseGen7(ex, "coefficients"));
+      const attendu = JSON.parse(reponseBruteCorrecteMotifDelta(ex, "coefficients"));
       const lus = { a: await courant.locator("#mc-coefficients-a").inputValue(), b: await courant.locator("#mc-coefficients-b").inputValue(), c: await courant.locator("#mc-coefficients-c").inputValue() };
       verifier(JSON.stringify(lus) === JSON.stringify(attendu), `${l} : champs_multiples pré-rempli (attendu ${JSON.stringify(attendu)}, lu ${JSON.stringify(lus)})`);
     }
-    if (champ === "racinesReconnaissance") verifier((await courant.locator(".moteur-choix input:checked").count()) === 1, `${l} : qcm pré-rempli (un choix coché)`);
-    if (champ === "racinesChamp1") verifier((await courant.locator(".moteur-champ").first().inputValue()) === reponseGen7(ex, "racinesChamp1"), `${l} : champ_expression pré-rempli`);
-    if (champ === "racinesChamp2") verifier((await courant.locator(".moteur-liste-ligne .moteur-champ").count()) === 2, `${l} : liste_valeurs pré-rempli (2 valeurs)`);
+    if (champ === "allure") verifier((await courant.locator(".moteur-choix input:checked").count()) === 2, `${l} : champs_multiples à choix pré-rempli (deux choix cochés)`);
+    if (champ === "racines") verifier((await courant.locator(".moteur-liste-ligne .moteur-champ").count()) === 2, `${l} : liste_valeurs pré-rempli (2 valeurs)`);
     if (champ === "domaineImage") verifier((await courant.locator(".moteur-apercu").textContent()) !== "?… ; …?" && (await courant.locator(".moteur-bouton-crochet").first().textContent()) !== "?", `${l} : intervalle pré-rempli`);
     if (champ === "tableauSignes") verifier((await courant.locator(".moteur-case-renseignee").count()) === (await courant.locator(".moteur-case-signe").count()), `${l} : tableau_signes pré-rempli (toutes les cases renseignées)`);
-    if (champ === "racinesChamp1") {
+    if (champ === "racines") {
       await page.screenshot({ path: join(CAPTURES, `${l}-02-modification-prerempli.png`), fullPage: true });
-      // RAPPORT §48 : pendant la modification d'un écran, le rappel gris porte un crayon par AUTRE écran répondu (7 sur 8), jamais un gros bouton.
+      // RAPPORT §48 : pendant la modification d'un écran, le rappel gris porte un crayon par AUTRE écran répondu (5 sur 6), jamais un gros bouton.
       await verifierCrayons(page, `${l} rappel`, largeur, "rappel");
-      verifier((await page.locator(".moteur-rappel .moteur-crayon").count()) === 7, `${l} rappel : un crayon pour chacun des 7 autres écrans répondus`);
+      verifier((await page.locator(".moteur-rappel .moteur-crayon").count()) === 5, `${l} rappel : un crayon pour chacun des 5 autres écrans répondus`);
     }
     const message = await validerRetour(/Revoir mes réponses|Continuer/);
     verifier(message.includes("Réponse inchangée."), `${l} / ${champ} : re-valider sans changer = « inchangée » (« ${message} »)`);
     await page.waitForSelector(".moteur-remise");
   }
-  verifier(lignes() === avantTout, `${l} : aller-retour exact des six composants : AUCUNE ligne écrite (${avantTout} -> ${lignes()})`);
+  verifier(lignes() === avantTout, `${l} : aller-retour exact des composants : AUCUNE ligne écrite (${avantTout} -> ${lignes()})`);
 
   // ── Annuler ──
   await carte("allure").getByRole("button", { name: "Modifier ma réponse" }).click();
@@ -1830,22 +1718,21 @@ async function scenarioRetourArriere(navigateur: any, base: string, largeur: num
   await page.waitForSelector(".moteur-remise");
   verifier(lignes() === avantTout, `${l} : « Annuler » n'écrit rien`);
 
-  // ── Modifier racinesChamp1 : racinesChamp2 ET le tableau sont périmés ; le panneau disparaît ──
-  await carte("racinesChamp1").getByRole("button", { name: "Modifier ma réponse" }).click();
-  const autreEcriture = `(${reponseGen7(ex, "racinesChamp1")})`; // même factorisation, chaîne DIFFÉRENTE : c'est une modification
-  await courant.locator(".moteur-champ").first().fill(autreEcriture);
+  // ── Modifier axeSommet : domaineImage ET le tableau sont périmés ; le panneau disparaît ──
+  await carte("axeSommet").getByRole("button", { name: "Modifier ma réponse" }).click();
+  await courant.locator("#mc-axeSommet-axeTexte").fill("x = -1.5"); // même valeur que « x = -3/2 », chaîne DIFFÉRENTE : c'est une modification
   const message = await validerRetour(/Continuer/);
   verifier(message.includes("Réponse modifiée.") && message.includes("à refaire (2)"), `${l} : la modification annonce 2 écrans à refaire (« ${message} »)`);
   await page.waitForSelector(".moteur-ecran-courant");
   verifier((await page.locator(".moteur-message-succes").first().textContent())?.includes("2 écrans qui en dépendent") === true, `${l} : la notice de tête le rappelle`);
-  verifier((await lireConsigneGen7(page)).includes(`$${factorisationVersLatex(autreEcriture)} = 0$`), `${l} : racinesChamp2 est bâti sur la NOUVELLE factorisation (${autreEcriture})`);
-  verifier((await page.locator(".moteur-remise").count()) === 0 && (await page.getByRole("button", { name: "Modifier ma réponse" }).count()) === 6, `${l} : plus de « Rendre » ; 6 écrans intacts restent modifiables`);
-  verifier((await page.locator(".moteur-table-structure").count()) === 0, `${l} : le tableau (aval) a disparu`);
+  verifier((await lireConsigneGen7(page)).includes("y_S"), `${l} : domaineImage est re-servi (son énoncé rappelle l'ordonnée du sommet confirmée)`);
+  verifier((await page.locator(".moteur-remise").count()) === 0 && (await page.getByRole("button", { name: "Modifier ma réponse" }).count()) === 4, `${l} : plus de « Rendre » ; 4 écrans intacts restent modifiables`);
+  verifier((await page.locator(".moteur-table-structure").count()) === 0, `${l} : le tableau (aval) n'est pas affiché : un seul écran à la fois`);
   await page.screenshot({ path: join(CAPTURES, `${l}-03-aval-perime.png`), fullPage: true });
-  await repondreGen7(page, ex, "racinesChamp2");
+  await repondreMD(page, ex, "domaineImage");
   await validerRetour(/Écran suivant/);
   await page.waitForSelector(".moteur-table-structure");
-  await repondreGen7(page, ex, "tableauSignes");
+  await repondreMD(page, ex, "tableauSignes");
   await validerRetour(/Revoir mes réponses/);
   await page.waitForSelector(".moteur-remise");
   await verifierBlocsRelecturePleineLargeur(page, `${l} relecture avant la remise`, largeur);
@@ -1862,7 +1749,7 @@ async function scenarioRetourArriere(navigateur: any, base: string, largeur: num
   verifier((await page.getByRole("button", { name: "Modifier ma réponse" }).count()) === 0, `${l} : plus aucun « Modifier » après la remise`);
   {
     const [justes, faux] = [await page.locator(".moteur-statut-correct").count(), await page.locator(".moteur-statut-not_equivalent").count()];
-    verifier(justes === 8 && faux === 0, `${l} : après la remise, les 8 verdicts sont révélés d'un coup (dernières réponses, toutes justes) : ${justes} justes, ${faux} faux ${JSON.stringify(s.base.table("reponses").slice(8).map((r) => [r.champ, r.statut]))}`);
+    verifier(justes === 6 && faux === 0, `${l} : après la remise, les 6 verdicts sont révélés d'un coup (dernières réponses, toutes justes) : ${justes} justes, ${faux} faux ${JSON.stringify(s.base.table("reponses").slice(6).map((r) => [r.champ, r.statut]))}`);
   }
   await page.screenshot({ path: join(CAPTURES, `${l}-04-apres-remise.png`), fullPage: true });
   await page.getByRole("button", { name: "Terminer" }).click();
@@ -1875,15 +1762,62 @@ async function scenarioRetourArriere(navigateur: any, base: string, largeur: num
   {
     const s2: Scenario = creerScenario();
     installerBase(s2.base);
-    const { ex: ex2 } = await assignerGen7(s2, "mise_en_evidence", 12345, { feedback: true, retour: true });
+    const { ex: ex2 } = await assignerMD(s2, VARIANTE_REPERE, GRAINE_REPERE, { feedback: true, retour: true });
     const c2 = await ouvrirTacheGen7(navigateur, base, largeur, s2);
-    await repondreGen7(c2.page, ex2, "coefficients");
+    await repondreMD(c2.page, ex2, "coefficients");
     await c2.page.locator(".moteur-ecran-courant").getByRole("button", { name: "Valider", exact: true }).click();
     await c2.page.waitForSelector(".moteur-statut-correct");
     verifier((await c2.page.getByRole("button", { name: "Question suivante" }).count()) === 1 && (await c2.page.getByRole("button", { name: /Modifier ma réponse/ }).count()) === 0, `${l} : sous correction immédiate le réglage est sans effet (verdict, « Question suivante », aucun « Modifier »)`);
     await c2.contexte.close();
   }
   void tacheId;
+}
+
+/**
+ * Retour en arrière (RAPPORT §37) sur le TÉMOIN technique : les composants que le nouveau gen7 n'utilise plus (champ texte, qcm) gardent leur aller-retour exact dans le navigateur.
+ * Les quatre écrans du profil « base » sont répondus par l'API (rien à prouver sur la saisie ici) ; la page s'ouvre sur le panneau « Rendre » ; pour chaque écran, le crayon rouvre
+ * l'écran PRÉ-REMPLI et re-valider sans changer écrit zéro ligne (« Réponse inchangée. »).
+ */
+async function scenarioRetourArriereTemoin(navigateur: any, base: string, largeur: number) {
+  const l = `${largeur} retour témoin`;
+  imposerProfilAssignation("base");
+  const s: Scenario = creerScenario();
+  installerBase(s.base);
+  const tacheId = creerTache(s, { nom: "Retour témoin", feedback_immediat: false, autoriser_retour_arriere: true, variantes: [{ variante_id: VARIANTE_TEMOIN, nombre_exercices: 1 }] });
+  const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tacheId, eleve_ids: ["eleve-1"] } });
+  verifier(a.statut === 201, `${l} : assignation ${a.statut}`);
+  const ligne = s.base.table("exercices_assignes").find((x) => x.tache_id === tacheId)!;
+  const ex = temoin.generer(Number(ligne.graine));
+  const champs = [CHAMP_SOMME, CHAMP_PARITE, CHAMP_DIVISEURS, CHAMP_SIGNES];
+  for (const champ of champs) {
+    const r = await appeler("reponses", "POST", { jeton: "eleve:eleve-1", corps: { exercice_assigne_id: ligne.id, champ, reponse_brute: reponseBruteCorrecte(ex, champ) } });
+    verifier(r.statut === 200, `${l} : préparation ${champ} : ${r.statut}`);
+  }
+  // Tout est répondu : la page s'ouvre sur le panneau « Rendre », sans écran courant (donc pas `ouvrirTacheGen7`, qui attend un écran courant).
+  const { page, contexte, journal } = await preparerPage(navigateur, base, largeur, largeur < 600 ? 800 : 900, "eleve:eleve-1", "e1@x", `localStorage.setItem("eleve-profil-cache", JSON.stringify({ affichage: "Test eleve-1", prenom: "Test", nom: "eleve-1" }));`);
+  await page.goto(base + "/eleve.html");
+  await page.waitForSelector(".carte-tache");
+  await page.locator(".carte-tache").first().click();
+  await page.waitForSelector(".moteur-remise");
+  const courant = page.locator(".moteur-ecran-courant");
+  const avant = s.base.table("reponses").length;
+  for (const [i, champ] of champs.entries()) {
+    await page.locator(".moteur-ecran-termine").nth(i).getByRole("button", { name: "Modifier ma réponse" }).click();
+    await page.waitForFunction(`document.querySelectorAll(".moteur-ecran-courant").length === 1`);
+    verifier(await courant.getByRole("button", { name: "Valider", exact: true }).isEnabled(), `${l} / ${champ} : l'écran s'ouvre pré-rempli (« Valider » actif sans rien toucher)`);
+    if (champ === CHAMP_SOMME) verifier((await courant.locator(".moteur-champ").first().inputValue()) === reponseBruteCorrecte(ex, champ), `${l} : champ texte pré-rempli à l'identique`);
+    if (champ === CHAMP_PARITE) verifier((await courant.locator(".moteur-choix input:checked").count()) === 1, `${l} : qcm pré-rempli (un choix coché)`);
+    if (champ === CHAMP_DIVISEURS) verifier((await courant.locator(".moteur-liste-ligne .moteur-champ").count()) >= 1, `${l} : liste pré-remplie`);
+    await courant.getByRole("button", { name: "Valider", exact: true }).click();
+    await page.waitForSelector(".moteur-ecran-courant .moteur-retour .moteur-statut");
+    const message = ((await courant.locator(".moteur-retour .moteur-statut").textContent()) ?? "").replace(/\s+/g, " ").trim();
+    verifier(message.includes("Réponse inchangée."), `${l} / ${champ} : re-valider sans changer = « inchangée » (« ${message} »)`);
+    await courant.getByRole("button", { name: /Revoir mes réponses|Continuer/ }).click();
+    await page.waitForSelector(".moteur-remise");
+  }
+  verifier(s.base.table("reponses").length === avant, `${l} : aller-retour exact (champ texte, qcm, liste, tableau) : AUCUNE ligne écrite (${avant} -> ${s.base.table("reponses").length})`);
+  verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+  await contexte.close();
 }
 
 /**
@@ -1936,62 +1870,6 @@ async function scenarioApercuRetour(navigateur: any, base: string, largeur: numb
     } else {
       verifier((await popup.getByRole("button", { name: "Question suivante" }).count()) === 1 && (await popup.getByRole("button", { name: /Modifier ma réponse/ }).count()) === 0, `${l} : sans le réglage, comportement d'origine`);
     }
-    verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
-    await contexte.close();
-  }
-}
-
-/**
- * Cascade sur le TABLEAU DE SIGNES (RAPPORT §41), dans le navigateur et les deux régimes : coefficients confirmés a = −5, b = 4, c = 0 (faux pour
- * f = 3x² + 3x, graine du scénario) -> le tableau servi est celui de SA fonction (racines 0 et 0,8 ; a < 0) et est accepté ; en correction
- * immédiate ses valeurs de x sont les siennes (0 ; 0,4 ; 0,8), en correction coupée elles restent symboliques.
- */
-async function scenarioGen7CascadeTableau(navigateur: any, base: string, largeur: number) {
-  // Trois régimes (RAPPORT §45) : immédiate SANS la case et coupée = cascade sur SA fonction, valeurs de x symboliques ; immédiate AVEC la case = la fausse réponse a
-  // été révélée, le tableau repart de la VRAIE fonction, valeurs de x numériques.
-  for (const [feedback, visible] of [[true, false], [false, false], [true, true]] as const) {
-    const l = `${largeur} gen7 cascade tableau ${visible ? "immédiat + réponse affichée" : feedback ? "immédiat" : "coupé"}`;
-    const s: Scenario = creerScenario();
-    installerBase(s.base);
-    const { ex } = await assignerGen7(s, "mise_en_evidence", 12345, { feedback, visible });
-    const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
-    const courant = page.locator(".moteur-ecran-courant");
-    const valider = async () => {
-      const avant = (await page.evaluate(`document.querySelector(".moteur-ecran-courant .moteur-consigne").textContent`)) as string;
-      await courant.getByRole("button", { name: "Valider", exact: true }).click();
-      await page.waitForSelector(".moteur-ecran-courant .moteur-retour .moteur-statut");
-      await page.getByRole("button", { name: /Question suivante|Voir la fin/ }).click();
-      await page.waitForFunction(`(() => { const c = document.querySelector(".moteur-ecran-courant .moteur-consigne"); return document.querySelector(".moteur-fin") !== null || (c !== null && c.textContent !== ${JSON.stringify(avant)}); })()`);
-    };
-    for (const [k, v] of [["a", "-5"], ["b", "4"], ["c", "0"]]) await courant.locator(`#mc-coefficients-${k}`).fill(v);
-    await valider();
-    await repondreGen7(page, ex, "allure");
-    await valider();
-    await courant.locator("#mc-axeSommet-axeTexte").fill("x = 2/5");
-    await courant.locator("#mc-axeSommet-xS").fill("2/5");
-    await courant.locator("#mc-axeSommet-yS").fill("4/5");
-    await valider();
-    await repondreGen7(page, ex, "domaineImage");
-    await valider();
-    for (const champ of ["racinesReconnaissance", "racinesChamp1", "racinesChamp2"]) {
-      await repondreGen7(page, ex, champ);
-      await valider();
-    }
-    await page.waitForSelector(".moteur-table-structure");
-    const entetes = ((await page.evaluate(`[...document.querySelectorAll(".moteur-ecran-courant .moteur-rangee-x td")].map((td) => td.querySelector("annotation")?.textContent?.trim() ?? "")`)) as string[]).filter((t) => t !== "");
-    // graine 12345 de ce scénario : f(x) = x² + 5x, racines −5 et 0, sommet −5/2 ; SES coefficients (−5, 4, 0) donneraient 0 ; 2/5 ; 4/5.
-    if (visible) verifier(JSON.stringify(entetes) === JSON.stringify(["-5", "-\\dfrac{5}{2}", "0"]), `${l} : la ligne des x montre les valeurs de la VRAIE fonction (${JSON.stringify(entetes)})`);
-    else verifier(entetes.join() === "x_1,x_S,x_2", `${l} : aucune solution montrée, valeurs symboliques (${JSON.stringify(entetes)})`);
-    await page.screenshot({ path: join(CAPTURES, `${largeur}-gen7-cascade-tableau-${visible ? "revele" : feedback ? "immediat" : "coupe"}.png`), fullPage: true });
-    // sans solution montrée : le tableau de SA fonction (a < 0 : − 0 + + + 0 −, ⌢) est accepté ; avec la case : celui de la VRAIE fonction
-    // (le filtre « seules les réponses correctes » vit dans `projeterExercice` : appelé ici directement, on lui applique la même règle)
-    const confirmees = visible ? [] : [{ champ: "coefficients", reponseBrute: JSON.stringify({ a: "-5", b: "4", c: "0" }), statut: "not_equivalent" as const }];
-    const eff = fonctionEffective(projeterGen7(ex, confirmees, { correctionImmediate: feedback, solutionMontree: visible }));
-    await remplirTableauGen7(page, ex, solutionTableauGen7(eff));
-    await courant.getByRole("button", { name: "Valider", exact: true }).click();
-    await page.waitForSelector(".moteur-ecran-courant .moteur-retour .moteur-statut");
-    const statut = s.base.table("reponses").find((r) => r.champ === "tableauSignes")?.statut;
-    verifier(statut === "correct", `${l} : le tableau ${visible ? "de la VRAIE fonction" : "de SA fonction"} est accepté (${statut})`);
     verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
     await contexte.close();
   }
@@ -2087,7 +1965,7 @@ async function repondreMD(page: any, ex: ExerciceMotifDelta, champ: string): Pro
   } else if (champ === "tableauSignes") {
     const lignes = page.locator(".moteur-ecran-courant .moteur-ligne-tableau");
     const sol = JSON.parse(brute) as Record<string, Record<string, string>>;
-    for (const [i, rangee] of rangeesTableauMD(fonctionVraie(ex)).entries()) {
+    for (const [i, rangee] of rangeesTableauMD(fonctionEffective(ex)).entries()) {
       const boutons = lignes.nth(i).locator("td button");
       for (const [c, cellule] of rangee.cellules.entries()) {
         const attendu = (sol[rangee.ligne] as Record<string, string>)[cellule.ancre] as string;
@@ -2366,8 +2244,6 @@ async function main() {
       controlerReponsesHttp(`${largeur} admin`, [{ statut: 403, motif: /^GET \/api\/admin\/profs$/, pourquoi: "un prof non admin appelle l'API admin à la main : refus serveur attendu (403)" }]);
       await scenarioPoids(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} poids`);
-      await scenarioGen7Parties(navigateur, url, largeur);
-      controlerReponsesHttp(`${largeur} gen7 parties`);
       await scenarioGen7Coupe(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} gen7 coupé`);
       await scenarioGen7Prof(navigateur, url, largeur);
@@ -2376,14 +2252,14 @@ async function main() {
       controlerReponsesHttp(`${largeur} gen7 motif/delta`);
       await scenarioGen7Cascade(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} gen7 cascade`);
-      await scenarioGen7CascadeTableau(navigateur, url, largeur);
-      controlerReponsesHttp(`${largeur} gen7 cascade tableau`);
       await scenarioApercu(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} aperçu`);
       await scenarioApercuRetour(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} aperçu retour`);
       await scenarioRetourArriere(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} retour en arrière`);
+      await scenarioRetourArriereTemoin(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} retour en arrière (témoin)`);
     }
   } catch (e) {
     // Un scénario qui plante (timeout d'attente d'un élément) ne passe jamais par `controlerReponsesHttp` :

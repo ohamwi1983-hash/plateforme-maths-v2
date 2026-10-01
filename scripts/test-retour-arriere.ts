@@ -1,5 +1,5 @@
-// Test permanent — retour en arrière (RAPPORT §37), contre le VRAI `api/router.ts`, le VRAI registre (gen7 : cascade racinesChamp1 ->
-// racinesChamp2 -> tableauSignes) et une base en mémoire. Vérifie : modification d'un écran déjà traversé ; invalidation TRANSITIVE des
+// Test permanent — retour en arrière (RAPPORT §37), contre le VRAI `api/router.ts`, le VRAI registre (gen7 « motif / delta » : cascade
+// coefficients -> axeSommet -> domaineImage / tableauSignes) et une base en mémoire. Vérifie : modification d'un écran déjà traversé ; invalidation TRANSITIVE des
 // écrans aval quand la réponse change, aucune quand elle est identique (D7) ; état = dernière réponse valide (ordre d'insertion, D4) ;
 // remise obligatoire pour terminer (D3) ; indistinguabilité d'un échec et d'une réussite avant la remise (règle de révélation) ; réglage
 // sans effet sous correction immédiate ; verrouillage par remise / chrono global (D1) ; aide collante (D5) ; lecteurs prof/élève
@@ -11,7 +11,10 @@ export {}; // module
 import { appeler, creerScenario, creerTache, installerBase } from "./support/harnaisRouteur";
 import { amontsTransitifs, dernieresReponsesValides } from "../lib/reponsesValides";
 import { chercherGenerateur } from "../lib/registreGenerateurs";
-import { champsAnalyseFonction, genererExercice, reponseBruteCorrecteAnalyseFonction, type ExerciceAnalyseFonction } from "../src/generateurs/analyseFonction";
+import { champsMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/ecrans";
+import { genererExerciceMD } from "../src/generateurs/analyseFonctionMotifDelta/exercice";
+import { reponseBruteCorrecteMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/solutions";
+import type { ExerciceMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/types";
 import { readFileSync } from "node:fs";
 
 const echecs: string[] = [];
@@ -21,7 +24,8 @@ function verifier(condition: boolean, message: string): void {
   if (!condition) echecs.push(message);
 }
 
-const ORDRE = champsAnalyseFonction("mise_en_evidence");
+const VARIANTE = "af_delta_racines_rationnelles";
+const ORDRE = champsMotifDelta();
 
 async function main(): Promise<void> {
   // ── 0. Validité : fonction pure (D4) ──
@@ -53,7 +57,7 @@ async function main(): Promise<void> {
     compteur++;
     const tache = creerTache(s, {
       nom: `retour ${compteur}`,
-      variantes: [{ variante_id: "af_mise_en_evidence", nombre_exercices: 1 }],
+      variantes: [{ variante_id: VARIANTE, nombre_exercices: 1 }],
       feedback_immediat: options.feedback ?? false,
       autoriser_retour_arriere: options.retour ?? true,
       aide_activee: options.aide ?? false,
@@ -62,7 +66,7 @@ async function main(): Promise<void> {
       chrono_duree_secondes: options.chrono?.duree ?? null,
     });
     const origine = Math.random;
-    Math.random = () => 12345 / 2 ** 32; // f = 4x² + 8x
+    Math.random = () => 4242 / 2 ** 32; // f = x² + 3x − 4
     try {
       const a = await appeler("assignations", "POST", { jeton: jetonProf, corps: { tache_id: tache, eleve_ids: ["eleve-1"] } });
       verifier(a.statut === 201, `assignation : ${a.statut} ${JSON.stringify(a.corps)}`);
@@ -71,8 +75,8 @@ async function main(): Promise<void> {
     }
     const ligne = s.base.table("exercices_assignes").find((l) => l.tache_id === tache)!;
     const id = ligne.id as string;
-    const ex: ExerciceAnalyseFonction = genererExercice("mise_en_evidence", Number(ligne.graine));
-    const bonne = (champ: string) => reponseBruteCorrecteAnalyseFonction(ex, champ);
+    const ex: ExerciceMotifDelta = genererExerciceMD(VARIANTE, Number(ligne.graine));
+    const bonne = (champ: string) => reponseBruteCorrecteMotifDelta(ex, champ);
     return {
       tache,
       id,
@@ -98,7 +102,7 @@ async function main(): Promise<void> {
   // ── 1. Parcours, modification, remise ──
   {
     const x = await nouveau();
-    verifier(ORDRE.join() === "coefficients,allure,axeSommet,domaineImage,racinesReconnaissance,racinesChamp1,racinesChamp2,tableauSignes", `ordre des écrans gen7 (${ORDRE.join()})`);
+    verifier(ORDRE.join() === "coefficients,allure,axeSommet,domaineImage,racines,tableauSignes", `ordre des écrans gen7 (${ORDRE.join()})`);
     await x.repondreJusqua("allure");
     let g = await x.lire();
     verifier(g.tache.retour_arriere === true, "GET : tache.retour_arriere = true");
@@ -106,7 +110,7 @@ async function main(): Promise<void> {
     verifier(champDe(g, "coefficients").valeur_saisie === x.bonne("coefficients"), "GET : la dernière réponse confirmée pré-remplit l'écran");
     verifier(g.champ_courant === "axeSommet" && g.exercice_termine === false && g.pret_a_rendre === false, "l'écran courant reste le premier sans réponse");
     // modifier un écran traversé (coefficients)
-    const nouvelle = JSON.stringify({ a: "4", b: "8", c: "1" });
+    const nouvelle = JSON.stringify({ a: "1", b: "3", c: "-3" });
     const r = await x.poster("coefficients", nouvelle);
     verifier(r.statut === 200 && r.corps.modifiable === true && r.corps.verrouille === false && r.corps.inchangee === false, `modifier un écran traversé : accepté (${r.statut} ${JSON.stringify(r.corps)})`);
     verifier(x.lignes().filter((l) => l.champ === "coefficients").length === 2, "l'ancienne ligne est CONSERVÉE (aucune suppression)");
@@ -146,37 +150,41 @@ async function main(): Promise<void> {
     verifier(s.base.table("exercices_assignes").find((l) => l.id === x.id)!.remis_le === s.base.table("exercices_assignes").find((l) => l.id === x.id)!.remis_le, "remis_le inchangé");
   }
 
-  // ── 2. Invalidation transitive : modifier racinesChamp1 périme racinesChamp2 ET le tableau ──
+  // ── 2. Invalidation par dépendance : modifier axeSommet périme domaineImage ET le tableau (pas l'allure ni les racines, qui n'en dépendent pas) ──
   {
     const x = await nouveau();
     await x.repondreJusqua("tableauSignes");
     let g = await x.lire();
-    verifier(g.pret_a_rendre === true && servis(g).join() === ORDRE.join(), "départ : 8 écrans répondus et servis");
+    verifier(g.pret_a_rendre === true && servis(g).join() === ORDRE.join(), "départ : 6 écrans répondus et servis");
     const avant = x.lignes().length;
-    const r = await x.poster("racinesChamp1", "(4x)(x+2)"); // autre écriture de la même factorisation : chaîne DIFFÉRENTE
-    verifier(r.statut === 200 && r.corps.inchangee === false, `nouvelle écriture acceptée (${r.statut})`);
-    verifier(JSON.stringify(r.corps.champs_invalides) === JSON.stringify(["racinesChamp2", "tableauSignes"]), `invalidation transitive annoncée : racinesChamp2 ET tableauSignes (${JSON.stringify(r.corps.champs_invalides)})`);
-    verifier(r.corps.champ_courant === "racinesChamp2" && r.corps.pret_a_rendre === false, `l'écran courant devient racinesChamp2 (${r.corps.champ_courant})`);
+    const r = await x.poster("axeSommet", JSON.stringify({ axeTexte: "x = -3/2", xS: "-3/2", yS: "-7" })); // ordonnée DIFFÉRENTE : chaîne différente
+    verifier(r.statut === 200 && r.corps.inchangee === false, `nouvelle réponse acceptée (${r.statut})`);
+    verifier(JSON.stringify(r.corps.champs_invalides) === JSON.stringify(["domaineImage", "tableauSignes"]), `invalidation annoncée : domaineImage ET tableauSignes (${JSON.stringify(r.corps.champs_invalides)})`);
+    verifier(r.corps.champ_courant === "domaineImage" && r.corps.pret_a_rendre === false, `l'écran courant devient domaineImage (${r.corps.champ_courant})`);
     verifier(x.lignes().length === avant + 1, "une seule ligne ajoutée : aucune ligne aval réécrite ni supprimée");
     g = await x.lire();
-    verifier(champDe(g, "racinesChamp2").modifiable === false && champDe(g, "racinesChamp2").valeur_saisie === null, "racinesChamp2 : plus de réponse valide (rien à pré-remplir)");
+    verifier(champDe(g, "domaineImage").modifiable === false && champDe(g, "domaineImage").valeur_saisie === null, "domaineImage : plus de réponse valide (rien à pré-remplir)");
     verifier(champDe(g, "tableauSignes").valeur_saisie === null, "tableauSignes : plus de réponse valide");
-    verifier(servis(g).includes("racinesChamp2") && !servis(g).includes("tableauSignes"), `racinesChamp2 re-servi, le tableau retiré tant que ses amonts ne sont pas re-répondus (${servis(g).join()})`);
-    for (const champ of ["coefficients", "allure", "axeSommet", "domaineImage", "racinesReconnaissance", "racinesChamp1"]) verifier(champDe(g, champ).modifiable === true, `${champ} : intact`);
+    // Le tableau dépend de coefficients, axeSommet et racines (tous de nouveau valides), PAS de domaineImage : il reste servi, sans réponse valide ni possibilité d'être modifié.
+    verifier(servis(g).includes("domaineImage") && champDe(g, "tableauSignes").modifiable === false, `domaineImage re-servi ; le tableau n'a plus de réponse valide (${servis(g).join()})`);
+    for (const champ of ["coefficients", "allure", "axeSommet", "racines"]) verifier(champDe(g, champ).modifiable === true, `${champ} : intact`);
     verifier((await x.rendre()).statut === 409, "rendre : refusé tant que les écrans périmés ne sont pas re-répondus");
-    // la consigne de racinesChamp2 suit la NOUVELLE factorisation confirmée (cascade)
-    verifier(g.ecrans.find((e: any) => e.champ === "racinesChamp2").consigne.includes("$(4x)(x + 2) = 0$"), "cascade : racinesChamp2 est bâti sur la NOUVELLE réponse confirmée");
-    const r2 = await x.poster("racinesChamp2", x.bonne("racinesChamp2"));
-    verifier(r2.statut === 200 && r2.corps.pret_a_rendre === false && r2.corps.champ_courant === "tableauSignes", "re-répondre racinesChamp2 : le tableau redevient courant");
+    // l'énoncé de domaineImage suit la NOUVELLE ordonnée confirmée (cascade)
+    verifier(g.ecrans.find((e: any) => e.champ === "domaineImage").consigne.includes("y_S = -7"), "cascade : domaineImage est bâti sur la NOUVELLE réponse confirmée");
+    const r2 = await x.poster("domaineImage", x.bonne("domaineImage"));
+    verifier(r2.statut === 200 && r2.corps.pret_a_rendre === false && r2.corps.champ_courant === "tableauSignes", "re-répondre domaineImage : le tableau redevient courant");
     const r3 = await x.poster("tableauSignes", x.bonne("tableauSignes"));
     verifier(r3.corps.pret_a_rendre === true, "tout est de nouveau valide : prêt à rendre");
-    // modifier un écran INTERMÉDIAIRE : périme seulement son aval
-    const r4 = await x.poster("racinesChamp2", JSON.stringify(["-2", "1"]));
-    verifier(JSON.stringify(r4.corps.champs_invalides) === JSON.stringify(["tableauSignes"]) && r4.corps.champ_courant === "tableauSignes", `modifier racinesChamp2 : périme le tableau seulement (${JSON.stringify(r4.corps.champs_invalides)})`);
+    // modifier un écran INTERMÉDIAIRE : périme seulement son aval (le tableau, pas domaineImage)
+    const r4 = await x.poster("racines", JSON.stringify(["1", "-4"]));
+    verifier(JSON.stringify(r4.corps.champs_invalides) === JSON.stringify(["tableauSignes"]) && r4.corps.champ_courant === "tableauSignes", `modifier racines : périme le tableau seulement (${JSON.stringify(r4.corps.champs_invalides)})`);
     // modifier un écran sans aval : rien ne bouge ailleurs
     await x.poster("tableauSignes", x.bonne("tableauSignes"));
     const r5 = await x.poster("domaineImage", JSON.stringify({}) + " ");
     verifier(r5.statut === 200 && JSON.stringify(r5.corps.champs_invalides) === "[]", `domaineImage n'a aucun écran aval : rien n'est périmé (${JSON.stringify(r5.corps.champs_invalides)})`);
+    // modifier les COEFFICIENTS périme tout ce qui en dépend, d'un coup
+    const rc = await x.poster("coefficients", JSON.stringify({ a: "1", b: "3", c: "-3" }));
+    verifier(JSON.stringify(rc.corps.champs_invalides) === JSON.stringify(["allure", "axeSommet", "domaineImage", "racines", "tableauSignes"]) && rc.corps.champ_courant === "allure", `modifier coefficients : périme les cinq autres écrans (${JSON.stringify(rc.corps.champs_invalides)})`);
   }
 
   // ── 3. Réponse IDENTIQUE : rien ne bouge (D7) ──
@@ -184,13 +192,13 @@ async function main(): Promise<void> {
     const x = await nouveau();
     await x.repondreJusqua("tableauSignes");
     const avant = x.lignes().length;
-    for (const variante of [x.bonne("racinesChamp1"), `  ${x.bonne("racinesChamp1")}  `]) {
-      const r = await x.poster("racinesChamp1", variante);
+    for (const variante of [x.bonne("axeSommet"), `  ${x.bonne("axeSommet")}  `]) {
+      const r = await x.poster("axeSommet", variante);
       verifier(r.statut === 200 && r.corps.inchangee === true && JSON.stringify(r.corps.champs_invalides) === "[]" && r.corps.pret_a_rendre === true, `réponse identique (${JSON.stringify(variante).slice(0, 25)}…) : aucun effet (${JSON.stringify(r.corps)})`);
     }
     verifier(x.lignes().length === avant, "réponse identique : AUCUNE ligne écrite");
     const g = await x.lire();
-    verifier(g.pret_a_rendre === true && champDe(g, "racinesChamp2").modifiable === true && champDe(g, "tableauSignes").modifiable === true, "réponse identique : les écrans aval restent valides");
+    verifier(g.pret_a_rendre === true && champDe(g, "domaineImage").modifiable === true && champDe(g, "tableauSignes").modifiable === true, "réponse identique : les écrans aval restent valides");
   }
 
   // ── 4. Un échec et une réussite sont INDISTINGUABLES avant la remise ──
@@ -277,24 +285,24 @@ async function main(): Promise<void> {
   {
     const x = await nouveau();
     await x.repondreJusqua("tableauSignes");
-    await x.poster("racinesChamp1", "x"); // faux : périme racinesChamp2 et le tableau
+    await x.poster("axeSommet", JSON.stringify({ axeTexte: "x = 1", xS: "1", yS: "1" })); // faux : périme domaineImage et le tableau
     let pr = await appeler("profs/resultats", "GET", { jeton: jetonProf, query: { tache_id: x.tache } });
     let exRes = pr.corps.eleves?.find((e: any) => e.id === "eleve-1")?.exercices?.[0];
     const champsProf = (exRes?.champs ?? []).map((c: any) => c.champ) as string[];
-    verifier(!champsProf.includes("racinesChamp2") && !champsProf.includes("tableauSignes") && champsProf.includes("racinesChamp1"), `vue prof : les écrans périmés n'apparaissent plus (${champsProf.join()})`);
-    verifier(exRes?.champs.find((c: any) => c.champ === "racinesChamp1")?.statut === "not_equivalent", "vue prof : racinesChamp1 = sa dernière réponse (fausse)");
+    verifier(!champsProf.includes("domaineImage") && !champsProf.includes("tableauSignes") && champsProf.includes("axeSommet") && champsProf.includes("racines"), `vue prof : les écrans périmés n'apparaissent plus (${champsProf.join()})`);
+    verifier(exRes?.champs.find((c: any) => c.champ === "axeSommet")?.statut === "not_equivalent", "vue prof : axeSommet = sa dernière réponse (fausse)");
     verifier(exRes?.complet === false, "vue prof : pas complet tant que l'élève n'a pas rendu");
-    await x.poster("racinesChamp1", x.bonne("racinesChamp1"));
-    await x.poster("racinesChamp2", x.bonne("racinesChamp2"));
+    await x.poster("axeSommet", x.bonne("axeSommet"));
+    await x.poster("domaineImage", x.bonne("domaineImage"));
     await x.poster("tableauSignes", x.bonne("tableauSignes"));
     verifier((await x.rendre()).statut === 200, "remise après correction");
     pr = await appeler("profs/resultats", "GET", { jeton: jetonProf, query: { tache_id: x.tache } });
     exRes = pr.corps.eleves?.find((e: any) => e.id === "eleve-1")?.exercices?.[0];
-    verifier(exRes?.complet === true && exRes.champs.length === 8 && exRes.champs.every((c: any) => c.statut === "correct"), `vue prof après remise : complet, 8 écrans, tous à leur dernière réponse (juste) : ${JSON.stringify(exRes?.champs?.map((c: any) => [c.champ, c.statut]))} complet=${exRes?.complet}`);
+    verifier(exRes?.complet === true && exRes.champs.length === 6 && exRes.champs.every((c: any) => c.statut === "correct"), `vue prof après remise : complet, 6 écrans, tous à leur dernière réponse (juste) : ${JSON.stringify(exRes?.champs?.map((c: any) => [c.champ, c.statut]))} complet=${exRes?.complet}`);
     const mr = await appeler("eleves/mes-resultats", "GET", { jeton: jetonEleve });
     const ligneTache = mr.corps.historiqueTaches?.find((t: any) => t.nomTache === `retour ${compteur}`);
     verifier(ligneTache !== undefined && ligneTache.pourcentage === 100, `mes-resultats : score sur les dernières réponses valides (${JSON.stringify(ligneTache)})`);
-    verifier(x.lignes().length === 8 + 4, `D8 : toutes les lignes sont conservées (${x.lignes().length})`);
+    verifier(x.lignes().length === 6 + 4, `D8 : toutes les lignes sont conservées (${x.lignes().length})`);
     const td = await appeler("eleves/tableau-de-bord", "GET", { jeton: jetonEleve });
     const t = ["en_cours", "effectuees", "anterieures"].flatMap((k) => td.corps[k] ?? []).find((t: any) => t.nom_tache === `retour ${compteur}`);
     verifier(td.corps.effectuees?.some((t: any) => t.nom_tache === `retour ${compteur}`) && t !== undefined, "tableau de bord : la tâche rendue est « effectuée »");
@@ -314,7 +322,7 @@ async function main(): Promise<void> {
     for (const f of ["lib/etatExercice.ts", "lib/routes/eleves/mes-resultats.ts", "lib/routes/profs/resultats.ts"]) {
       verifier(/dernieresReponsesValides|donneesEffectives/.test(readFileSync(f, "utf8")), `${f} passe par lib/reponsesValides.ts`);
     }
-    verifier(chercherGenerateur("af_mise_en_evidence") !== undefined, "registre : gen7 présent");
+    verifier(chercherGenerateur(VARIANTE) !== undefined && chercherGenerateur(VARIANTE) !== null, "registre : gen7 présent");
   }
 
   if (echecs.length > 0) {

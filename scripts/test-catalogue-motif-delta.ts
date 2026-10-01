@@ -1,16 +1,16 @@
-// Test permanent — CÂBLAGE du catalogue de gen7 « motif / delta » (RAPPORT §49) : catalogue affiché, JSON, `CORRESPONDANCE_JSON_VERS_PILOTE` de prof.html, registre, variantes RETIRÉES.
+// Test permanent — CÂBLAGE du catalogue de gen7 « motif / delta » (RAPPORT §49) : catalogue affiché, JSON, `CORRESPONDANCE_JSON_VERS_PILOTE` de prof.html, registre, anciennes variantes SUPPRIMÉES.
 // Lancer : `npm run test-catalogue-motif-delta`. Pur (aucune base). Le champ « nombre d'exercices » non `disabled` des dix entrées est mesuré en Chromium (`scenarioGen7Prof`).
 //
 //  1. Les dix familles = les dix entrées du catalogue affiché (ids, ordre) ; libellés IDENTIQUES mot pour mot au JSON (4e, n° 7) ; deux axes (7 + 3).
 //  2. `CORRESPONDANCE_JSON_VERS_PILOTE["4e:7"]` (extrait LITTÉRALEMENT de prof.html) : dix entrées, mêmes ids, même ordre que le JSON.
-//  3. Registre : les dix nouveaux sont exécutables et actifs ; les quatre anciens sont exécutables, RETIRÉS, hors catalogue, libellés conservés ; composition : nouveaux acceptés, anciens refusés.
-//  4. `verifierCoherenceRegistre` : les trois défauts de variante retirée sont détectés.
+//  3. Registre : les dix nouveaux sont exécutables ; les quatre anciens (`af_mise_en_evidence`, …) n'existent plus (registre, catalogue, libellé) ; composition : nouveaux acceptés, anciens refusés.
+//  4. `verifierCoherenceRegistre` : les défauts de câblage d'une variante curriculaire sont détectés.
 
 export {}; // module
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { CATALOGUE_GENERATEURS, VARIANTES_RETIREES, estVarianteConnue, labelPourVariante } from "../lib/catalogueGenerateurs";
+import { CATALOGUE_GENERATEURS, estVarianteConnue, labelPourVariante } from "../lib/catalogueGenerateurs";
 import { DICTIONNAIRE_COMPETENCES } from "../lib/dictionnaireCompetences";
 import { REGISTRE_GENERATEURS, chercherGenerateur, variantesCatalogueSansGenerateur, verifierCoherenceRegistre } from "../lib/registreGenerateurs";
 import { validerComposition } from "../lib/validationCorpsTaches";
@@ -51,34 +51,31 @@ verifier(!/variante_id:\s*"af_(mise_en_evidence|binome_conjugue|produit_remarqua
 // ── 3. Registre ──
 for (const f of FAMILLES) {
   const g = chercherGenerateur(f.id);
-  verifier(g !== null && g.generateur_id === "gen7" && g.curriculaire && g.retire !== true, `registre : ${f.id} exécutable et actif`);
+  verifier(g !== null && g.generateur_id === "gen7" && g.curriculaire, `registre : ${f.id} exécutable`);
   verifier(estVarianteConnue(f.id) && validerComposition([{ variante_id: f.id, nombre_exercices: 1 }]).ok === true, `composition : ${f.id} acceptée`);
 }
 for (const id of IDS_ANCIENS) {
-  const g = chercherGenerateur(id);
-  verifier(g !== null && g.retire === true && g.curriculaire, `registre : ${id} exécutable mais RETIRÉ`);
-  verifier(!CATALOGUE_GENERATEURS.some((e) => e.variante_id === id) && VARIANTES_RETIREES.some((e) => e.variante_id === id), `${id} : hors catalogue, dans VARIANTES_RETIREES`);
-  verifier(!estVarianteConnue(id) && validerComposition([{ variante_id: id, nombre_exercices: 1 }]).ok === false, `composition : ${id} refusée (variante retirée)`);
-  verifier(labelPourVariante(id) === VARIANTES_RETIREES.find((e) => e.variante_id === id)!.label && labelPourVariante(id) !== null, `${id} : libellé d'affichage conservé (${labelPourVariante(id)})`);
+  verifier(chercherGenerateur(id) === null, `registre : ${id} n'existe plus`);
+  verifier(!CATALOGUE_GENERATEURS.some((e) => e.variante_id === id) && labelPourVariante(id) === null, `${id} : absent du catalogue, sans libellé`);
+  verifier(!estVarianteConnue(id) && validerComposition([{ variante_id: id, nombre_exercices: 1 }]).ok === false, `composition : ${id} refusée`);
 }
-verifier(REGISTRE_GENERATEURS.filter((g) => g.generateur_id === "gen7").length === 14, "registre : 14 générateurs gen7 (10 actifs + 4 retirés)");
+verifier(REGISTRE_GENERATEURS.filter((g) => g.generateur_id === "gen7").length === 10, "registre : exactement 10 générateurs gen7");
 verifier(variantesCatalogueSansGenerateur().length === 0, "aucune variante du catalogue sans générateur");
 for (const f of FAMILLES) verifier(labelPourVariante(f.id) === gen7.find((e) => e.variante_id === f.id)!.label, `${f.id} : libellé d'affichage`);
 
-// ── 4. Détection des défauts de variante retirée ──
-const ancien = chercherGenerateur("af_irreductible")!;
+// ── 4. Détection des défauts de câblage d'une variante curriculaire ──
+const base = chercherGenerateur(FAMILLES[0]!.id)!;
 const cat = CATALOGUE_GENERATEURS as unknown as { generateur_id: string; variante_id: string }[];
-const ret = VARIANTES_RETIREES as unknown as { generateur_id: string; variante_id: string }[];
-verifier(verifierCoherenceRegistre([ancien], [...cat, ret[3]!], DICTIONNAIRE_COMPETENCES, ret).some((e) => e.includes("présent dans CATALOGUE_GENERATEURS")), "cohérence : retiré présent au catalogue détecté");
-verifier(verifierCoherenceRegistre([ancien], cat, DICTIONNAIRE_COMPETENCES, []).some((e) => e.includes("absent de VARIANTES_RETIREES")), "cohérence : retiré absent de VARIANTES_RETIREES détecté");
-verifier(verifierCoherenceRegistre([{ ...ancien, retire: false }], [], DICTIONNAIRE_COMPETENCES, ret).some((e) => e.includes("non marqué")), "cohérence : variante dans VARIANTES_RETIREES mais non marquée détectée");
-verifier(verifierCoherenceRegistre([{ ...ancien, generateur_id: "gX" }], cat, DICTIONNAIRE_COMPETENCES, ret).some((e) => e.includes("VARIANTES_RETIREES")), "cohérence : generateur_id incohérent d'un retiré détecté");
-verifier(verifierCoherenceRegistre([{ ...ancien, codesCompetenceDeclares: ["CODE_INCONNU"] }], cat, DICTIONNAIRE_COMPETENCES, ret).some((e) => e.includes("CODE_INCONNU")), "cohérence : code inconnu d'un retiré détecté");
-verifier(verifierCoherenceRegistre(REGISTRE_GENERATEURS, CATALOGUE_GENERATEURS, DICTIONNAIRE_COMPETENCES, VARIANTES_RETIREES).length === 0, "cohérence : le registre réel est sain");
+verifier(verifierCoherenceRegistre([base], [], DICTIONNAIRE_COMPETENCES).some((e) => e.includes("absent de CATALOGUE_GENERATEURS")), "cohérence : curriculaire absent du catalogue détecté");
+verifier(verifierCoherenceRegistre([{ ...base, generateur_id: "gX" }], cat, DICTIONNAIRE_COMPETENCES).some((e) => e.includes("≠ catalogue")), "cohérence : generateur_id incohérent détecté");
+verifier(verifierCoherenceRegistre([{ ...base, codesCompetenceDeclares: ["CODE_INCONNU"] }], cat, DICTIONNAIRE_COMPETENCES).some((e) => e.includes("CODE_INCONNU")), "cohérence : code inconnu détecté");
+verifier(verifierCoherenceRegistre([{ ...base, curriculaire: false }], cat, DICTIONNAIRE_COMPETENCES).some((e) => e.includes("non curriculaire présent dans CATALOGUE_GENERATEURS")), "cohérence : non curriculaire au catalogue détecté");
+verifier(verifierCoherenceRegistre([base, base], cat, DICTIONNAIRE_COMPETENCES).some((e) => e.includes("en double")), "cohérence : variante_id en double détecté");
+verifier(verifierCoherenceRegistre(REGISTRE_GENERATEURS, CATALOGUE_GENERATEURS, DICTIONNAIRE_COMPETENCES).length === 0, "cohérence : le registre réel est sain");
 
 if (echecs.length > 0) {
   console.error(`ÉCHEC : ${echecs.length} vérification(s) sur ${nb}`);
   for (const e of echecs) console.error(` - ${e}`);
   process.exit(1);
 }
-console.log(`OK : ${nb} vérifications (catalogue, JSON, CORRESPONDANCE prof.html, registre : 10 actifs + 4 retirés, compositions, cohérence)`);
+console.log(`OK : ${nb} vérifications (catalogue, JSON, CORRESPONDANCE prof.html, registre : 10 variantes, anciennes supprimées, compositions, cohérence)`);

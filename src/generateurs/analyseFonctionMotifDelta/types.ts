@@ -1,14 +1,23 @@
 import { rat, type Rat } from "./exact/rationnel";
 import { diviser, exactDepuisRat, fois, foisRat, moins, oppose, racinesDuSecondDegre, type Exact } from "./exact/nombreExact";
-import type { Terme } from "../analyseFonction/formatage";
-import type { AffichageColonnes } from "../analyseFonction/tableauSignes";
 
 /**
  * gen7 « motif / delta » (RAPPORT §49) : dix sous-variantes, deux familles. Types et constantes COMMUNS. Tout est EXACT : un coefficient est `(n/d)·√rad`
  * (`rad = 1` : rationnel), jamais un flottant. L'exercice est JSON pur (le contrat l'exige) : les nombres `Exact` (des `Map`) n'en font jamais partie, ils sont
  * recalculés à la demande par `fonctionExacte`.
  */
-export { type Terme };
+/** Terme d'un polynôme `ax² + bx + c`. */
+export type Terme = "a" | "b" | "c";
+
+/** Valeurs de x des colonnes du tableau : « vraies » (solution montrée) ou « symboliques » (x₁, x_S, x₂). */
+export type AffichageColonnes = "vraies" | "symboliques";
+
+/** Noms de champ des six écrans (identiques pour les dix sous-variantes) ; `CHAMP_RACINES` est défini plus bas. */
+export const CHAMP_COEFFICIENTS = "coefficients";
+export const CHAMP_ALLURE = "allure";
+export const CHAMP_AXE_SOMMET = "axeSommet";
+export const CHAMP_DOMAINE_IMAGE = "domaineImage";
+export const CHAMP_TABLEAU_SIGNES = "tableauSignes";
 
 export const CHAMP_RACINES = "racines";
 

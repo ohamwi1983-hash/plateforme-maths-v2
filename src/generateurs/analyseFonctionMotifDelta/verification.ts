@@ -1,12 +1,11 @@
 import type { ResultatVerification } from "../../../lib/contratGenerateur";
-import { CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE, CHAMP_TABLEAU_SIGNES } from "../analyseFonction/types";
 import { verifierRacinesMD } from "./racinesEcran";
 import { verifierTableauMD } from "./tableauSignes";
 import { verifierAllureMD } from "./allure";
 import { verifierAxeSommetMD } from "./axeSommet";
 import { verifierCoefficientsMD } from "./coefficients";
 import { verifierDomaineImageMD } from "./domaineImage";
-import { CHAMP_RACINES, coefVersExact, fonctionEffective, type ExerciceMotifDelta } from "./types";
+import { CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE, CHAMP_RACINES, CHAMP_TABLEAU_SIGNES, coefVersExact, fonctionEffective, type ExerciceMotifDelta } from "./types";
 
 /**
  * Vérification d'un champ de gen7 « motif / delta ». `ex` est l'exercice EFFECTIF (`projeterExercice`, point de substitution UNIQUE) : `coefficients` est jugé sur les VRAIS coefficients,

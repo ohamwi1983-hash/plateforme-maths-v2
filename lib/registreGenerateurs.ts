@@ -1,8 +1,7 @@
 import type { Generateur, ResultatVerification } from "./contratGenerateur";
-import { CATALOGUE_GENERATEURS, VARIANTES_RETIREES } from "./catalogueGenerateurs";
+import { CATALOGUE_GENERATEURS } from "./catalogueGenerateurs";
 import { DICTIONNAIRE_COMPETENCES } from "./dictionnaireCompetences";
 import { generateurTemoinTechnique } from "../src/generateurs/_temoinTechnique";
-import { GENERATEURS_ANALYSE_FONCTION } from "../src/generateurs/analyseFonction/generateurs";
 import { GENERATEURS_MOTIF_DELTA } from "../src/generateurs/analyseFonctionMotifDelta/generateurs";
 
 /**
@@ -16,7 +15,7 @@ import { GENERATEURS_MOTIF_DELTA } from "../src/generateurs/analyseFonctionMotif
  * (ce qu'on peut composer) : le registre sait EXÉCUTER. Les deux ne sont pas fusionnés, leur
  * cohérence est contrôlée par `verifierCoherenceRegistre` au chargement de ce module.
  */
-export const REGISTRE_GENERATEURS: readonly Generateur<any>[] = [generateurTemoinTechnique, ...GENERATEURS_MOTIF_DELTA, ...GENERATEURS_ANALYSE_FONCTION];
+export const REGISTRE_GENERATEURS: readonly Generateur<any>[] = [generateurTemoinTechnique, ...GENERATEURS_MOTIF_DELTA];
 
 interface EntreeCatalogue {
   generateur_id: string;
@@ -31,16 +30,14 @@ interface EntreeCatalogue {
  *    codes déclarés présents dans le dictionnaire de compétences ;
  *  - générateur non curriculaire (témoin) : ne doit PAS figurer dans le catalogue affiché ;
  *  - codes de compétence déclarés sans doublon.
- *  - générateur RETIRÉ (`retire: true`) : curriculaire, ABSENT du catalogue affiché, PRÉSENT dans `VARIANTES_RETIREES` (même `generateur_id`), codes dans le dictionnaire ;
  * Les entrées de catalogue SANS générateur au registre ne sont pas une erreur (une variante cataloguée avant
- * d'être livrée) : elles sont exposées par `variantesCatalogueSansGenerateur`. Depuis la phase 3b-3 les quatre
- * variantes de gen7 (`af_*`) sont au registre : la liste est vide.
+ * d'être livrée) : elles sont exposées par `variantesCatalogueSansGenerateur`. Les dix variantes de gen7 (`af_motif_*`, `af_delta_*`)
+ * sont au registre : la liste est vide.
  */
 export function verifierCoherenceRegistre(
   registre: readonly Generateur<any>[],
   catalogue: readonly EntreeCatalogue[],
   dictionnaire: Record<string, unknown>,
-  retirees: readonly EntreeCatalogue[] = [],
 ): string[] {
   const erreurs: string[] = [];
   const vus = new Set<string>();
@@ -49,19 +46,10 @@ export function verifierCoherenceRegistre(
     vus.add(g.variante_id);
 
     const dansCatalogue = catalogue.find((e) => e.variante_id === g.variante_id);
-    const dansRetirees = retirees.find((e) => e.variante_id === g.variante_id);
     const codesAbsents = (): string[] =>
       // `Object.hasOwn` : `code in dictionnaire` acceptait « constructor », « toString »… (membres d'Object.prototype), RAPPORT.md §20.
       g.codesCompetenceDeclares.filter((code) => !Object.hasOwn(dictionnaire, code)).map((code) => `${g.variante_id} : code de compétence "${code}" absent de lib/dictionnaireCompetences.ts`);
-    if (g.retire === true) {
-      // Variante RETIRÉE (RAPPORT §49) : exécutable, jamais proposée au professeur ; son libellé d'affichage vit dans VARIANTES_RETIREES.
-      if (!g.curriculaire) erreurs.push(`${g.variante_id} : un générateur retiré est un générateur curriculaire (le témoin n'est jamais « retiré »)`);
-      if (dansCatalogue) erreurs.push(`${g.variante_id} : générateur retiré présent dans CATALOGUE_GENERATEURS (il ne doit plus être proposé)`);
-      if (!dansRetirees) erreurs.push(`${g.variante_id} : générateur retiré absent de VARIANTES_RETIREES (libellé d'affichage manquant)`);
-      else if (dansRetirees.generateur_id !== g.generateur_id) erreurs.push(`${g.variante_id} : generateur_id "${g.generateur_id}" ≠ VARIANTES_RETIREES "${dansRetirees.generateur_id}"`);
-      erreurs.push(...codesAbsents());
-    } else if (g.curriculaire) {
-      if (dansRetirees) erreurs.push(`${g.variante_id} : présent dans VARIANTES_RETIREES mais non marqué \`retire\` au registre`);
+    if (g.curriculaire) {
       if (!dansCatalogue) erreurs.push(`${g.variante_id} : générateur curriculaire absent de CATALOGUE_GENERATEURS`);
       else if (dansCatalogue.generateur_id !== g.generateur_id) erreurs.push(`${g.variante_id} : generateur_id "${g.generateur_id}" ≠ catalogue "${dansCatalogue.generateur_id}"`);
       erreurs.push(...codesAbsents());
@@ -78,7 +66,7 @@ export function variantesCatalogueSansGenerateur(registre: readonly Generateur<a
   return CATALOGUE_GENERATEURS.filter((e) => !registre.some((g) => g.variante_id === e.variante_id)).map((e) => e.variante_id);
 }
 
-const erreursAuChargement = verifierCoherenceRegistre(REGISTRE_GENERATEURS, CATALOGUE_GENERATEURS, DICTIONNAIRE_COMPETENCES, VARIANTES_RETIREES);
+const erreursAuChargement = verifierCoherenceRegistre(REGISTRE_GENERATEURS, CATALOGUE_GENERATEURS, DICTIONNAIRE_COMPETENCES);
 if (erreursAuChargement.length > 0) {
   // Échec bruyant volontaire : un registre incohérent ne doit jamais démarrer à moitié.
   throw new Error(`Registre de générateurs incohérent :\n - ${erreursAuChargement.join("\n - ")}`);
