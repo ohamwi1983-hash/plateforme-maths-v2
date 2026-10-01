@@ -31,6 +31,7 @@
     "test-reponse-visible": "tsx scripts/test-reponse-visible.ts",
     "test-cascade-revelee": "tsx scripts/test-cascade-revelee.ts",
     "test-exact-motif-delta": "tsx scripts/test-exact-motif-delta.ts",
+    "test-generation-motif-delta": "tsx scripts/test-generation-motif-delta.ts",
     "chromium-temoin": "tsx scripts/chromium-temoin-technique.ts",
     "chromium-design": "tsx scripts/chromium-fidelite-design.ts"
   },
