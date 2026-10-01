@@ -76,8 +76,8 @@ f(x) = a·(x − z)(x − z̄) = a·[ x² − 2p·x + (p² + q²) ]
 | 1.5 | `a(x² − m²n)`, `m ≤ 2` | 0 | `−am²n` | 0 | `c` | `±m√n` | 2 | 96 |
 | 1.6 | `a·x(x − r)`, `r ∈ ±1..6` | `−ar` | 0 | `r/2` | `−ar²/4` | `0`, `r` | 2 | 96 |
 | 1.7 | `a·x(x − s·m√n)`, `m ≤ 3` | `−asm√n` **irr.** | 0 | `sm√n/2` **irr.** | `−am²n/4` rationnel | `0`, `sm√n` | 2 | 288 |
-| 2.1 | `a[x² − 2px + p² + q²]`, `p ∈ ½ℤ*`, `q ≤ 3` | `−2ap` ≠ 0 | `a(p² + q²)` | `p` | … | aucune réelle | 3 | 180 |
-| 2.2 | `a(x − r₁)(x − r₂)`, `r₁ < r₂`, non nuls, non opposés | `−a(r₁+r₂)` ≠ 0 | `ar₁r₂` ≠ 0 | `(r₁+r₂)/2` | … | `r₁`, `r₂` rationnelles | 3 | 480 |
+| 2.1 | `a[x² − 2px + p² + q²]`, `p ∈ ½ℤ*`, `q ≤ 3` | `−2ap` ≠ 0 | `a(p² + q²)` | `p` | `a·q²` | aucune réelle | 3 | 180 |
+| 2.2 | `a(x − r₁)(x − r₂)`, `r₁ < r₂`, non nuls, non opposés | `−a(r₁+r₂)` ≠ 0 | `ar₁r₂` ≠ 0 | `(r₁+r₂)/2` | `−a(r₁−r₂)²/4` | `r₁`, `r₂` rationnelles | 3 | 480 |
 | 2.3 | `a[(x − p)² − m²n]`, `p ∈ ±1..4`, `m ≤ 2` | `−2ap` ≠ 0 | `a(p² − m²n)` | `p` | `−am²n` | `p ± m√n` | 3 | 768 |
 
 \* avec les bornes ci-dessus. **Vérifié par calcul exact** : les affirmations du prompt tiennent (1.7 : `yS` rationnel et `xS` irrationnel ; 2.3 : racines forcément non nulles et non opposées car `√n` est irrationnel ; 2.2 : par rejet explicite). En 2.3, `Δ = 4a²m²n` n'est jamais un carré parfait puisque `n` est sans facteur carré.
