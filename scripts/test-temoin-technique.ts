@@ -101,13 +101,14 @@ async function main() {
 
   // ── 3. Registre : cohérence + échec bruyant ───────────────────────────────────────────────────
   const { verifierCoherenceRegistre, verifierAvecControle, chercherGenerateur, REGISTRE_GENERATEURS, variantesCatalogueSansGenerateur } = require("../lib/registreGenerateurs");
-  const { CATALOGUE_GENERATEURS } = require("../lib/catalogueGenerateurs");
+  const { CATALOGUE_GENERATEURS, VARIANTES_RETIREES } = require("../lib/catalogueGenerateurs");
   const { DICTIONNAIRE_COMPETENCES } = require("../lib/dictionnaireCompetences");
-  verifier(verifierCoherenceRegistre(REGISTRE_GENERATEURS, CATALOGUE_GENERATEURS, DICTIONNAIRE_COMPETENCES).length === 0, "le registre réel devrait être cohérent");
+  verifier(verifierCoherenceRegistre(REGISTRE_GENERATEURS, CATALOGUE_GENERATEURS, DICTIONNAIRE_COMPETENCES, VARIANTES_RETIREES).length === 0, "le registre réel devrait être cohérent");
   verifier(chercherGenerateur(VARIANTE_TEMOIN) === temoin, "chercherGenerateur(témoin)");
-  // Depuis la 3b-3 les 4 variantes gen7 sont au registre (leur comportement : scripts/test-generation-gen7.ts, scripts/test-route-gen7.ts).
-  verifier(["af_mise_en_evidence", "af_binome_conjugue", "af_produit_remarquable", "af_irreductible"].every((v) => chercherGenerateur(v)?.generateur_id === "gen7"), "les 4 variantes gen7 doivent être au registre (3b-3)");
-  verifier(variantesCatalogueSansGenerateur().length === 0 && variantesCatalogueSansGenerateur(REGISTRE_GENERATEURS.filter((g: { variante_id: string }) => g.variante_id !== "af_irreductible")).join() === "af_irreductible", `aucune variante cataloguée sans générateur attendue, et une variante retirée du registre doit être nommée (obtenu ${variantesCatalogueSansGenerateur().join(",")})`);
+  // Depuis la 3b-3 les 4 variantes gen7 « catégories » sont au registre (RETIRÉES du catalogue en RAPPORT §49, toujours exécutables : scripts/test-generation-gen7.ts, scripts/test-route-gen7.ts) ;
+  // les dix variantes « motif / delta » (RAPPORT §49) sont les variantes actives (scripts/test-catalogue-motif-delta.ts).
+  verifier(["af_mise_en_evidence", "af_binome_conjugue", "af_produit_remarquable", "af_irreductible"].every((v) => chercherGenerateur(v)?.generateur_id === "gen7"), "les 4 variantes gen7 historiques doivent rester au registre (exécutables, retirées du catalogue)");
+  verifier(variantesCatalogueSansGenerateur().length === 0 && variantesCatalogueSansGenerateur(REGISTRE_GENERATEURS.filter((g: { variante_id: string }) => g.variante_id !== "af_delta_aucune_racine")).join() === "af_delta_aucune_racine", `aucune variante cataloguée sans générateur attendue, et une variante retirée du registre doit être nommée (obtenu ${variantesCatalogueSansGenerateur().join(",")})`);
   const cat = [{ generateur_id: "gX", variante_id: "x1" }];
   const base = { ...temoin, curriculaire: true, generateur_id: "gX", variante_id: "x1", codesCompetenceDeclares: [] as string[] };
   verifier(verifierCoherenceRegistre([base, base], cat, {}).some((e: string) => e.includes("en double")), "doublon de variante_id non détecté");

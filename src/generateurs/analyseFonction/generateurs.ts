@@ -30,6 +30,7 @@ function creerGenerateur(categorie: CategorieAnalyseFonction): Generateur<Exerci
     variante_id: `af_${categorie}`,
     generateur_id: GENERATEUR_ID_ANALYSE_FONCTION,
     curriculaire: true,
+    retire: true, // RAPPORT §49 : exécutable (exercices déjà assignés) mais retiré du catalogue affiché, remplacé par `analyseFonctionMotifDelta`
     codesCompetenceDeclares: categorie === "irreductible" ? [...CODES_FONCTION] : [...CODES_FONCTION, ...CODES_RACINES_DECLARES],
     generer: (graine: number) => genererExercice(categorie, graine),
     ecrans: ecransAnalyseFonction,

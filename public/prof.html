@@ -1480,24 +1480,23 @@
      */
     const CORRESPONDANCE_JSON_VERS_PILOTE = {
       /**
-       * gen7 (spec-gen7.md §3, CLAUDE.md "discipline de câblage prof.html") — 4e/numero 7
-       * ("Analyse d'une fonction du second degré", chapitre 1) a 4 variantes qui correspondent, DANS
-       * L'ORDRE, aux 4 `CategorieAnalyseFonction` équiprobables du pilote
-       * (`lib/catalogueGenerateurs.ts`) — libellés vérifiés mot pour mot contre
-       * `public/catalogue-generateurs-complet.json` (`chapitre:1, numero:7`) avant cet ajout :
-       * "Mise en évidence (c=0)"→af_mise_en_evidence, "Binôme conjugué (b=0, différence de deux
-       * carrés)"→af_binome_conjugue, "Produit remarquable (Δ=0, carré parfait)"→
-       * af_produit_remarquable, "Irréductible (Δ<0, aucune racine réelle)"→af_irreductible. Les
-       * `variante_id` sont préfixés "af_" (voir le commentaire de tête de `CATALOGUE_GENERATEURS`,
-       * lib/catalogueGenerateurs.ts, sur la collision avec les 3 entrées gen1 de même id `Categorie`
-       * brut, non applicable ici puisque gen1 n'existe plus dans ce dépôt — préfixe conservé pour
-       * rester identique à la donnée de catalogue serveur).
+       * gen7 (CLAUDE.md "discipline de câblage prof.html", RAPPORT §49) — 4e/numero 7 ("Analyse d'une fonction du second degré", chapitre 1) a DIX variantes, dans l'ordre du
+       * JSON (`chapitre:1, numero:7`) et de `CATALOGUE_GENERATEURS` : sept « sans discriminant » (reconnaissance de motif, `af_motif_*`) puis trois « avec discriminant »
+       * (méthode générale, `af_delta_*`). Libellés vérifiés mot pour mot contre le JSON par `scripts/test-catalogue-motif-delta.ts`. Les quatre anciennes catégories
+       * (`af_mise_en_evidence`, `af_binome_conjugue`, `af_produit_remarquable`, `af_irreductible`) sont RETIRÉES du catalogue : elles restent exécutables côté serveur pour les
+       * exercices déjà assignés, mais ne se composent plus ici.
        */
       "4e:7": [
-        { index: 0, variante_id: "af_mise_en_evidence" },
-        { index: 1, variante_id: "af_binome_conjugue" },
-        { index: 2, variante_id: "af_produit_remarquable" },
-        { index: 3, variante_id: "af_irreductible" },
+        { index: 0, variante_id: "af_motif_aucune_racine" },
+        { index: 1, variante_id: "af_motif_racine_double_rationnelle" },
+        { index: 2, variante_id: "af_motif_racine_double_irrationnelle" },
+        { index: 3, variante_id: "af_motif_racines_opposees_rationnelles" },
+        { index: 4, variante_id: "af_motif_racines_opposees_irrationnelles" },
+        { index: 5, variante_id: "af_motif_racine_nulle_rationnelle" },
+        { index: 6, variante_id: "af_motif_racine_nulle_irrationnelle" },
+        { index: 7, variante_id: "af_delta_aucune_racine" },
+        { index: 8, variante_id: "af_delta_racines_rationnelles" },
+        { index: 9, variante_id: "af_delta_racines_irrationnelles" },
       ],
     };
 

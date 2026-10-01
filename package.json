@@ -22,6 +22,7 @@
     "test-verification-gen7": "tsx scripts/test-verification-gen7.ts",
     "test-generation-gen7": "tsx scripts/test-generation-gen7.ts",
     "test-route-gen7": "tsx scripts/test-route-gen7.ts",
+    "test-route-motif-delta": "tsx scripts/test-route-motif-delta.ts",
     "test-katex": "tsx scripts/test-katex.ts",
     "test-eleve-desactive": "tsx scripts/test-eleve-desactive.ts",
     "test-apercu-tache": "tsx scripts/test-apercu-tache.ts",
@@ -35,6 +36,7 @@
     "test-croquis-reels": "tsx scripts/test-croquis-reels.ts",
     "test-verification-motif-delta": "tsx scripts/test-verification-motif-delta.ts",
     "test-cascade-motif-delta": "tsx scripts/test-cascade-motif-delta.ts",
+    "test-catalogue-motif-delta": "tsx scripts/test-catalogue-motif-delta.ts",
     "chromium-temoin": "tsx scripts/chromium-temoin-technique.ts",
     "chromium-design": "tsx scripts/chromium-fidelite-design.ts"
   },

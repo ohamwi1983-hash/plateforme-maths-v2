@@ -45,9 +45,6 @@ export interface Famille {
   coefficientBIrrationnel: boolean;
   sommetIrrationnel: boolean;
   racinesIrrationnelles: boolean;
-  /** Libellé du catalogue AFFICHÉ au professeur (identique mot pour mot dans `catalogue-generateurs-complet.json`). */
-  libelle: string;
-  exemple: string;
   pool: () => EntreePool[];
 }
 
@@ -143,71 +140,51 @@ export const FAMILLES: readonly Famille[] = [
   {
     id: "af_motif_aucune_racine", numero: "1.1", groupe: "motif", poidsRacines: 2, aucuneRacine: true,
     coefficientBIrrationnel: false, sommetIrrationnel: false, racinesIrrationnelles: false,
-    libelle: "Sans discriminant : aucune racine réelle (b=0)",
-    exemple: "Étudier f(x) = 2x² + 18 (b=0) : aucune racine réelle, trouver le sommet, l'ensemble-image et le tableau de signe.",
     pool: poolAucuneRacineMotif,
   },
   {
     id: "af_motif_racine_double_rationnelle", numero: "1.2", groupe: "motif", poidsRacines: 2, aucuneRacine: false,
     coefficientBIrrationnel: false, sommetIrrationnel: false, racinesIrrationnelles: false,
-    libelle: "Sans discriminant : racine double rationnelle",
-    exemple: "Étudier f(x) = 2x² − 12x + 18 : reconnaître le carré parfait, trouver la racine double, le sommet et le tableau de signe.",
     pool: poolDoubleRationnelle,
   },
   {
     id: "af_motif_racine_double_irrationnelle", numero: "1.3", groupe: "motif", poidsRacines: 2, aucuneRacine: false,
     coefficientBIrrationnel: true, sommetIrrationnel: true, racinesIrrationnelles: true,
-    libelle: "Sans discriminant : racine double irrationnelle",
-    exemple: "Étudier f(x) = x² − 2√3 x + 3 : reconnaître le carré parfait, la racine double est √3 (écrire sqrt(3)).",
     pool: poolDoubleIrrationnelle,
   },
   {
     id: "af_motif_racines_opposees_rationnelles", numero: "1.4", groupe: "motif", poidsRacines: 2, aucuneRacine: false,
     coefficientBIrrationnel: false, sommetIrrationnel: false, racinesIrrationnelles: false,
-    libelle: "Sans discriminant : racines opposées rationnelles (b=0)",
-    exemple: "Étudier f(x) = 3x² − 12 (b=0) : deux racines opposées, le sommet, l'ensemble-image et le tableau de signe.",
     pool: poolOpposeesRationnelles,
   },
   {
     id: "af_motif_racines_opposees_irrationnelles", numero: "1.5", groupe: "motif", poidsRacines: 2, aucuneRacine: false,
     coefficientBIrrationnel: false, sommetIrrationnel: false, racinesIrrationnelles: true,
-    libelle: "Sans discriminant : racines opposées irrationnelles (b=0)",
-    exemple: "Étudier f(x) = x² − 5 (b=0) : deux racines opposées irrationnelles ±√5 (écrire sqrt(5)).",
     pool: poolOpposeesIrrationnelles,
   },
   {
     id: "af_motif_racine_nulle_rationnelle", numero: "1.6", groupe: "motif", poidsRacines: 2, aucuneRacine: false,
     coefficientBIrrationnel: false, sommetIrrationnel: false, racinesIrrationnelles: false,
-    libelle: "Sans discriminant : une racine nulle, l'autre rationnelle (c=0)",
-    exemple: "Étudier f(x) = 2x² − 6x (c=0) : mettre x en évidence, les racines 0 et 3, le sommet et le tableau de signe.",
     pool: poolNulleRationnelle,
   },
   {
     id: "af_motif_racine_nulle_irrationnelle", numero: "1.7", groupe: "motif", poidsRacines: 2, aucuneRacine: false,
     coefficientBIrrationnel: true, sommetIrrationnel: true, racinesIrrationnelles: true,
-    libelle: "Sans discriminant : une racine nulle, l'autre irrationnelle (c=0)",
-    exemple: "Étudier f(x) = x² − √2 x (c=0) : les racines 0 et √2 (écrire sqrt(2)), le sommet d'abscisse √2/2.",
     pool: poolNulleIrrationnelle,
   },
   {
     id: "af_delta_aucune_racine", numero: "2.1", groupe: "delta", poidsRacines: 3, aucuneRacine: true,
     coefficientBIrrationnel: false, sommetIrrationnel: false, racinesIrrationnelles: false,
-    libelle: "Avec discriminant : aucune racine réelle (Δ<0)",
-    exemple: "Étudier f(x) = x² − 2x + 5 (Δ<0) : aucune racine réelle, trouver le sommet, l'ensemble-image et le tableau de signe.",
     pool: poolDeltaAucuneRacine,
   },
   {
     id: "af_delta_racines_rationnelles", numero: "2.2", groupe: "delta", poidsRacines: 3, aucuneRacine: false,
     coefficientBIrrationnel: false, sommetIrrationnel: false, racinesIrrationnelles: false,
-    libelle: "Avec discriminant : deux racines distinctes rationnelles",
-    exemple: "Étudier f(x) = x² − x − 6 : calculer Δ, deux racines rationnelles, le sommet et le tableau de signe.",
     pool: poolDeltaRationnelles,
   },
   {
     id: "af_delta_racines_irrationnelles", numero: "2.3", groupe: "delta", poidsRacines: 3, aucuneRacine: false,
     coefficientBIrrationnel: false, sommetIrrationnel: false, racinesIrrationnelles: true,
-    libelle: "Avec discriminant : deux racines distinctes irrationnelles",
-    exemple: "Étudier f(x) = x² − 2x − 4 : calculer Δ, deux racines irrationnelles 1 ± √5 (écrire sqrt(5)), le sommet et le tableau de signe.",
     pool: poolDeltaIrrationnelles,
   },
 ];
