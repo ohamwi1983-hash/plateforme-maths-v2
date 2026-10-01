@@ -7,6 +7,8 @@ import { SOUS_CHAMPS_COEFFICIENTS_MD } from "./coefficients";
 import { latexExact } from "./exact/nombreExact";
 import { chercherFamille } from "./familles";
 import { ecranRacinesMD } from "./racinesEcran";
+import { ecranTableauMD } from "./tableauSignes";
+import { approx } from "./exact/nombreExact";
 import { latexPolynomeMD, ordreAffichage } from "./formatage";
 import { rat, versNombreR } from "./exact/rationnel";
 import { CHAMP_RACINES, coefVersExact, fonctionEffective, type ExerciceMotifDelta } from "./types";
@@ -114,9 +116,22 @@ export function ecransUnACinq(ex: ExerciceMotifDelta): EcranDeclare[] {
   ];
 }
 
-/** Assemble les écrans d'un exercice ; poids et noms posés ici, une seule fois. */
-export function ecransMotifDelta(ex: ExerciceMotifDelta, ecransSuivants: readonly EcranDeclare[] = []): EcranDeclare[] {
+/**
+ * Écran 6 : le tableau, jugé sur la fonction EFFECTIVE (RAPPORT §41) ; ses colonnes en dérivent. Aide `croquis_parabole` sur la parabole effective (coefficients RÉELS admis : décision Q4) ;
+ * `aide_disponible` ne dépend jamais de la justesse d'une réponse. Valeurs de x vraies ou symboliques selon `affichageTableau` (règle de révélation §42).
+ */
+export function ecranSix(ex: ExerciceMotifDelta): EcranDeclare {
+  const fe = fonctionEffective(ex);
+  return {
+    ...ecranTableauMD(fe, ex.affichageTableau, `${enonceEffectif(ex)} Complète le tableau de signe et de variation de $f$.`),
+    aide: { type: "croquis_parabole", a: versNombreR(fe.a), b: approx(fe.b), c: versNombreR(fe.c), marqueS: true, marquesOx: true },
+    dependDe: [...(DEPENDANCES_MD[CHAMP_TABLEAU_SIGNES] as string[])],
+  };
+}
+
+/** Assemble les six écrans d'un exercice ; poids et noms posés ici, une seule fois. */
+export function ecransMotifDelta(ex: ExerciceMotifDelta): EcranDeclare[] {
   const famille = chercherFamille(ex.famille);
   if (famille === undefined) throw new Error(`ecransMotifDelta : famille inconnue « ${ex.famille} »`);
-  return [...ecransUnACinq(ex), ...ecransSuivants].map((e) => ({ ...e, nom: NOMS_ECRANS_MD[e.champ], poids: poidsDe(e.champ, famille.poidsRacines) }));
+  return [...ecransUnACinq(ex), ecranSix(ex)].map((e) => ({ ...e, nom: NOMS_ECRANS_MD[e.champ], poids: poidsDe(e.champ, famille.poidsRacines) }));
 }

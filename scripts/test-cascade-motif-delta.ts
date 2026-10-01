@@ -6,7 +6,7 @@
 //  2. `allure`, `axeSommet`, `domaineImage` jugés sur la fonction EFFECTIVE : la réponse de l'élève suivant SA fonction est correcte, la réponse de la vraie fonction (si elle diffère) ne l'est pas.
 //  3. Ordonnée du sommet confirmée (fausse) → `domaineImage` repart d'elle.
 //  4. Libellé : IDENTIQUE que les coefficients confirmés soient justes ou faux (règle de révélation) ; ordre des termes jamais canonique ; terme nul absent.
-//  5. `projeterMotifDelta` : valeurs de x du tableau vraies seulement si la solution est montrée.
+//  5. `projeterMotifDelta` : valeurs de x du tableau vraies seulement si la solution est montrée ; le tableau lui-même est jugé sur la fonction EFFECTIVE (RAPPORT §41).
 
 export {}; // module
 
@@ -20,7 +20,7 @@ import { verifierMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta
 import { reponseBruteCorrecteMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/solutions";
 import { enonceEffectif } from "../src/generateurs/analyseFonctionMotifDelta/ecrans";
 import { approx, egaux, texteSaisieExact } from "../src/generateurs/analyseFonctionMotifDelta/exact/nombreExact";
-import { CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE } from "../src/generateurs/analyseFonction/types";
+import { CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE, CHAMP_TABLEAU_SIGNES } from "../src/generateurs/analyseFonction/types";
 import { CHAMP_RACINES } from "../src/generateurs/analyseFonctionMotifDelta/types";
 
 const echecs: string[] = [];
@@ -55,7 +55,7 @@ for (const fam of FAMILLES) {
     verifier(fe.a.n === -ex.a.n && !meme(fe, vrai), `${ctx} : la fonction effective est celle de l'élève`);
 
     // 2. écrans dépendants jugés sur la fonction EFFECTIVE
-    for (const champ of [CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_DOMAINE_IMAGE, CHAMP_RACINES]) {
+    for (const champ of [CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_DOMAINE_IMAGE, CHAMP_RACINES, CHAMP_TABLEAU_SIGNES]) {
       const attenduEleve = reponseBruteCorrecteMotifDelta(proj, champ);
       verifier(verifierMotifDelta(proj, champ, attenduEleve).statut === "correct", `${ctx} / ${champ} : la méthode juste appliquée aux coefficients de l'élève est CORRECTE`);
       const attenduVrai = reponseBruteCorrecteMotifDelta(ex, champ);

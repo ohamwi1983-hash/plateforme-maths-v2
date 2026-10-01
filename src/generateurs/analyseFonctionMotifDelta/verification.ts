@@ -1,6 +1,7 @@
 import type { ResultatVerification } from "../../../lib/contratGenerateur";
-import { CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE } from "../analyseFonction/types";
+import { CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE, CHAMP_TABLEAU_SIGNES } from "../analyseFonction/types";
 import { verifierRacinesMD } from "./racinesEcran";
+import { verifierTableauMD } from "./tableauSignes";
 import { verifierAllureMD } from "./allure";
 import { verifierAxeSommetMD } from "./axeSommet";
 import { verifierCoefficientsMD } from "./coefficients";
@@ -24,7 +25,9 @@ export function verifierMotifDelta(ex: ExerciceMotifDelta, champ: string, repons
       return verifierDomaineImageMD({ aPositif: f.a.n > 0, yImage: ex.effectif.yImage === null ? f.yS : coefVersExact(ex.effectif.yImage) }, reponseBrute);
     case CHAMP_RACINES:
       return verifierRacinesMD(f, reponseBrute);
+    case CHAMP_TABLEAU_SIGNES:
+      return verifierTableauMD(f, reponseBrute);
     default:
-      throw new Error(`gen7 motif/delta : champ inconnu ou non encore câblé « ${champ} »`);
+      throw new Error(`gen7 motif/delta : champ inconnu « ${champ} »`);
   }
 }

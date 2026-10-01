@@ -1,4 +1,5 @@
-import { CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE } from "../analyseFonction/types";
+import { CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE, CHAMP_TABLEAU_SIGNES } from "../analyseFonction/types";
+import { solutionTableauMD, solutionTableauTexte } from "./tableauSignes";
 import { allureAttendue } from "./allure";
 import { latexExact, texteSaisieExact, type Exact } from "./exact/nombreExact";
 import { CHAMP_RACINES, coefVersExact, fonctionEffective, type ExerciceMotifDelta } from "./types";
@@ -25,8 +26,10 @@ export function solutionAttendueMotifDelta(ex: ExerciceMotifDelta, champ: string
       return f.a.n > 0 ? `$[${latexExact(yImage(ex))}\\,;\\,+\\infty[$` : `$]-\\infty\\,;\\,${latexExact(yImage(ex))}]$`;
     case CHAMP_RACINES:
       return solutionRacines(f);
+    case CHAMP_TABLEAU_SIGNES:
+      return solutionTableauTexte(f);
     default:
-      throw new Error(`gen7 motif/delta : champ inconnu ou non encore câblé « ${champ} »`);
+      throw new Error(`gen7 motif/delta : champ inconnu « ${champ} »`);
   }
 }
 
@@ -47,8 +50,10 @@ export function reponseBruteCorrecteMotifDelta(ex: ExerciceMotifDelta, champ: st
     }
     case CHAMP_RACINES:
       return reponseBruteRacines(f);
+    case CHAMP_TABLEAU_SIGNES:
+      return JSON.stringify(solutionTableauMD(f));
     default:
-      throw new Error(`gen7 motif/delta : champ inconnu ou non encore câblé « ${champ} »`);
+      throw new Error(`gen7 motif/delta : champ inconnu « ${champ} »`);
   }
 }
 

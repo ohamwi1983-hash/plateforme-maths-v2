@@ -17,7 +17,8 @@ import { verifierMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta
 import { reponseBruteCorrecteMotifDelta, solutionAttendueMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/solutions";
 import { ecransMotifDelta, NOMS_ECRANS_MD } from "../src/generateurs/analyseFonctionMotifDelta/ecrans";
 import { approx, estRationnel, texteSaisieExact, type Exact } from "../src/generateurs/analyseFonctionMotifDelta/exact/nombreExact";
-import { CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE } from "../src/generateurs/analyseFonction/types";
+import { CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE, CHAMP_TABLEAU_SIGNES } from "../src/generateurs/analyseFonction/types";
+import { colonnesTableauMD, rangeesTableauMD, solutionTableauMD } from "../src/generateurs/analyseFonctionMotifDelta/tableauSignes";
 import { CHAMP_RACINES } from "../src/generateurs/analyseFonctionMotifDelta/types";
 
 const echecs: string[] = [];
@@ -39,7 +40,7 @@ function nonSimplifie(x: Exact): string | null {
   if (r === 1 || Math.abs(q.n) < 2) return null;
   return `${q.n < 0 ? "-" : ""}sqrt(${q.n * q.n * r})${q.d > 1 ? `/${q.d}` : ""}`;
 }
-const CHAMPS_MD = [CHAMP_COEFFICIENTS, CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_DOMAINE_IMAGE, CHAMP_RACINES] as const;
+const CHAMPS_MD = [CHAMP_COEFFICIENTS, CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_DOMAINE_IMAGE, CHAMP_RACINES, CHAMP_TABLEAU_SIGNES] as const;
 
 for (const fam of FAMILLES) {
   for (const [i, { a, b, c }] of poolDe(fam).entries()) {
@@ -153,11 +154,56 @@ for (const fam of FAMILLES) {
       }
     }
 
+    // ── tableauSignes : solution exacte recoupée par un oracle FLOTTANT indépendant, structure, détecteurs ──
+    {
+      const sol = solutionTableauMD(f) as { signe: Record<string, string>; variation: Record<string, string> };
+      const cols = colonnesTableauMD(f, "symboliques");
+      const [A, Bf, Cf] = [a.n, approx(coefVersExact(b)), c.n];
+      for (const col of cols) {
+        if (col.colonne.genre !== "intervalle") continue;
+        const xr = approx(col.x);
+        const v = A * xr * xr + Bf * xr + Cf;
+        verifier(Math.abs(v) > 1e-9 && sol.signe[col.colonne.id] === (v > 0 ? "+" : "-"), `${ctx} : signe exact de la colonne ${col.colonne.id} recoupé par l'oracle flottant (f(${xr.toFixed(4)}) = ${v.toFixed(4)})`);
+      }
+      const nbZeros = Object.values(sol.signe).filter((v) => v === "0").length;
+      verifier(nbZeros === f.racines.length && cols.length === (f.racines.length === 2 ? 7 : 3), `${ctx} : ${nbZeros} « 0 » et ${cols.length} colonnes pour ${f.racines.length} racine(s)`);
+      const alphabets = rangeesTableauMD(f)[0]!.cellules.map((cell) => cell.alphabet.includes("0"));
+      verifier(alphabets.filter(Boolean).length === nbZeros, `${ctx} : « 0 » offert seulement sur une colonne racine`);
+      const symboliques = cols.map((cc) => cc.colonne.libelle + (cc.colonne.valeur ?? "")).join(" ");
+      verifier(!/\\sqrt|\\dfrac/.test(symboliques) && !/\d/.test(symboliques.replace(/x_[12S]/g, "")), `${ctx} : valeurs de x non révélées en mode symbolique (${symboliques.slice(0, 80)})`);
+      const vraies = colonnesTableauMD(f, "vraies").map((cc) => cc.colonne.libelle).join(" ");
+      if (f.racines.some((r) => !estRationnel(r)) || !estRationnel(f.xS)) verifier(/\\sqrt|\\dfrac/.test(vraies), `${ctx} : valeurs vraies en LaTeX exact (${vraies.slice(0, 80)})`);
+      const flipS: Record<string, string> = { "+": "-", "-": "+", "0": "0" };
+      const flipV: Record<string, string> = { "↗": "↘", "↘": "↗", "⌢": "⌣", "⌣": "⌢" };
+      const mapper = (ligne: Record<string, string>, t: Record<string, string>) => Object.fromEntries(Object.entries(ligne).map(([k, x]) => [k, t[x] as string]));
+      const un = (ligne: Record<string, string>, t: Record<string, string>) => {
+        const [premier] = Object.keys(ligne).filter((k) => t[ligne[k] as string] !== ligne[k]);
+        return { ...ligne, [premier as string]: t[ligne[premier as string] as string] as string };
+      };
+      const T = (signe: unknown, variation: unknown) => V(CHAMP_TABLEAU_SIGNES, { signe, variation });
+      sortie(T(mapper(sol.signe, flipS), sol.variation), "not_equivalent", ["TABLEAU_SIGNE_INVERSE"], "tableau : ligne de signe inversée");
+      sortie(T(sol.signe, mapper(sol.variation, flipV)), "not_equivalent", ["TABLEAU_CONCAVITE_INCORRECTE"], "tableau : variations inversées (concavité)");
+      sortie(T(mapper(sol.signe, flipS), mapper(sol.variation, flipV)), "not_equivalent", ["TABLEAU_SIGNE_INVERSE", "TABLEAU_CONCAVITE_INCORRECTE"], "tableau : les deux lignes inversées");
+      sortie(T(un(sol.signe, flipS), sol.variation), "not_equivalent", ["TABLEAU_SIGNE_PARTIEL"], "tableau : signe en partie juste");
+      sortie(T(sol.signe, un(sol.variation, flipV)), "not_equivalent", ["TABLEAU_VARIATION_PARTIEL"], "tableau : variations en partie justes");
+      sortie(T(un(sol.signe, flipS), un(sol.variation, flipV)), "not_equivalent", ["TABLEAU_SIGNE_PARTIEL", "TABLEAU_VARIATION_PARTIEL"], "tableau : les deux en partie justes");
+      sortie(T(un(sol.signe, flipS), mapper(sol.variation, flipV)), "not_equivalent", ["TABLEAU_SIGNE_PARTIEL", "TABLEAU_CONCAVITE_INCORRECTE"], "tableau : signe partiel et variations inversées");
+      if (nbZeros > 0) {
+        const fausse = Object.fromEntries(Object.entries(sol.signe).map(([k, x]) => [k, x === "0" ? "+" : flipS[x]]));
+        sortie(T(fausse, sol.variation), "not_equivalent", [], "tableau : ligne de signe entièrement fausse SANS être l'inverse (aucun code)");
+      }
+      const { [Object.keys(sol.signe)[0] as string]: _retiree, ...incomplet } = sol.signe;
+      void _retiree;
+      sortie(T(incomplet, sol.variation), "parse_error", [], "tableau : case manquante");
+      sortie(T({ ...sol.signe, c0: "0" }, sol.variation), "parse_error", [], "tableau : « 0 » sur une case qui ne l'offre pas");
+      sortie(V(CHAMP_TABLEAU_SIGNES, { signe: sol.signe }), "parse_error", [], "tableau : ligne des variations absente");
+    }
+
     // ── déclaration des écrans et textes servis (un exercice sur 9, tous les pools couverts) ──
     if (i % 9 === 0) {
       const gen = genererExerciceMD(fam.id, 4242 + i);
       const ecrans: EcranDeclare[] = ecransMotifDelta(gen);
-      verifier(ecrans.map((e) => e.champ).join() === `${CHAMP_COEFFICIENTS},${CHAMP_ALLURE},${CHAMP_AXE_SOMMET},${CHAMP_DOMAINE_IMAGE},${CHAMP_RACINES}`, `${ctx} : les cinq premiers écrans, dans l'ordre`);
+      verifier(ecrans.map((e) => e.champ).join() === `${CHAMP_COEFFICIENTS},${CHAMP_ALLURE},${CHAMP_AXE_SOMMET},${CHAMP_DOMAINE_IMAGE},${CHAMP_RACINES},${CHAMP_TABLEAU_SIGNES}`, `${ctx} : les six écrans, dans l'ordre`);
       for (const e of ecrans) {
         verifier(e.nom === NOMS_ECRANS_MD[e.champ] && typeof e.poids === "number", `${ctx} / ${e.champ} : nom et poids déclarés`);
         noter(e.consigne);
@@ -171,7 +217,9 @@ for (const fam of FAMILLES) {
         noter(solutionAttendueMotifDelta(gen, e.champ));
       }
       const poids = ecrans.map((e) => e.poids).join();
-      verifier(poids === `1,1,2,1,${fam.poidsRacines}`, `${ctx} : poids 1, 1, 2, 1, ${fam.poidsRacines} (obtenu ${poids})`);
+      verifier(poids === `1,1,2,1,${fam.poidsRacines},3`, `${ctx} : poids 1, 1, 2, 1, ${fam.poidsRacines}, 3 (obtenu ${poids})`);
+      const tabEcran = ecrans.find((e) => e.champ === CHAMP_TABLEAU_SIGNES);
+      verifier(tabEcran?.type === "tableau_signes" && tabEcran.dependDe?.join() === `${CHAMP_COEFFICIENTS},${CHAMP_AXE_SOMMET},${CHAMP_RACINES}` && typeof tabEcran.aide === "object" && tabEcran.aide.type === "croquis_parabole" && tabEcran.aide.marquesOx === true, `${ctx} : tableau : dépendances, aide croquis_parabole (coefficients réels)`);
       const rac = ecrans.find((e) => e.champ === CHAMP_RACINES);
       verifier(rac?.type === "liste_valeurs" && rac.permetAucune === true && rac.aide === undefined && rac.dependDe?.join() === CHAMP_COEFFICIENTS, `${ctx} : racines : liste_valeurs permetAucune, aucune aide, dépend des coefficients`);
       const allure = ecrans.find((e) => e.champ === CHAMP_ALLURE);
@@ -200,4 +248,4 @@ if (echecs.length > 0) {
   for (const e of echecs) console.error(` - ${e}`);
   process.exit(1);
 }
-console.log(`OK : ${nb} vérifications (écrans 1 à 5 sur les pools exhaustifs des 10 familles, perturbations, codes, ${nbTextes} textes servis contrôlés)`);
+console.log(`OK : ${nb} vérifications (les six écrans sur les pools exhaustifs des 10 familles, perturbations, codes, ${nbTextes} textes servis contrôlés)`);
