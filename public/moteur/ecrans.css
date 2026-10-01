@@ -1119,6 +1119,15 @@
   overflow-wrap: anywhere;
 }
 
+/* Aperçu AVEC libellé d'auteur (« im f = ») placé au-dessus de la saisie (RAPPORT §49) : même couleur discrète, la valeur tapée par l'élève en retrait de sens. */
+.moteur-apercu-nom {
+  font-family: var(--font-corps);
+}
+
+.moteur-apercu-dessus {
+  color: var(--text);
+}
+
 /* Après verrouillage : ce que l'élève a choisi prend la couleur du verdict (violet tant que le serveur
    n'a rien dit) ; `button:disabled` (style.css) applique `opacity: 0.55`, qui délaverait cette couleur. */
 .moteur-bouton.moteur-bouton-crochet:disabled,

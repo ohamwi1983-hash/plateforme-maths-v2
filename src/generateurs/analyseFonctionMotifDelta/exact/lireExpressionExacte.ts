@@ -26,6 +26,15 @@ const DECIMALES_MAX = 9;
 
 class ErreurLecture extends Error {}
 
+/**
+ * Un fragment de la saisie de l'élève recopié dans un message : les messages sont du texte d'AUTEUR (balisage `$…$` interprété), la saisie d'un élève JAMAIS. On échappe
+ * donc `$` (`\$` = `$` littéral hors mathématiques), on retire les retours à la ligne et on tronque.
+ */
+function citer(fragment: string): string {
+  const court = fragment.length > 24 ? `${fragment.slice(0, 24)}…` : fragment;
+  return court.replace(/[\r\n]+/g, " ").replace(/\\/g, "").replace(/\$/g, "\\$");
+}
+
 const MESSAGE_VIDE = "Écris une valeur.";
 const MESSAGE_TROP_LONG = "Cette expression est trop longue.";
 const MESSAGE_PARENTHESE = "Il manque une parenthèse.";
@@ -98,7 +107,7 @@ export function lireExpressionExacte(texte: string): LectureExacte {
     }
     if (/^sqrt/i.test(brut.slice(i, i + 4))) return appelSqrt();
     const mot = /^[A-Za-zÀ-ÿ_√]+/.exec(brut.slice(i))?.[0] ?? c;
-    throw new ErreurLecture(`Je ne comprends pas « ${mot} » : pour une racine carrée, écris sqrt(2) ; sinon utilise des nombres, + − * / et des parenthèses.`);
+    throw new ErreurLecture(`Je ne comprends pas « ${citer(mot)} » : pour une racine carrée, écris sqrt(2) ; sinon utilise des nombres, + − * / et des parenthèses.`);
   }
 
   function unaire(): Exact {
@@ -151,7 +160,7 @@ export function lireExpressionExacte(texte: string): LectureExacte {
     const valeur = expression();
     if (!fin()) {
       if (courant() === ")") throw new ErreurLecture("Il y a une parenthèse fermante en trop.");
-      throw new ErreurLecture(`Je ne comprends pas « ${brut.slice(i)} » dans ta réponse.`);
+      throw new ErreurLecture(`Je ne comprends pas « ${citer(brut.slice(i))} » dans ta réponse.`);
     }
     return { ok: true, valeur, nonSimplifie };
   } catch (e) {

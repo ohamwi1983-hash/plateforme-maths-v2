@@ -5,7 +5,7 @@
  *  - `construireCroquisParabole({ a, b, c, marqueS, surlignageImf, marquesOx })` : la parabole
  *    y = ax² + bx + c, servie par l'aide typée `croquis_parabole`. Les trois croquis de gen7 (axe et
  *    sommet, domaine et image, tableau de signes) en sont des PARAMÈTRES (les surcouches).
- *  - `construireCroquisAllure({ signeA, signeAB, c })` : l'axe Oy seul, qui suit EN DIRECT les choix
+ *  - `construireCroquisAllure({ signeA, signeAB, positionSommet, c })` : l'axe Oy seul, qui suit EN DIRECT les choix
  *    locaux d'un écran `champs_multiples` (illustration, pas une aide). Purement qualitatif : il ne
  *    dépend que de deux signes et de `c`.
  *
@@ -42,8 +42,9 @@ function pgcd(x, y) {
   return a || 1;
 }
 
-/** Fraction irréductible « p/q » (ou entier) — arithmétique entière exacte. */
+/** Fraction irréductible « p/q » (ou entier) — arithmétique entière exacte ; sur des valeurs non entières (coefficients irrationnels, RAPPORT §49) : décimale arrondie. */
 export function etiquetteFraction(numerateur, denominateur) {
+  if (!Number.isInteger(numerateur) || !Number.isInteger(denominateur)) return etiquetteDecimale(numerateur / denominateur);
   let n = numerateur;
   let d = denominateur;
   if (d < 0) [n, d] = [-n, -d];
@@ -57,14 +58,18 @@ function etiquetteDecimale(v) {
   return String(Math.round(v * 100) / 100).replace(".", ",");
 }
 
-/** Racines réelles de ax²+bx+c : exactes (fractions) quand Δ est un carré parfait, décimales sinon ; `null` si Δ < 0. */
+/**
+ * Racines réelles de ax²+bx+c : exactes (fractions) quand Δ est un carré parfait, décimales sinon ; `null` si Δ < 0. Coefficients RÉELS admis (RAPPORT §49 : `b = −2√2`…) :
+ * Δ est alors un flottant, `Δ = 0` et `Δ < 0` se décident à une tolérance relative de 1e-9 (aucun effet sur des coefficients entiers, dont Δ est un entier).
+ */
 export function racinesParabole(a, b, c) {
   const delta = b * b - 4 * a * c;
-  if (delta < 0) return null;
+  const echelle = Math.max(1, b * b, Math.abs(4 * a * c));
+  if (delta < -1e-9 * echelle) return null;
   const den = 2 * a;
-  if (delta === 0) return [{ valeur: -b / den, etiquette: etiquetteFraction(-b, den) }];
+  if (Math.abs(delta) <= 1e-9 * echelle) return [{ valeur: -b / den, etiquette: etiquetteFraction(-b, den) }];
   const s = Math.round(Math.sqrt(delta));
-  const exact = s * s === delta;
+  const exact = [a, b, c].every(Number.isInteger) && s * s === delta;
   const brutes = [(-b - Math.sqrt(delta)) / den, (-b + Math.sqrt(delta)) / den].sort((x, y) => x - y);
   if (exact) {
     const [n1, n2] = [-b - s, -b + s].sort((x, y) => x / den - y / den);
@@ -78,8 +83,9 @@ export function racinesParabole(a, b, c) {
 
 /** Description textuelle du croquis de parabole (attribut `aria-label`). */
 export function descriptionCroquisParabole({ a, b, c }) {
-  const terme = (coef, suite) => (coef === 0 ? "" : `${coef < 0 ? " − " : " + "}${Math.abs(coef) === 1 && suite !== "" ? "" : Math.abs(coef)}${suite}`);
-  const corps = `${a === 1 ? "" : a === -1 ? "−" : a}x²${terme(b, "x")}${terme(c, "")}`;
+  const nombre = (v) => (Number.isInteger(v) ? v : etiquetteDecimale(v));
+  const terme = (coef, suite) => (coef === 0 ? "" : `${coef < 0 ? " − " : " + "}${Math.abs(coef) === 1 && suite !== "" ? "" : nombre(Math.abs(coef))}${suite}`);
+  const corps = `${a === 1 ? "" : a === -1 ? "−" : nombre(a)}x²${terme(b, "x")}${terme(c, "")}`;
   return `Croquis de la parabole d'équation y = ${corps}, ouverte vers le ${a > 0 ? "haut" : "bas"}.`;
 }
 
@@ -184,12 +190,19 @@ export function construireCroquisParabole(options) {
   return svg;
 }
 
+/** Position du sommet par rapport à Oy : `"gauche"`, `"axe"`, `"droite"` ou `null`. Déduite de `signeAB` (a·b > 0 : à gauche) si `positionSommet` n'est pas donnée. */
+export function positionDuSommet(signeAB, positionSommet) {
+  if (positionSommet === "gauche" || positionSommet === "axe" || positionSommet === "droite") return positionSommet;
+  return signeAB === "+" ? "gauche" : signeAB === "-" ? "droite" : signeAB === "0" ? "axe" : null;
+}
+
 /** Description textuelle du croquis d'allure, uniquement d'après les choix locaux (attribut `aria-label`). */
-export function descriptionCroquisAllure(signeA, signeAB) {
-  if (!signeA || !signeAB) return "Croquis de l'axe des ordonnées : fais tes deux choix pour voir la parabole.";
+export function descriptionCroquisAllure(signeA, signeAB, positionSommet) {
+  const position = positionDuSommet(signeAB, positionSommet);
+  if (!signeA || !position) return "Croquis de l'axe des ordonnées : fais tes deux choix pour voir la parabole.";
   const sens = signeA === "-" ? "bas" : "haut";
-  const position = signeAB === "0" ? "sur l'axe des ordonnées" : signeAB === "+" ? "à gauche de l'axe des ordonnées" : "à droite de l'axe des ordonnées";
-  return `Croquis de l'axe des ordonnées : parabole ouverte vers le ${sens}, sommet ${position}.`;
+  const lieu = position === "axe" ? "sur l'axe des ordonnées" : position === "gauche" ? "à gauche de l'axe des ordonnées" : "à droite de l'axe des ordonnées";
+  return `Croquis de l'axe des ordonnées : parabole ouverte vers le ${sens}, sommet ${lieu}.`;
 }
 
 const LARGEUR_ALLURE = 200;
@@ -201,15 +214,16 @@ const HAUTEUR_ALLURE = 180;
  * à l'origine, publique dans l'énoncé.
  * @returns {SVGSVGElement}
  */
-export function construireCroquisAllure({ signeA, signeAB, c }) {
-  const enCours = !signeA || !signeAB;
-  const svg = el("svg", { viewBox: `0 0 ${LARGEUR_ALLURE} ${HAUTEUR_ALLURE}`, role: "img", "aria-label": descriptionCroquisAllure(signeA, signeAB), focusable: "false" }, "moteur-croquis moteur-croquis-allure");
+export function construireCroquisAllure({ signeA, signeAB, positionSommet, c }) {
+  const position = positionDuSommet(signeAB, positionSommet);
+  const enCours = !signeA || !position;
+  const svg = el("svg", { viewBox: `0 0 ${LARGEUR_ALLURE} ${HAUTEUR_ALLURE}`, role: "img", "aria-label": descriptionCroquisAllure(signeA, signeAB, positionSommet), focusable: "false" }, "moteur-croquis moteur-croquis-allure");
   const marge = 22;
   const axeX = LARGEUR_ALLURE / 2;
   const sommetY = 90;
   const demiLargeur = LARGEUR_ALLURE / 2 - marge;
   const k = 60 / (demiLargeur * demiLargeur);
-  const decalage = enCours || signeAB === "0" ? 0 : signeAB === "+" ? -demiLargeur * 0.5 : demiLargeur * 0.5;
+  const decalage = enCours || position === "axe" ? 0 : position === "gauche" ? -demiLargeur * 0.5 : demiLargeur * 0.5;
   const sommetX = axeX + decalage;
   const sens = !enCours && signeA === "-" ? -1 : 1;
   const yPx = (x) => sommetY - sens * k * (x - sommetX) * (x - sommetX);

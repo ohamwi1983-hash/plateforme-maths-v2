@@ -206,6 +206,11 @@ for (const [saisie, motif] of REFUSEES) {
   }
   verifier(!l.ok && motif.test(l.message) && l.message.length > 0, `lecteur : « ${saisie.slice(0, 30)} » refusée avec un message attendu ${String(motif)} (obtenu ${l.ok ? "acceptée" : l.message})`);
 }
+// Un fragment de la saisie recopié dans un message ne doit JAMAIS ouvrir un balisage mathématique : aucun « $ » non échappé.
+for (const hostile of ["$x$", "a$b", "$$", "2$", "x$", "$sqrt(2)", "ab$cd$ef", "\\$", "$\\frac{1}{2}$"]) {
+  const l = lireExpressionExacte(hostile);
+  verifier(!l.ok && !/(^|[^\\])\$/.test(l.message), `lecteur : le message pour « ${hostile} » ne contient aucun « $ » non échappé (« ${l.ok ? "" : l.message} »)`);
+}
 for (let k = 0; k < 3000; k++) {
   const alphabet = "0123456789+-*/(),.sqrtSQRTx −";
   const n = prng.entierEntre(0, 14);

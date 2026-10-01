@@ -213,8 +213,16 @@ export interface IllustrationAllure {
   c: number;
   /** Id du sous-champ dont le choix (`"+"` | `"-"`) alimente le croquis (signe de a). */
   champSigneA: string;
-  /** Id du sous-champ dont le choix (`"+"` | `"-"` | `"0"`) alimente le croquis (signe de a·b). */
-  champSigneAB: string;
+  /**
+   * Id du sous-champ dont le choix (`"+"` | `"-"` | `"0"`) alimente le croquis (signe de a·b) : la POSITION du sommet y est déduite
+   * (a·b > 0 : à gauche de Oy ; a·b < 0 : à droite ; a·b = 0 : sur l'axe). Exactement UN de `champSigneAB` et `champPositionSommet`.
+   */
+  champSigneAB?: string;
+  /**
+   * Variante « position du sommet » (RAPPORT §49) : id du sous-champ dont le choix est `"gauche"` (x_S < 0), `"axe"` (x_S = 0) ou `"droite"` (x_S > 0) ;
+   * le croquis déplace le sommet horizontalement d'après ce choix, en gardant la concavité du sous-champ `champSigneA`. Un seul dessin, deux réglages indépendants.
+   */
+  champPositionSommet?: string;
 }
 
 export interface EcranChampsMultiples extends EcranCommun {
@@ -225,6 +233,12 @@ export interface EcranChampsMultiples extends EcranCommun {
 
 export interface EcranIntervalle extends EcranCommun {
   type: "intervalle";
+  /**
+   * Aperçu TEXTUEL en direct de l'intervalle en cours de saisie (RAPPORT §49). Absent : l'aperçu historique, sans libellé, SOUS la ligne de saisie
+   * (inchangé). `libelle` : texte d'AUTEUR (balisage `$…$` admis, rendu par `rendreTexte`), ex. `$\mathrm{im}\,f =$` ; la valeur qui suit est du texte d'ÉLÈVE,
+   * jamais interprété. `auDessus` : l'aperçu est placé AU-DESSUS de la ligne de saisie.
+   */
+  apercu?: { libelle: string; auDessus?: boolean };
 }
 
 export type EcranDeclare =
