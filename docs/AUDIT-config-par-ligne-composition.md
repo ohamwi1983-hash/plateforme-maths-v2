@@ -318,7 +318,7 @@ La décision 1 de la section 7 est tranchée par l'affirmative. Conséquences, p
 **C) Doublons exacts : fusionnés en additionnant les `nombre_exercices` — confirmé.**
 - Point d'implémentation unique : `validerComposition` (`lib/validationCorpsTaches.ts:114-128`), donc les trois routes d'écriture (`taches.ts:231`, `taches/[id].ts:42`,
   `taches-apercu.ts:106`) reçoivent la même composition normalisée. L'interface peut prévenir (« cette ligne existe déjà, les nombres seront additionnés »), jamais décider.
-- **Clé de fusion = `(variante_id, configuration canonique, chrono_duree_secondes)`** (**HYPOTHÈSE de ma part, à confirmer**). Raison : deux lignes identiques par variante et
+- **Clé de fusion = `(variante_id, configuration canonique, chrono_duree_secondes)`** (**confirmée par le propriétaire**; hypothèse initiale de ma part). Raison : deux lignes identiques par variante et
   configuration mais de durées de chrono **différentes** ne sont pas des doublons exacts ; les fusionner en silence perdrait l'une des deux durées, exactement le défaut
   « première valeur non nulle » qu'on cherche à supprimer (A.2). Elles restent donc deux lignes. Si vous préférez fusionner quand même, il faut une règle de choix de la durée
   (non proposée : toute règle serait arbitraire).
@@ -334,6 +334,11 @@ La décision 1 de la section 7 est tranchée par l'affirmative. Conséquences, p
 - Le contrat n'a donc pas besoin d'un `configurationParDefaut` : seul `validerConfiguration` est requis.
 - Interface : le contrôle d'une ligne neuve s'affiche vide ; le bouton d'enregistrement reste bloqué avec le message de B.4 tant qu'une ligne de configuration est vide.
 
+**E) Précision sur la clé de fusion (dérivée de C, sans décision nouvelle).** Le chrono par ligne n'a d'effet qu'en mode `par_ecran` (`validationCorpsTaches.ts:10-15` ; ignoré en `global` / `aucun`, mais jamais rejeté
+s'il est fourni). Pour que deux lignes ne restent pas distinctes à cause d'une durée **sans effet**, la clé de fusion lit une durée **normalisée** : `null` si `chrono_mode ≠ "par_ecran"`, la valeur sinon ;
+absent et `null` sont équivalents. L'interface n'envoie déjà pas la durée hors `par_ecran` (`prof.html:4505-4509`) : la normalisation ne protège que les appels directs à l'API. Test à prévoir : deux lignes
+identiques à durées différentes fusionnent en `global`, restent distinctes en `par_ecran`.
+
 ### Reste ouvert
 
-- Confirmer la clé de fusion de C (la durée de chrono en fait partie).
+Rien sur les décisions de conception de cette section : A à E sont tranchées. Ce qui reste est de l'exécution (non commencée), et dépend de gen8 pour la partie « contrôle de configuration d'une ligne » de l'interface.
