@@ -760,8 +760,10 @@ async function main(): Promise<void> {
       const cases = page.locator(".moteur-ligne-tableau td button");
       const n = await cases.count();
       for (let k = 0; k < n; k++) await cases.nth(k).click();
+      const saisies = (await page.evaluate(`[...document.querySelectorAll(".moteur-ecran-courant .moteur-ligne-tableau .moteur-case-signe")].map((b) => b.getAttribute("aria-label").replace(" Toucher pour changer.", ""))`)) as string[];
       await valider(page);
       await page.waitForSelector(".moteur-retour .moteur-tableau-solution");
+      const marqueesDirect = (await page.evaluate(`(() => { const c = [...document.querySelectorAll(".moteur-ecran-courant .moteur-ligne-tableau .moteur-case-signe.moteur-partie-fausse")]; if (c.length === 0) return null; const k = getComputedStyle(c[0]); return { n: c.length, couleur: k.color, bord: k.borderTopColor + " " + k.borderTopWidth, fond: k.backgroundColor }; })()`)) as { n: number; couleur: string; bord: string; fond: string } | null;
       await flou(page);
       await page.screenshot({ path: join(CAPTURES, `fidelite-app-tableau-solution-${largeur}.png`), fullPage: true });
       const S = ".moteur-retour .moteur-tableau-solution";
@@ -791,12 +793,29 @@ async function main(): Promise<void> {
       await page.waitForSelector(".moteur-ecran-termine .moteur-tableau-solution");
       await flou(page);
       await page.screenshot({ path: join(CAPTURES, `fidelite-app-tableau-solution-recap-${largeur}.png`), fullPage: true });
-      const R = ".moteur-ecran-termine .moteur-resume .moteur-tableau-solution";
+      const R = ".moteur-ecran-termine .moteur-resume .moteur-tableau-solution:not(.moteur-tableau-reponse)";
       verifier((await page.locator(R).count()) === 1, `${e} / récapitulatif : le tableau rempli est dans la carte de relecture`);
       comparer(e, "récapitulatif : cadre", REF["cadre"]!, await mesurer(page, R), ["borderTopWidth", "borderTopColor", "borderTopLeftRadius", "overflowX"]);
       comparer(e, "récapitulatif : case de signe", REF["case"]!, await mesurer(page, `${R} .moteur-rangee-signe .moteur-case-signe`), P_CASE);
       verifier(JSON.stringify(await page.evaluate(`(${hauteurs})(${JSON.stringify(R)})`)) === JSON.stringify(aCompleter), `${e} / récapitulatif : mêmes rangées et mêmes hauteurs que le tableau à compléter`);
       verifier(!(await page.evaluate("document.documentElement.scrollWidth > window.innerWidth")), `${e} / récapitulatif : pas de défilement horizontal de la page`);
+      // « Ta réponse » dessinée (RAPPORT §54) : le même tableau, rempli de CE QUE L'ÉLÈVE a confirmé, cases fausses en rouge comme sous « Valider ».
+      const RE = ".moteur-ecran-termine .moteur-resume .moteur-tableau-reponse";
+      verifier((await page.locator(RE).count()) === 1, `${e} / récapitulatif : « Ta réponse » est un tableau`);
+      verifier((await page.locator(".moteur-ecran-termine .moteur-resume:has(.moteur-tableau-reponse) .moteur-reponse-eleve").innerText()).trim() === "Ta réponse :", `${e} / récapitulatif : étiquette « Ta réponse : » puis le tableau (pas de résumé en texte en double)`);
+      comparer(e, "récapitulatif : ta réponse, cadre", REF["cadre"]!, await mesurer(page, RE), ["borderTopWidth", "borderTopColor", "borderTopLeftRadius", "overflowX"]);
+      verifier(JSON.stringify(await page.evaluate(`(${hauteurs})(${JSON.stringify(RE)})`)) === JSON.stringify(aCompleter), `${e} / récapitulatif : ta réponse a les mêmes rangées et hauteurs que le tableau à compléter`);
+      const lues = (await page.evaluate(`[...document.querySelectorAll(${JSON.stringify(RE)} + " .moteur-case-signe")].map((b) => b.getAttribute("aria-label"))`)) as string[];
+      const sansPoint = (v: string): string => (v.endsWith(".") ? v.slice(0, -1) : v);
+      verifier(lues.length === saisies.length && lues.every((v, k) => sansPoint(v) === sansPoint(saisies[k]!)), `${e} / récapitulatif : les cases rendent EXACTEMENT ce que l'élève avait saisi (${lues.length} cases ; ${lues.slice(0, 2).join(" | ")} / ${saisies.slice(0, 2).join(" | ")})`);
+      const etatRep = (await page.evaluate(`(() => { const t = document.querySelector(${JSON.stringify(RE)}); const b = [...t.querySelectorAll(".moteur-case-signe")]; return { actifs: b.filter((x) => !x.disabled || x.tabIndex !== -1).length, vides: b.filter((x) => x.getAttribute("aria-label").includes("vide")).length, fleches: t.querySelectorAll(".moteur-fleche").length, marquees: b.filter((x) => x.classList.contains("moteur-partie-fausse")).length, marques: b.filter((x) => x.classList.contains("moteur-partie-fausse")).every((x) => x.getAttribute("aria-description") === "Réponse incorrecte"), couleur: (() => { const m = b.find((x) => x.classList.contains("moteur-partie-fausse")); const k = m ? getComputedStyle(m) : null; return k ? { couleur: k.color, bord: k.borderTopColor + " " + k.borderTopWidth, fond: k.backgroundColor } : null; })(), neutres: [...new Set(b.filter((x) => !x.classList.contains("moteur-partie-fausse")).map((x) => getComputedStyle(x).color))] }; })()`)) as { actifs: number; vides: number; fleches: number; marquees: number; marques: boolean; couleur: { couleur: string; bord: string; fond: string } | null; neutres: string[] };
+      verifier(etatRep.actifs === 0 && etatRep.vides === 0, `${e} / récapitulatif : ta réponse en lecture seule, toutes cases remplies (${JSON.stringify({ actifs: etatRep.actifs, vides: etatRep.vides })})`);
+      verifier(etatRep.fleches >= 1, `${e} / récapitulatif : flèches de variation TRACÉES dans ta réponse (${etatRep.fleches})`);
+      verifier(marqueesDirect !== null && etatRep.marquees === marqueesDirect.n && etatRep.marquees >= 1 && etatRep.marques, `${e} / récapitulatif : les MÊMES cases fausses qu'après « Valider » (${etatRep.marquees} contre ${marqueesDirect?.n}), avec aria-description`);
+      verifier(marqueesDirect !== null && etatRep.couleur !== null && JSON.stringify(etatRep.couleur) === JSON.stringify({ couleur: marqueesDirect.couleur, bord: marqueesDirect.bord, fond: marqueesDirect.fond }), `${e} / récapitulatif : case fausse du récapitulatif = case fausse de l'écran courant (${JSON.stringify(etatRep.couleur)} contre ${JSON.stringify(marqueesDirect)})`);
+      verifier(etatRep.neutres.length === 1 && etatRep.neutres[0] === (REF["case"] as any).color, `${e} / récapitulatif : cases justes en texte neutre (${etatRep.neutres.join(" | ")})`);
+      await page.locator(RE).scrollIntoViewIfNeeded();
+      await page.screenshot({ path: join(CAPTURES, `fidelite-app-tableau-reponse-recap-${largeur}.png`), fullPage: true });
       await ctx.close();
     }
   }

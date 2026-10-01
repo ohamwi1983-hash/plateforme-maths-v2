@@ -1480,8 +1480,8 @@
   border-block: 0;
 }
 
-.moteur-tableau-solution .moteur-table-structure .moteur-case-signe:disabled,
-.moteur-tableau-solution .moteur-table-structure .moteur-case-signe.moteur-case-renseignee:disabled {
+.moteur-tableau-solution .moteur-table-structure .moteur-case-signe:disabled:not(.moteur-partie-fausse),
+.moteur-tableau-solution .moteur-table-structure .moteur-case-signe.moteur-case-renseignee:disabled:not(.moteur-partie-fausse) {
   color: var(--text);
   cursor: default;
 }

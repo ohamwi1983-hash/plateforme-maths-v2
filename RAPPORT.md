@@ -1772,3 +1772,16 @@ Six remarques après essai de l'aperçu de la PR #36. Livré sur une branche emp
 - **« Ta réponse » reste textuelle** dans le récapitulatif (seule la réponse ATTENDUE est un tableau) ; la dessiner aussi, avec les cases fausses en rouge, est faisable avec le même constructeur.
 - **Correction d'un test fragile** : `scenarioEtendu` attendait « un tableau à 7 colonnes » ; la solution dessinée du quotient de l'exercice 1 en est un, d'où une attente maintenant liée à « EXERCICE 2 SUR ».
 - **Portée de la solution dessinée** : tableau de signes seulement ; les autres écrans gardent leur phrase.
+
+## §54 : « Ta réponse » dessinée en tableau dans l'écran récapitulatif
+
+Demande : « Dessine aussi “Ta réponse” en tableau dans le récapitulatif » (suite de §53).
+
+**Livré.** `tableauSignes.js` : `construireLecture` (partagé avec la solution) et `reponse(ecran, valeurSaisie, partiesFausses)` ; `moteur.js` : `resumeTermine` utilise `composant.reponse` quand il existe (étiquette « Ta réponse : » puis le tableau, crayon « Modifier ma réponse » inchangé à droite de l'étiquette), sinon le résumé textuel d'avant. CSS : la couleur neutre des cases en lecture seule ne s'applique pas aux cases marquées (`:not(.moteur-partie-fausse)`, `ecrans.css`), sinon elle masquait le rouge.
+
+**Vérifications** (`chromium-design`, 1203, à 390 et 1280 px) : même cadre, mêmes rangées et mêmes hauteurs que le tableau à compléter ; les cases rendent EXACTEMENT ce que l'élève avait saisi (comparées aux libellés accessibles de l'écran courant avant « Valider ») ; lecture seule, aucune case vide, flèches tracées ; les MÊMES cases fausses qu'après « Valider », avec la même couleur, bordure et fond (mesurés), `aria-description` posé ; cases justes en texte neutre ; pas de résumé en texte en double. Mutation : désactiver l'appel à `composant.reponse` → échec. `chromium-temoin` 3083 et les 46 suites inchangés.
+
+**Écarts et risques.**
+- **Porte inchangée** : les cases rouges viennent de `parties_fausses` (§52) : sous correction coupée, ou pour une tâche antérieure sous correction forcée, la réponse est dessinée SANS cases rouges (le tableau rempli de la réponse de l'élève n'est pas une information nouvelle pour lui, comme `valeur_saisie`).
+- **Rappel gris non modifié** : « Ta réponse » y reste en texte compact ; seule la relecture (écran récapitulatif) est dessinée, comme demandé.
+- **Seul le tableau de signes** a une version dessinée de la réponse ; les autres écrans gardent leur résumé textuel.

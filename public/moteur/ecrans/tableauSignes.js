@@ -281,6 +281,38 @@ function poserReponse(ecran, cases, reponseBrute) {
   }
 }
 
+/**
+ * Tableau en LECTURE SEULE rempli de `reponseBrute` (la solution, RAPPORT §53, ou la réponse de l'élève, §54) : construit par les mêmes fonctions que le tableau à compléter, cases `disabled`.
+ * `partiesFausses` (optionnel) : identifiants `<ligne>:<ancre>` à surligner. `null` si `reponseBrute` n'est pas un objet JSON.
+ */
+function construireLecture(ecran, reponseBrute, libelleGroupe, partiesFausses) {
+  let saisie;
+  try {
+    saisie = JSON.parse(reponseBrute);
+  } catch {
+    return null;
+  }
+  if (typeof saisie !== "object" || saisie === null || Array.isArray(saisie)) return null;
+  const racine = element("div", "moteur-tableau-signes moteur-tableau-solution");
+  const cases = new Map();
+  const structure = ecran.colonnes.some((c) => c.genre !== undefined);
+  racine.classList.toggle("moteur-tableau-structure-hote", structure);
+  const rien = () => {};
+  racine.appendChild(structure ? construireStructure(ecran, cases, rien, true) : construireHeritee(ecran, cases, rien, true));
+  poserReponse(ecran, cases, reponseBrute);
+  if (aDesParties(partiesFausses)) {
+    // Carte, jamais un objet indexé par la clé reçue (RAPPORT §20) ; aucun déclencheur : une case en lecture seule ne se modifie pas, sa marque ne se périme pas.
+    creerMarquage((id) => {
+      const i = id.indexOf(":");
+      const etat = i > 0 ? cases.get(`${id.slice(0, i)}|${id.slice(i + 1)}`) : undefined;
+      return etat ? { elements: [etat.bouton] } : null;
+    }).marquer(partiesFausses);
+  }
+  racine.setAttribute("role", "group");
+  racine.setAttribute("aria-label", libelleGroupe);
+  return racine;
+}
+
 export default {
   type: "tableau_signes",
 
@@ -329,22 +361,17 @@ export default {
    * `reponseBrute` = la forme structurée envoyée par le serveur (`solution_structuree`), au format d'une réponse. `null` si elle est illisible : l'appelant retombe sur la phrase.
    */
   solution(ecran, reponseBrute) {
-    let saisie;
-    try {
-      saisie = JSON.parse(reponseBrute);
-    } catch {
-      return null;
-    }
-    if (typeof saisie !== "object" || saisie === null || Array.isArray(saisie)) return null;
-    const racine = element("div", "moteur-tableau-signes moteur-tableau-solution");
-    const cases = new Map();
-    const structure = ecran.colonnes.some((c) => c.genre !== undefined);
-    racine.classList.toggle("moteur-tableau-structure-hote", structure);
-    const rien = () => {};
-    racine.appendChild(structure ? construireStructure(ecran, cases, rien, true) : construireHeritee(ecran, cases, rien, true));
-    poserReponse(ecran, cases, reponseBrute);
-    racine.setAttribute("role", "group");
-    racine.setAttribute("aria-label", "Réponse attendue : tableau rempli");
+    return construireLecture(ecran, reponseBrute, "Réponse attendue : tableau rempli");
+  },
+
+  /**
+   * La RÉPONSE de l'élève dessinée (RAPPORT §54) : le même tableau en lecture seule, rempli de ce qu'il a confirmé ; les cases désignées par `partiesFausses` (`<ligne>:<ancre>`, §52) sont
+   * surlignées en rouge, comme après « Valider ». `reponseBrute` est du texte d'ÉLÈVE : une valeur hors de l'alphabet de sa case est ignorée (case laissée à « ? »), jamais interprétée.
+   * `null` si la réponse est illisible : l'appelant retombe sur le résumé en texte.
+   */
+  reponse(ecran, reponseBrute, partiesFausses) {
+    const racine = construireLecture(ecran, reponseBrute, "Ta réponse : tableau rempli", partiesFausses);
+    racine?.classList.add("moteur-tableau-reponse");
     return racine;
   },
 

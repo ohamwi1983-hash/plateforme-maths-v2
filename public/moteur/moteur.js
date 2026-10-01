@@ -416,16 +416,22 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
   function resumeTermine(ecran, info, crayon) {
     const bloc = creer("div", "moteur-resume");
     if (info.valeur_saisie !== null) {
+      const composant = composantPour(ecran);
+      // Un écran dont le composant sait DESSINER la réponse (tableau de signes, RAPPORT §54) la montre comme l'écran lui-même ; sinon, le résumé en texte.
+      const dessin = typeof composant.reponse === "function" ? composant.reponse(ecran, info.valeur_saisie, info.parties_fausses) : null;
       const reponse = creer("p", "moteur-reponse-eleve");
-      const valeur = creer("span", "moteur-valeur");
-      rendrePieces(valeur, composantPour(ecran).resumer(ecran, info.valeur_saisie, info.parties_fausses));
-      reponse.append(creer("span", "moteur-etiquette", "Ta réponse : "), valeur);
+      if (dessin === null) {
+        const valeur = creer("span", "moteur-valeur");
+        rendrePieces(valeur, composant.resumer(ecran, info.valeur_saisie, info.parties_fausses));
+        reponse.append(creer("span", "moteur-etiquette", "Ta réponse : "), valeur);
+      } else reponse.append(creer("span", "moteur-etiquette", "Ta réponse :"));
       if (crayon) {
         const ligne = creer("div", "moteur-ligne-reponse");
         ligne.append(reponse, crayon);
         bloc.appendChild(ligne);
         crayon = null;
       } else bloc.appendChild(reponse);
+      if (dessin !== null) bloc.appendChild(dessin);
     }
     if (crayon) bloc.appendChild(crayon); // (jamais sans réponse en pratique : « modifiable » suppose une réponse)
     if (info.statut !== null) bloc.appendChild(creer("p", "moteur-statut moteur-statut-" + info.statut, LIBELLES_STATUT[info.statut]));
