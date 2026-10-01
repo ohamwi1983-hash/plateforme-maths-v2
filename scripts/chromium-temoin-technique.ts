@@ -720,6 +720,62 @@ async function verifierBlocsRelecturePleineLargeur(page: any, etiquette: string,
   }
 }
 
+/**
+ * RAPPORT §48 : « Modifier ma réponse » n'est plus un gros bouton mais un CRAYON (modèle A du propriétaire : pastille ronde `--violet-clair` de 32 px, à droite)
+ * à côté de chaque réponse — dans le rappel gris (une ligne par écran répondu) et dans la relecture (à droite du bloc « Ta réponse »). Mesuré sur le style CALCULÉ :
+ * le bouton global du site (`min-height: 44px`, padding 9×18, ombre violette, survol `brightness`) ne doit RIEN laisser filtrer.
+ */
+async function verifierCrayons(page: any, etiquette: string, largeur: number, endroit: "rappel" | "relecture") {
+  await page.mouse.move(0, 0); // état NEUTRE : un crayon survolé prend (voulu) le fond plein --violet-vif
+  await page.waitForTimeout(300);
+  const m = (await page.evaluate(`(() => {
+    const sonde = (prop, valeur) => { const e = document.createElement("i"); e.style[prop] = valeur; document.body.appendChild(e); const v = getComputedStyle(e)[prop]; e.remove(); return v; };
+    const violetClair = sonde("backgroundColor", "var(--violet-clair)"), violetVif = sonde("color", "var(--violet-vif)"), violetVifFond = sonde("backgroundColor", "var(--violet-vif)");
+    const racine = ${endroit === "rappel" ? `".moteur-rappel"` : `".moteur-ecran-termine"`};
+    const crayons = [...document.querySelectorAll(racine + " .moteur-crayon")].map((b) => {
+      const r = b.getBoundingClientRect(), st = getComputedStyle(b), svg = b.querySelector("svg"), sr = svg ? svg.getBoundingClientRect() : null;
+      const hote = b.closest(${endroit === "rappel" ? `".moteur-rappel"` : `".moteur-ecran-termine"`}).getBoundingClientRect();
+      const voisin = ${endroit === "rappel" ? `b.closest(".moteur-rappel-ligne")` : `b.closest(".moteur-ecran-termine")`};
+      const reponse = ${endroit === "rappel" ? `b.closest(".moteur-rappel-ligne").querySelector(".moteur-rappel-corps")` : `b.closest(".moteur-ecran-termine").querySelector(".moteur-reponse-eleve")`};
+      const rr = reponse ? reponse.getBoundingClientRect() : null;
+      return { l: r.width, h: r.height, x: r.left, droite: r.right, haut: r.top + window.scrollY, bas: r.bottom + window.scrollY, hoteDroite: hote.right,
+        rayon: st.borderTopLeftRadius, fond: st.backgroundColor, couleur: st.color, ombre: st.boxShadow, bord: st.borderTopWidth, margeBas: st.marginBottom, minH: st.minHeight,
+        svgL: sr ? sr.width : null, label: b.getAttribute("aria-label"), titre: b.getAttribute("title"), type: b.getAttribute("type"), tag: b.tagName,
+        aDroiteDeLaReponse: rr ? r.left >= rr.right - 1 : null, chevauche: rr ? (r.top < rr.bottom && r.bottom > rr.top) : null, ligneH: voisin ? voisin.getBoundingClientRect().height : null,
+        classeLigne: voisin ? voisin.className : "" };
+    });
+    return { violetClair, violetVif, violetVifFond, crayons, gros: document.querySelectorAll(".moteur-bouton-modifier").length };
+  })()`)) as any;
+  verifier(m.gros === 0, `${etiquette} (${largeur}px) : plus aucun gros bouton « Modifier ma réponse » (.moteur-bouton-modifier : ${m.gros})`);
+  verifier(m.crayons.length > 0, `${etiquette} (${largeur}px) : au moins un crayon dans ${endroit}`);
+  let precedentBas = -Infinity;
+  for (const [i, c] of m.crayons.entries()) {
+    const e = `${etiquette} (${largeur}px) crayon ${i + 1}`;
+    verifier(c.tag === "BUTTON" && c.type === "button", `${e} : un vrai <button type="button">`);
+    verifier(c.l === 32 && c.h === 32, `${e} : 32 × 32 px (obtenu ${c.l} × ${c.h}) : le \`min-height: 44px\` du bouton global ne filtre pas`);
+    verifier(c.rayon === "16px" || c.rayon === "50%", `${e} : rond (rayon ${c.rayon})`);
+    verifier(c.fond === m.violetClair && c.couleur === m.violetVif, `${e} : fond --violet-clair et icône --violet-vif (${c.fond} / ${c.couleur})`);
+    verifier(c.ombre === "none" && c.bord === "0px" && c.margeBas === "0px" && c.minH === "0px", `${e} : ni ombre, ni bord, ni marge, ni hauteur mini hérités (${c.ombre} / ${c.bord} / ${c.margeBas} / ${c.minH})`);
+    verifier(c.svgL === 16, `${e} : icône SVG de 16 px (${c.svgL})`);
+    verifier(typeof c.label === "string" && /^Modifier ma réponse à l'écran « .+ »$/.test(c.label) && c.titre === "Modifier", `${e} : libellé accessible explicite + infobulle (« ${c.label} » / « ${c.titre} »)`);
+    verifier(c.haut >= precedentBas - 0.5, `${e} : ne chevauche pas le crayon précédent (haut ${c.haut} ≥ bas précédent ${precedentBas})`);
+    precedentBas = c.bas;
+    if (endroit === "rappel") {
+      verifier(/moteur-rappel-ligne-modifiable/.test(c.classeLigne) && c.ligneH >= 32, `${e} : sa ligne est « modifiable » et fait au moins 32 px (${c.ligneH})`);
+      const retrait = c.hoteDroite - c.droite; // bord (1 px bureau, 0 mobile) + padding de 16 px
+      verifier(retrait >= 15 && retrait <= 17.5, `${e} : aligné à droite du panneau gris, à ${retrait} px du bord`);
+    } else {
+      verifier(c.aDroiteDeLaReponse === true && c.chevauche === true, `${e} : à droite du bloc « Ta réponse », à la même hauteur`);
+    }
+  }
+  // Survol : fond plein --violet-vif, icône --surface, et le `filter: brightness` du bouton global ne s'applique pas.
+  const premier = page.locator(`${endroit === "rappel" ? ".moteur-rappel" : ".moteur-ecran-termine"} .moteur-crayon`).first();
+  await premier.hover();
+  const h = (await premier.evaluate((el: unknown) => { const st = getComputedStyle(el); return { fond: st.backgroundColor, couleur: st.color, filtre: st.filter }; })) as { fond: string; couleur: string; filtre: string };
+  verifier(h.fond === m.violetVifFond && h.couleur === "rgb(255, 255, 255)" && h.filtre === "none", `${etiquette} (${largeur}px) : survol = fond --violet-vif, icône blanche, aucun filtre (${JSON.stringify(h)})`);
+  await page.mouse.move(0, 0);
+}
+
 /** Valeur courante lue dans l'`aria-label` d'une case (« … : + . Toucher pour changer. ») ; « vide » = `?`. */
 const valeurDeCase = async (bouton: any) => ((await bouton.getAttribute("aria-label")) ?? "").replace(/^.*: ([^:]*)\. Toucher pour changer\.$/, "$1");
 
@@ -1715,6 +1771,16 @@ async function scenarioRetourArriere(navigateur: any, base: string, largeur: num
   }
   await page.waitForSelector(".moteur-remise");
   verifier((await page.getByRole("button", { name: "Modifier ma réponse" }).count()) === 8, `${l} : « Modifier ma réponse » sur chacun des 8 écrans`);
+  await verifierCrayons(page, `${l} relecture`, largeur, "relecture");
+  verifier((await page.locator(".moteur-ecran-termine .moteur-crayon").count()) === 8, `${l} relecture : un crayon par carte (8)`);
+  verifier(/crayon/i.test((await page.locator(".moteur-remise .moteur-message").innerText()) ?? ""), `${l} : le panneau de remise parle du CRAYON, plus d'un bouton « Modifier ma réponse »`);
+  // Clavier : Entrée sur le crayon (vrai <button>) rouvre l'écran, comme un clic.
+  await page.locator(".moteur-ecran-termine .moteur-crayon").first().focus();
+  await page.keyboard.press("Enter");
+  await page.waitForSelector(".moteur-ecran-courant");
+  verifier((await page.getByRole("button", { name: "Annuler" }).count()) === 1, `${l} relecture : Entrée sur le crayon ouvre l'écran à modifier (« Annuler » proposé)`);
+  await page.getByRole("button", { name: "Annuler" }).click();
+  await page.waitForSelector(".moteur-remise");
   verifier((await page.locator(".moteur-ecran-courant").count()) === 0 && (await sansVerdict()), `${l} : panneau « Rendre » affiché, rien de corrigé`);
   await page.screenshot({ path: join(CAPTURES, `${l}-01-panneau-remise.png`), fullPage: true });
 
@@ -1736,7 +1802,12 @@ async function scenarioRetourArriere(navigateur: any, base: string, largeur: num
     if (champ === "racinesChamp2") verifier((await courant.locator(".moteur-liste-ligne .moteur-champ").count()) === 2, `${l} : liste_valeurs pré-rempli (2 valeurs)`);
     if (champ === "domaineImage") verifier((await courant.locator(".moteur-apercu").textContent()) !== "?… ; …?" && (await courant.locator(".moteur-bouton-crochet").first().textContent()) !== "?", `${l} : intervalle pré-rempli`);
     if (champ === "tableauSignes") verifier((await courant.locator(".moteur-case-renseignee").count()) === (await courant.locator(".moteur-case-signe").count()), `${l} : tableau_signes pré-rempli (toutes les cases renseignées)`);
-    if (champ === "racinesChamp1") await page.screenshot({ path: join(CAPTURES, `${l}-02-modification-prerempli.png`), fullPage: true });
+    if (champ === "racinesChamp1") {
+      await page.screenshot({ path: join(CAPTURES, `${l}-02-modification-prerempli.png`), fullPage: true });
+      // RAPPORT §48 : pendant la modification d'un écran, le rappel gris porte un crayon par AUTRE écran répondu (7 sur 8), jamais un gros bouton.
+      await verifierCrayons(page, `${l} rappel`, largeur, "rappel");
+      verifier((await page.locator(".moteur-rappel .moteur-crayon").count()) === 7, `${l} rappel : un crayon pour chacun des 7 autres écrans répondus`);
+    }
     const message = await validerRetour(/Revoir mes réponses|Continuer/);
     verifier(message.includes("Réponse inchangée."), `${l} / ${champ} : re-valider sans changer = « inchangée » (« ${message} »)`);
     await page.waitForSelector(".moteur-remise");

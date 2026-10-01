@@ -1,0 +1,43 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Référence — crayon « Modifier ma réponse » (rappel gris et relecture)</title>
+<!-- RÉFÉRENCE du CRAYON « Modifier ma réponse » (RAPPORT §48) : modèle A choisi par le propriétaire sur maquette — pastille ronde de 32 px, fond `--violet-clair`,
+     icône de crayon (SVG de 16 px, trait de 2 px, `currentColor` = `--violet-vif`), à DROITE de la réponse. Deux emplacements, un seul composant :
+       1. le RAPPORT : une ligne du panneau gris (marque 20 px + nom + réponse) dont le crayon est le dernier enfant ; la ligne fait au moins 32 px de haut,
+          le texte est décalé de 7 px et la marque de 6 px pour rester centrés sur le crayon ;
+       2. la RELECTURE : à droite du bloc « Ta réponse », centré verticalement sur lui.
+     Exprimée UNIQUEMENT avec les valeurs des tokens de `:root` (public/style.css). Le bouton global du site (min-height 44 px, padding 9 × 18, bord 2 px, ombre
+     violette, marge) est volontairement ABSENT ici : l'application doit le neutraliser. scripts/chromium-fidelite-design.ts rend ce fichier et l'application à 390 et
+     1280 px et compare les styles CALCULÉS. Le survol (fond plein `--violet-vif`, icône `--surface`) et le focus clavier (contour 2 px `--violet-vif`, décalage 2 px)
+     sont décrits ici et mesurés dans scripts/chromium-temoin-technique.ts (verifierCrayons). -->
+<style>
+  body { margin: 0; background: #FAF9FC; font-family: 'Inter', sans-serif; color: #1C1730; line-height: 1.5; }
+  .rappel { background: #F6F3FB; border: 1px solid #E9E4F3; border-radius: 13px; padding: 14px 16px; margin: 0; max-width: 480px; }
+  .ligne { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+  .marque { flex: none; width: 20px; height: 20px; margin-top: 6px; border-radius: 50%; background: #F1EBFC; color: #3B1470; font-size: 12px; font-weight: 700; line-height: 1; display: flex; align-items: center; justify-content: center; }
+  .corps { flex: 1; min-width: 0; padding-top: 7px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+  .nom { font-size: 13px; font-weight: 700; }
+  .valeur { font-family: 'Fraunces', serif; font-size: 14px; }
+  .crayon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; min-height: 0; margin: 0 0 0 auto; padding: 0; border: 0; border-radius: 50%; background: #F1EBFC; color: #7C3AED; box-shadow: none; cursor: pointer; -webkit-appearance: none; appearance: none; }
+  .crayon svg { display: block; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .relecture { display: flex; align-items: center; gap: 8px; margin-top: 24px; max-width: 480px; }
+  .reponse { flex: 1; min-width: 0; margin: 0; padding: 8px 16px; border-radius: 13px; background: #FFFFFF; border: 1px solid #E9E4F3; }
+  @media (max-width: 600px) { .rappel { max-width: none; border-width: 1px 0; border-radius: 0; } .relecture { max-width: none; } }
+</style>
+<body>
+<div data-ref="rappel" class="rappel">
+  <div data-ref="ligne" class="ligne">
+    <span data-ref="marque" class="marque">•</span>
+    <div data-ref="corps" class="corps"><span class="nom">Somme :</span><span class="valeur">12+</span></div>
+    <button data-ref="crayon" type="button" class="crayon" aria-label="Modifier ma réponse à l'écran « Somme »" title="Modifier">
+      <svg data-ref="icone" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+    </button>
+  </div>
+</div>
+<div data-ref="relecture" class="relecture">
+  <p data-ref="reponse" class="reponse">Ta réponse : 12+</p>
+  <button data-ref="crayon-relecture" type="button" class="crayon" aria-label="Modifier ma réponse à l'écran « Somme »" title="Modifier">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+  </button>
+</div>
+</body>

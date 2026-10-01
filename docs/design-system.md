@@ -155,6 +155,7 @@ structure, deux mises en page en CSS seul).
 | Panneau gris | `--surface-sunken`, filet `--border`, padding 14 × 16 px ; arrondi `--radius-sm` sur bureau, filets haut et bas seulement sur mobile |
 | Piste de progression | 12 px de haut, fond `--violet-clair`, pilule ; un segment par écran |
 | Ligne du rappel | marque ronde de 20 px + nom (13 px gras) + réponse d'ÉLÈVE (`--font-marque` 14 px) ; l'écran courant : cercle numéroté `--violet-vif` |
+| Crayon « Modifier ma réponse » (RAPPORT §48) | pastille ronde de 32 px `--violet-clair`, icône SVG de 16 px (trait de 2 px, `--violet-vif`), à droite de la ligne du rappel et du bloc « Ta réponse » de la relecture ; survol : fond `--violet-vif`, icône `--surface` ; focus : contour 2 px `--violet-vif`. Référence : `docs/reference/crayon-modifier.html` |
 
 **Marques et segments** (couleur = le verdict que le **serveur** a décidé de montrer, `info.statut`) : `correct` → `--vert-vif` (✓), `not_equivalent`
 → `--danger` (✕), `parse_error` → `--ambre` (!), **sans verdict** (correction coupée, `statut = null`) → marque `--violet-clair` (•) et segment
