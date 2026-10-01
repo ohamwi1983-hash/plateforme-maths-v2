@@ -1651,7 +1651,7 @@ tranche : la cible prime sur mobile. Cela rend caduque cette décision et change
 
 ## §49 : gen7 reconstruit — deux familles, dix sous-variantes (`af_motif_*` ×7, `af_delta_*` ×3), calcul exact, six écrans
 
-Exécution de `PROMPT-gen7-v2-reconstruction.md`, après le rapport d'état des lieux `docs/gen7-v2-etat-des-lieux.md` (13 divergences D1–D13, 9 questions) et les réponses du propriétaire (Q1–Q9, ci-dessous). Livrable lisible : `docs/gen7-v2-livrable.md`. Branche `gen7-v2`, huit commits, une PR.
+Exécution de `PROMPT-gen7-v2-reconstruction.md`, après le rapport d'état des lieux `docs/gen7-v2-etat-des-lieux.md` (13 divergences D1–D13, 9 questions) et les réponses du propriétaire (Q1–Q9, ci-dessous). Livrable lisible : `docs/gen7-v2-livrable.md`. Branche `gen7-v2`, onze commits (2 de documentation, C1 à C8), une PR.
 
 **Livré (citations exactes).**
 - *Calcul exact* : espace vectoriel ℚ(√r) (`src/generateurs/analyseFonctionMotifDelta/exact/`), division par un rationnel seulement, signe par approximation flottante mais zéro EXACT ; lecteur de saisie `lireExpressionExacte` (`exact/lireExpressionExacte.ts:42`) ; comparaison hybride (Q5) `comparerValeur` (`comparaison.ts:25`) : ±0,005 si l'attendu est rationnel, exacte s'il comporte une racine. Une racine non simplifiée donne `RACINE_NON_SIMPLIFIEE`.
