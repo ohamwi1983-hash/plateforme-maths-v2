@@ -1,0 +1,27 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Référence — bouton « Besoin d'un indice ? » : jaunâtre, avec une ampoule (RAPPORT §53)</title>
+<!-- RÉFÉRENCE du BOUTON D'AIDE d'un écran : un bouton de la famille ambre (la zone d'indice qu'il ouvre est déjà `--ambre-clair`) avec une icône d'AMPOULE devant le libellé. Exprimée UNIQUEMENT avec
+     les valeurs des tokens de `:root` (public/style.css) : aucune valeur nouvelle. scripts/chromium-fidelite-design.ts rend ce fichier et l'application à 390 et 1280 px et compare les styles CALCULÉS.
+       - fond `--ambre-clair`, filet de 2 px `--ambre-vif`, texte `--text` (le texte ambre sur ambre clair ne passerait pas 4,5:1) ;
+       - ampoule de 20 px : verre `--ambre-vif`, contour et culot `currentColor` ; icône DÉCORATIVE (`aria-hidden`), le nom accessible reste le libellé ;
+       - gabarit du `.moteur-bouton` du moteur (600, 8 × 16 px, 44 px de haut) : SEULES les couleurs et l'icône changent ; l'espacement de 12 px autour du bouton est inchangé ;
+       - la zone d'indice qu'il ouvre est `--ambre-clair` pour TOUTES les aides, y compris les aides typées (formule colorée, croquis). -->
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #FFFFFF; font-family: 'Inter', sans-serif; color: #1C1730; line-height: 1.5; }
+  .env { max-width: 688px; padding: 24px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+  .aide-bouton { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 16px; box-sizing: border-box; font-family: 'Inter', sans-serif; font-size: 16px; font-weight: 600; color: #1C1730; background: #FDF1E2; border: 2px solid #F5A623; border-radius: 13px; cursor: pointer; }
+  .aide-bouton svg { flex: none; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .aide-bouton .verre { fill: #F5A623; }
+  .aide-texte { margin: 0; padding: 10px 14px; background: #FDF1E2; color: #1C1730; border-radius: 13px; font-size: 14.4px; }
+</style>
+<body>
+<div class="env">
+  <button data-ref="bouton" class="aide-bouton" type="button">
+    <svg data-ref="icone" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path data-ref="verre" class="verre" d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2V17h6v-.3c0-.8.4-1.5 1-2A7 7 0 0 0 12 2z"/><path d="M9 20h6"/><path d="M10 23h4"/></svg>
+    <span data-ref="libelle">Besoin d'un indice ?</span>
+  </button>
+  <p data-ref="texte" class="aide-texte">1) Le signe de a donne le sens de la parabole.</p>
+</div>
+</body>

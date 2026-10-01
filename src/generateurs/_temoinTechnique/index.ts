@@ -709,6 +709,11 @@ export const generateurTemoinTechnique: Generateur<ExerciceTemoin> = {
     }
     throw new Error(`Champ inconnu pour ${VARIANTE_TEMOIN} : ${champ}`);
   },
+
+  /** RAPPORT §53 : les deux tableaux STRUCTURÉS du profil `etendu` ont une forme dessinable (le tableau rempli) ; le tableau hérité de la Section A reste une phrase. */
+  solutionStructuree(ex: ExerciceTemoin, champ: string): string | null {
+    return champ === CHAMP_SIGNES_VARIATION || champ === CHAMP_QUOTIENT ? reponseBruteCorrecte(ex, champ) : null;
+  },
 };
 
 /**

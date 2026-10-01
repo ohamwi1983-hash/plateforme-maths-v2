@@ -38,6 +38,9 @@ if (entree7) {
   verifier(entree7.variantes.map((v) => v.label).join("|") === gen7.map((e) => e.label).join("|"), "JSON : libellés IDENTIQUES mot pour mot à CATALOGUE_GENERATEURS, dans le même ordre");
   verifier(entree7.variantes.slice(0, 7).every((v) => v.axe === "sans discriminant") && entree7.variantes.slice(7).every((v) => v.axe === "avec discriminant"), "JSON : sept « sans discriminant » puis trois « avec discriminant »");
   verifier(entree7.variantes.every((v) => typeof v.exemple === "string" && v.exemple.length > 20), "JSON : chaque variante a un exemple");
+  // Présentation prof (RAPPORT §53) : deux sous-groupes, via le mécanisme `groupe` déjà utilisé par gen13 ; la correspondance par INDEX (CORRESPONDANCE_JSON_VERS_PILOTE) n'est pas touchée.
+  const groupes = (entree7.variantes as { groupe?: string }[]).map((v) => v.groupe);
+  verifier(groupes.slice(0, 7).every((g) => g === "Sans discriminant") && groupes.slice(7).every((g) => g === "Avec discriminant"), "JSON : `groupe` = « Sans discriminant » (7 premières) puis « Avec discriminant » (3 dernières)");
   verifier(FAMILLES.slice(0, 7).every((f) => f.groupe === "motif") && FAMILLES.slice(7).every((f) => f.groupe === "delta"), "familles : sept « motif » puis trois « delta »");
 }
 

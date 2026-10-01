@@ -99,7 +99,7 @@ export function fonctionExacte(a: Coef, b: Coef, c: Coef): FonctionExacte | null
  *  - `coefficientsEleve` : les coefficients effectifs sont ceux de l'élève ET diffèrent des vrais ;
  *  - `coefficientsAffiches` : coefficients confirmés exploitables (justes OU faux) : l'énoncé suivant affiche SA fonction avec le MÊME libellé dans les deux cas (un libellé propre
  *    à l'erreur serait un verdict visible sous correction coupée) ;
- *  - `yImage` / `ordonneeEleve` / `ordonneeAffichee` : ordonnée du sommet confirmée à `axeSommet` (même logique), `null` = celle de la fonction effective.
+ *  - `yImage` : ordonnée du sommet confirmée à `axeSommet` (même logique), `null` = celle de la fonction effective ; elle sert à JUGER l'ensemble-image, jamais à l'AFFICHER (RAPPORT §53).
  */
 export interface DonneesEffectivesMotifDelta {
   a: Coef;
@@ -108,7 +108,6 @@ export interface DonneesEffectivesMotifDelta {
   coefficientsEleve: boolean;
   coefficientsAffiches: boolean;
   yImage: Coef | null;
-  ordonneeAffichee: boolean;
 }
 
 export interface ExerciceMotifDelta {
@@ -125,7 +124,7 @@ export interface ExerciceMotifDelta {
 }
 
 export function effectifVraiMD(a: Coef, b: Coef, c: Coef): DonneesEffectivesMotifDelta {
-  return { a, b, c, coefficientsEleve: false, coefficientsAffiches: false, yImage: null, ordonneeAffichee: false };
+  return { a, b, c, coefficientsEleve: false, coefficientsAffiches: false, yImage: null };
 }
 
 /** Fonction VRAIE de l'exercice (jamais `null` : les coefficients générés sont exploitables par construction). */

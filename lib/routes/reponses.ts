@@ -3,6 +3,7 @@ import { avecGestionErreurs } from "../avecGestionErreurs";
 import { eleveAuthentifie, supabaseAdmin } from "../supabaseAdmin";
 import { verifierAvecControle } from "../registreGenerateurs";
 import { partiesFaussesDe } from "../partiesFausses";
+import { solutionStructureeSiMontree } from "../solutionStructuree";
 import { calculerEtatExercice, chargerContexteTache, chargerDonneesExercice, COLONNES_EXERCICE_ASSIGNE, projeterExercice, regenererExercice, revelationFinDeTache, tacheEstCompletePourEleve, type LigneExerciceAssigne } from "../etatExercice";
 import { calculerDureeEcouleeSecondes, horodatageDebutPertinent } from "../moteurTentatives";
 import { construireChampVue, REGLAGES_FORCEES_ANTERIEURES } from "../tableauDeBord";
@@ -175,11 +176,13 @@ export const gererReponses = avecGestionErreurs(async function handler(req: Requ
   const reveleTout = revelationFinDeTache(contexte, tacheTerminee);
   const reponseRetenue = identique ? { valeur_saisie: champAvant.derniere!.valeur_saisie, statut: champAvant.derniere!.statut } : { valeur_saisie: reponse_brute, statut: resultat.statut };
   const vue = construireChampVue(champ, reponseRetenue, regenere.generateur.solutionAttendue(projete.exercice, champ), reveleTout ? REGLAGES_FORCEES_ANTERIEURES : contexte.reglages, reveleTout, champApres.etat);
+  const solutionStructuree = solutionStructureeSiMontree(regenere.generateur, projete.exercice, champ, vue.solution_attendue);
   // `verrouille` pour le client = « ne peut plus être modifié » : un champ répondu mais modifiable (retour en arrière) n'est pas verrouillé.
   const verrouilleClient = champApres.verrouille && !champApres.modifiable;
   res.status(200).json({
     ...(vue.statut !== null ? { statut: vue.statut } : {}),
     ...(vue.solution_attendue !== null ? { solution_attendue: vue.solution_attendue } : {}),
+    ...(solutionStructuree !== null ? { solution_structuree: solutionStructuree } : {}),
     ...(resultat.statut === "parse_error" && contexte.reglages.feedback_immediat ? { message_erreur: resultat.messageErreur } : {}),
     // Parties à surligner en rouge (RAPPORT §52) : sous correction immédiate seulement (porte unique : `lib/partiesFausses.ts`).
     ...(() => {

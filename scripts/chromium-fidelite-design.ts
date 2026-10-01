@@ -269,6 +269,15 @@ async function main(): Promise<void> {
     const touche = (await page.evaluate(`(() => { const b = document.querySelector("${C} .moteur-bouton-crochet"); const r = b.getBoundingClientRect(); const cx = r.left + r.width / 2, cy = r.top + r.height / 2; const test = (x, y) => document.elementFromPoint(x, y) === b; return { interieur: test(cx, cy), gauche: test(r.left - 5, cy), droite: test(r.right + 5, cy), haut: test(cx, r.top - 5), bas: test(cx, r.bottom + 5), loin: test(r.left - 9, cy) }; })()`)) as Record<string, boolean>;
     verifier(touche.interieur && touche.gauche && touche.droite && touche.haut && touche.bas && !touche.loin, `intervalle : zone tactile de 44×44 px (touchée à 5 px, plus à 9 px) : ${JSON.stringify(touche)}`);
     verifier(dims.borne === 64, `intervalle : champs de borne de 64 px de large (${dims.borne})`);
+    // UNE SEULE LIGNE à toute largeur (RAPPORT §53) : les 7 éléments ont le même centre vertical et la ligne ne déborde pas, même à 320 px.
+    for (const largeur of [390, 360, 320]) {
+      await page.setViewportSize({ width: largeur, height: 800 });
+      const ligne = (await page.evaluate(`(() => { const l = document.querySelector("${C} .moteur-intervalle-ligne"); const r = l.getBoundingClientRect(); const e = [...l.children].map((c) => { const b = c.getBoundingClientRect(); return { n: c.className, cy: Math.round((b.top + b.height / 2) * 10) / 10, g: b.left, d: b.right }; }); return { n: e.length, cys: e.map((x) => x.cy), bornes: [...l.querySelectorAll('.moteur-champ-borne')].map((b) => Math.round(b.getBoundingClientRect().width)), droite: Math.max(...e.map((x) => x.d)), gauche: Math.min(...e.map((x) => x.g)), ligne: [r.left, r.right], fenetre: window.innerWidth, debordPage: document.documentElement.scrollWidth > window.innerWidth }; })()`)) as { n: number; cys: number[]; bornes: number[]; droite: number; gauche: number; ligne: number[]; fenetre: number; debordPage: boolean };
+      verifier(ligne.n === 7 && Math.max(...ligne.cys) - Math.min(...ligne.cys) <= 1, `intervalle à ${largeur} px : les 7 éléments sur UNE ligne (centres verticaux ${JSON.stringify(ligne.cys)})`);
+      // La cible tactile des crochets (::after, −8 px) dépasse volontairement la ligne : on mesure les ÉLÉMENTS, pas scrollWidth.
+      verifier(!ligne.debordPage && ligne.droite <= ligne.ligne[1] + 0.5 && ligne.gauche >= ligne.ligne[0] - 0.5 && ligne.bornes.every((b) => b >= 40), `intervalle à ${largeur} px : aucun débordement (${JSON.stringify(ligne)})`);
+    }
+    await page.setViewportSize({ width: 390, height: 800 });
     await ctx.close();
   }
   // ── Enveloppe de l'exercice (RAPPORT §43) : docs/reference/enveloppe-exercice.html, à 390 ET 1280 px ──
@@ -545,6 +554,45 @@ async function main(): Promise<void> {
     }
   }
 
+  // Aides communes aux blocs gen7 ci-dessous (parties fausses, bouton d'aide).
+  /** Session gen7 (correction immédiate, essais selon `tentatives`) ; `pre` = écrans répondus par l'API avant l'ouverture. */
+  async function ouvrirGen7(largeur: number, tentatives: number, pre: [string, unknown][], options: { aide?: boolean; solution?: boolean } = {}) {
+    imposerProfilAssignation("aleatoire");
+    const s = creerScenario();
+    installerBase(s.base);
+    const tid = creerTache(s, { nom: "Fidélité parties fausses", feedback_immediat: true, reponse_visible: options.solution ?? false, tentatives_supplementaires: tentatives, aide_activee: options.aide ?? false, variantes: [{ variante_id: "af_delta_racines_rationnelles", nombre_exercices: 1 }] });
+    const o = Math.random;
+    Math.random = () => 4242 / 2 ** 32;
+    try {
+      const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tid, eleve_ids: ["eleve-1"] } });
+      if (a.statut !== 201) throw new Error("assignation " + a.statut);
+    } finally {
+      Math.random = o;
+    }
+    const ligne = s.base.table("exercices_assignes")[0]!;
+    const ex = genererExerciceMD("af_delta_racines_rationnelles", Number(ligne.graine));
+    for (const [champ, brut] of pre) {
+      const r = await appeler("reponses", "POST", { jeton: "eleve:eleve-1", corps: { exercice_assigne_id: ligne.id, champ, reponse_brute: brut === "@juste" ? reponseBruteCorrecteMotifDelta(ex, champ) : typeof brut === "string" ? brut : JSON.stringify(brut) } });
+      if (r.statut !== 200) throw new Error(`préparation ${champ} : ${r.statut} ${JSON.stringify(r.corps)}`);
+    }
+    const ctx = await navigateur.newContext({ viewport: { width: largeur, height: 900 }, hasTouch: largeur < 600 });
+    const page = await ctx.newPage();
+    await page.route("**/unpkg.com/@supabase/supabase-js**", (r: any) => r.fulfill({ contentType: "text/javascript", body: stubSupabase("eleve:eleve-1", "e1@x") }));
+    await page.route("**/fonts.googleapis.com/**", (r: any) => r.fulfill({ contentType: "text/css", body: "" }));
+    await page.route("**/fonts.gstatic.com/**", (r: any) => r.abort());
+    await page.addInitScript(`localStorage.setItem("eleve-profil-cache", JSON.stringify({ affichage: "Test eleve-1", prenom: "Test", nom: "eleve-1" }));`);
+    await page.goto(srv.url + "/eleve.html");
+    await page.waitForSelector(".carte-tache");
+    await page.locator(".carte-tache").click();
+    await page.waitForSelector(".moteur-ecran-courant");
+    return { page, ctx };
+  }
+  const valider = async (page: any) => {
+    await page.locator(".moteur-ecran-courant").getByRole("button", { name: "Valider", exact: true }).click();
+    await page.waitForSelector(".moteur-ecran-courant .moteur-retour .moteur-statut");
+  };
+
+
   // ── Parties fausses (RAPPORT §52) : docs/reference/parties-fausses.html, à 390 ET 1280 px ──
   {
     const refPF = readFileSync(join(RACINE, "docs/reference/parties-fausses.html"), "utf8");
@@ -552,43 +600,6 @@ async function main(): Promise<void> {
     const P_PIECE = ["color", "fontWeight", "textDecorationLine", "textDecorationStyle", "textDecorationColor"];
     /** Contenu du pseudo-élément ::after (le ✕) : mesuré à part, `getComputedStyle(el, "::after")`. */
     const apres = async (page: any, sel: string): Promise<string> => (await page.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); return e ? getComputedStyle(e, "::after").content : "ABSENT"; })()`)) as string;
-    /** Session gen7 (correction immédiate, essais selon `tentatives`) ; `pre` = écrans répondus par l'API avant l'ouverture. */
-    async function ouvrirGen7(largeur: number, tentatives: number, pre: [string, unknown][]) {
-      imposerProfilAssignation("aleatoire");
-      const s = creerScenario();
-      installerBase(s.base);
-      const tid = creerTache(s, { nom: "Fidélité parties fausses", feedback_immediat: true, reponse_visible: false, tentatives_supplementaires: tentatives, variantes: [{ variante_id: "af_delta_racines_rationnelles", nombre_exercices: 1 }] });
-      const o = Math.random;
-      Math.random = () => 4242 / 2 ** 32;
-      try {
-        const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tid, eleve_ids: ["eleve-1"] } });
-        if (a.statut !== 201) throw new Error("assignation " + a.statut);
-      } finally {
-        Math.random = o;
-      }
-      const ligne = s.base.table("exercices_assignes")[0]!;
-      const ex = genererExerciceMD("af_delta_racines_rationnelles", Number(ligne.graine));
-      for (const [champ, brut] of pre) {
-        const r = await appeler("reponses", "POST", { jeton: "eleve:eleve-1", corps: { exercice_assigne_id: ligne.id, champ, reponse_brute: brut === "@juste" ? reponseBruteCorrecteMotifDelta(ex, champ) : typeof brut === "string" ? brut : JSON.stringify(brut) } });
-        if (r.statut !== 200) throw new Error(`préparation ${champ} : ${r.statut} ${JSON.stringify(r.corps)}`);
-      }
-      const ctx = await navigateur.newContext({ viewport: { width: largeur, height: 900 }, hasTouch: largeur < 600 });
-      const page = await ctx.newPage();
-      await page.route("**/unpkg.com/@supabase/supabase-js**", (r: any) => r.fulfill({ contentType: "text/javascript", body: stubSupabase("eleve:eleve-1", "e1@x") }));
-      await page.route("**/fonts.googleapis.com/**", (r: any) => r.fulfill({ contentType: "text/css", body: "" }));
-      await page.route("**/fonts.gstatic.com/**", (r: any) => r.abort());
-      await page.addInitScript(`localStorage.setItem("eleve-profil-cache", JSON.stringify({ affichage: "Test eleve-1", prenom: "Test", nom: "eleve-1" }));`);
-      await page.goto(srv.url + "/eleve.html");
-      await page.waitForSelector(".carte-tache");
-      await page.locator(".carte-tache").click();
-      await page.waitForSelector(".moteur-ecran-courant");
-      return { page, ctx };
-    }
-    const valider = async (page: any) => {
-      await page.locator(".moteur-ecran-courant").getByRole("button", { name: "Valider", exact: true }).click();
-      await page.waitForSelector(".moteur-ecran-courant .moteur-retour .moteur-statut");
-    };
-
     for (const largeur of [390, 1280]) {
       const e = `parties fausses ${largeur} px`;
       const ctxR = await navigateur.newContext({ viewport: { width: largeur, height: 900 } });
@@ -597,7 +608,7 @@ async function main(): Promise<void> {
       await pR.setContent(refPF);
       const R = (ref: string) => mesurer(pR, `[data-ref="${ref}"]`);
       const REF: Record<string, Element | null> = {};
-      for (const ref of ["champ", "champ-faux", "choix", "choix-faux", "bouton", "bouton-faux", "piece-fausse"]) REF[ref] = await R(ref);
+      for (const ref of ["champ", "champ-faux", "choix", "choix-faux", "bouton", "bouton-faux", "crochet", "crochet-faux", "piece-fausse"]) REF[ref] = await R(ref);
       const apresRef = async (ref: string) => (await pR.evaluate(`getComputedStyle(document.querySelector('[data-ref="${ref}"]'), "::after").content`)) as string;
       const [croixChoixRef, croixBoutonRef] = [await apresRef("choix-faux"), await apresRef("bouton-faux")];
       await pR.screenshot({ path: join(CAPTURES, `fidelite-ref-parties-fausses-${largeur}.png`), fullPage: true });
@@ -646,8 +657,9 @@ async function main(): Promise<void> {
         for (let k = 0; k < 2 && (await droit.textContent()) !== "["; k++) await droit.click();
         await valider(page);
         await flou(page);
-        comparer(e, "bouton faux (crochet)", REF["bouton-faux"]!, await mesurer(page, ".moteur-bouton-crochet.moteur-partie-fausse"), ["color", "backgroundColor", "borderTopColor", "borderTopWidth", "borderTopStyle", "fontWeight"]);
-        verifier((await apres(page, ".moteur-bouton-crochet.moteur-partie-fausse")) === croixBoutonRef, `${e} : ✕ du bouton (${await apres(page, ".moteur-bouton-crochet.moteur-partie-fausse")} contre ${croixBoutonRef})`);
+        comparer(e, "crochet faux", REF["crochet-faux"]!, await mesurer(page, ".moteur-bouton-crochet.moteur-partie-fausse"), ["color", "backgroundColor", "borderTopColor", "borderTopWidth", "borderTopStyle", "borderTopLeftRadius", "fontWeight", "boxShadow"]);
+        verifier((await apres(page, ".moteur-bouton-crochet.moteur-partie-fausse")) === '""', `${e} : le crochet n'a PAS de ✕ (son ::after est sa cible tactile) : « ${await apres(page, ".moteur-bouton-crochet.moteur-partie-fausse")} »`);
+        verifier(croixBoutonRef !== "none", `${e} : (sanité) la référence d'un bouton ordinaire porte le ✕`);
         await ctx.close();
       }
       // (d) case de tableau : toutes les cases cliquées une fois (valeurs quelconques, fausses pour la plupart)
@@ -667,6 +679,125 @@ async function main(): Promise<void> {
         for (let k = 0; k < nbMarquees; k++) comparer(e, `case de tableau fausse n°${k + 1}`, REF["bouton-faux"]!, await mesurer(page, `[data-mesure-pf="${k}"]`), ["color", "backgroundColor", "borderTopColor", "borderTopWidth", "borderTopStyle"]);
         await ctx.close();
       }
+    }
+  }
+
+  // ── Bouton d'aide jaunâtre avec une ampoule (RAPPORT §53) : docs/reference/bouton-aide.html, à 390 ET 1280 px ──
+  {
+    const refAide = readFileSync(join(RACINE, "docs/reference/bouton-aide.html"), "utf8");
+    for (const largeur of [390, 1280]) {
+      const e = `bouton d'aide ${largeur} px`;
+      const ctxR = await navigateur.newContext({ viewport: { width: largeur, height: 900 } });
+      const pR = await ctxR.newPage();
+      await pR.route("**/fonts.googleapis.com/**", (r: any) => r.fulfill({ contentType: "text/css", body: "" }));
+      await pR.setContent(refAide);
+      const REF: Record<string, Element | null> = {};
+      for (const ref of ["bouton", "icone", "verre", "libelle", "texte"]) REF[ref] = await mesurer(pR, `[data-ref="${ref}"]`);
+      await pR.screenshot({ path: join(CAPTURES, `fidelite-ref-bouton-aide-${largeur}.png`), fullPage: true });
+      await ctxR.close();
+
+      const { page, ctx } = await ouvrirGen7(largeur, 0, [], { aide: true });
+      await flou(page);
+      await page.screenshot({ path: join(CAPTURES, `fidelite-app-bouton-aide-${largeur}.png`), fullPage: true });
+      comparer(e, "bouton", REF["bouton"]!, await mesurer(page, ".moteur-aide .moteur-bouton-aide"), ["color", "backgroundColor", "borderTopColor", "borderTopWidth", "borderTopStyle", "borderTopLeftRadius", "fontFamily", "fontSize", "fontWeight", "display", "alignItems", "columnGap", "paddingTop", "paddingLeft"]);
+      comparer(e, "ampoule", REF["icone"]!, await mesurer(page, ".moteur-aide .moteur-icone-ampoule"), ["width", "height", "fill", "stroke", "strokeWidth", "strokeLinecap"]);
+      comparer(e, "verre de l'ampoule", REF["verre"]!, await mesurer(page, ".moteur-aide .moteur-ampoule-verre"), ["fill"]);
+      comparer(e, "libellé", REF["libelle"]!, await mesurer(page, ".moteur-aide .moteur-aide-libelle"), ["color", "fontSize", "fontWeight"]);
+      verifier((await page.locator(".moteur-aide .moteur-icone-ampoule").getAttribute("aria-hidden")) === "true" && (await page.locator(".moteur-aide button").innerText()).trim() === "Besoin d'un indice ?", `${e} : ampoule décorative (aria-hidden), libellé inchangé`);
+      // La zone d'indice ouverte reste de la même famille (fond ambre clair) et le libellé du bouton ne perd pas son ampoule quand il change de texte.
+      await page.locator(".moteur-aide button").click();
+      await page.waitForSelector(".moteur-aide-texte:not([hidden])");
+      comparer(e, "zone d'indice", REF["texte"]!, await mesurer(page, ".moteur-aide-texte"), ["backgroundColor", "color"]);
+      await ctx.close();
+      // avec une pénalité : le libellé de confirmation remplace le texte, l'ampoule reste
+      {
+        imposerProfilAssignation("aleatoire");
+        const s2 = creerScenario();
+        installerBase(s2.base);
+        const tid = creerTache(s2, { nom: "Fidélité aide pénalité", aide_activee: true, aide_penalite_pourcent: 25, variantes: [{ variante_id: "af_delta_racines_rationnelles", nombre_exercices: 1 }] });
+        await appeler("assignations", "POST", { jeton: `prof:${s2.profId}`, corps: { tache_id: tid, eleve_ids: ["eleve-1"] } });
+        const ctx2 = await navigateur.newContext({ viewport: { width: largeur, height: 900 }, hasTouch: largeur < 600 });
+        const p2 = await ctx2.newPage();
+        await p2.route("**/unpkg.com/@supabase/supabase-js**", (r: any) => r.fulfill({ contentType: "text/javascript", body: stubSupabase("eleve:eleve-1", "e1@x") }));
+        await p2.route("**/fonts.googleapis.com/**", (r: any) => r.fulfill({ contentType: "text/css", body: "" }));
+        await p2.route("**/fonts.gstatic.com/**", (r: any) => r.abort());
+        await p2.addInitScript(`localStorage.setItem("eleve-profil-cache", JSON.stringify({ affichage: "Test eleve-1", prenom: "Test", nom: "eleve-1" }));`);
+        await p2.goto(srv.url + "/eleve.html");
+        await p2.waitForSelector(".carte-tache");
+        await p2.locator(".carte-tache").click();
+        await p2.waitForSelector(".moteur-aide button");
+        await p2.locator(".moteur-aide button").click();
+        verifier(/^Confirmer/.test((await p2.locator(".moteur-aide button").innerText()).trim()) && (await p2.locator(".moteur-aide button .moteur-icone-ampoule").count()) === 1, `${e} : le libellé de confirmation remplace le texte, l'ampoule reste`);
+        await p2.screenshot({ path: join(CAPTURES, `fidelite-app-bouton-aide-confirmation-${largeur}.png`), fullPage: true });
+        await ctx2.close();
+      }
+    }
+  }
+
+  // ── « Réponse attendue » = le tableau de signes REMPLI (RAPPORT §53) : docs/reference/tableau-solution.html, à 390 ET 1280 px ──
+  {
+    const refSol = readFileSync(join(RACINE, "docs/reference/tableau-solution.html"), "utf8");
+    // `fontSize` n'est pas comparé à la référence : le tableau À COMPLÉTER de l'application écrit déjà `1.15em` (18,4 px) là où `tableau-signes.html` écrit 1,1rem (17,6 px), un écart antérieur à ce
+    // chantier et jamais mesuré. La demande est « semblable au tableau à compléter » : la solution est donc comparée à CE tableau-là (`tailleCase`, ci-dessous), l'écart est signalé dans le RAPPORT §53.
+    const P_CASE = ["color", "backgroundColor", "fontWeight", "minHeight", "display", "alignItems", "justifyContent"];
+    for (const largeur of [390, 1280]) {
+      const e = `réponse attendue (tableau) ${largeur} px`;
+      const ctxR = await navigateur.newContext({ viewport: { width: largeur, height: 900 } });
+      const pR = await ctxR.newPage();
+      await pR.route("**/fonts.googleapis.com/**", (r: any) => r.fulfill({ contentType: "text/css", body: "" }));
+      await pR.setContent(refSol);
+      const REF: Record<string, Element | null> = {};
+      for (const ref of ["etiquette", "cadre", "case", "case-variation"]) REF[ref] = await mesurer(pR, `[data-ref="${ref}"]`);
+      await pR.screenshot({ path: join(CAPTURES, `fidelite-ref-tableau-solution-${largeur}.png`), fullPage: true });
+      await ctxR.close();
+
+      const { page, ctx } = await ouvrirGen7(largeur, 0, ["coefficients", "allure", "axeSommet", "domaineImage", "racines"].map((c) => [c, "@juste"] as [string, unknown]), { solution: true });
+      await page.waitForSelector(".moteur-ecran-courant .moteur-table-signes");
+      // Tableau À COMPLÉTER : hauteurs de ses rangées, pour la ressemblance demandée (« un tableau semblable au tableau à compléter »).
+      const hauteurs = `(racine) => { const h = (sel) => [...document.querySelectorAll(racine + " " + sel)].map((x) => Math.round(x.getBoundingClientRect().height * 10) / 10); return { x: h(".moteur-rangee-x td"), signe: h(".moteur-rangee-signe td"), variation: h(".moteur-rangee-variation td"), titre: h(".moteur-titre-ligne"), colonnes: h(".moteur-rangee-x td").length }; }`;
+      const aCompleter = (await page.evaluate(`(${hauteurs})(".moteur-ecran-courant .moteur-tableau-signes:not(.moteur-tableau-solution)")`)) as Record<string, number[] | number>;
+      const tailleCase = (await page.evaluate(`[".moteur-rangee-signe .moteur-case-signe", ".moteur-rangee-variation .moteur-case-signe"].map((q) => getComputedStyle(document.querySelector(".moteur-ecran-courant " + q)).fontSize)`)) as string[];
+      const cases = page.locator(".moteur-ligne-tableau td button");
+      const n = await cases.count();
+      for (let k = 0; k < n; k++) await cases.nth(k).click();
+      await valider(page);
+      await page.waitForSelector(".moteur-retour .moteur-tableau-solution");
+      await flou(page);
+      await page.screenshot({ path: join(CAPTURES, `fidelite-app-tableau-solution-${largeur}.png`), fullPage: true });
+      const S = ".moteur-retour .moteur-tableau-solution";
+      comparer(e, "étiquette", REF["etiquette"]!, await mesurer(page, ".moteur-retour .moteur-solution-structuree > .moteur-solution"), ["color", "backgroundColor", "borderTopLeftRadius"]);
+      comparer(e, "cadre", REF["cadre"]!, await mesurer(page, S), ["borderTopWidth", "borderTopColor", "borderTopStyle", "borderTopLeftRadius", "overflowX", "backgroundColor"]);
+      comparer(e, "case de signe", REF["case"]!, await mesurer(page, `${S} .moteur-rangee-signe .moteur-case-signe`), P_CASE);
+      comparer(e, "case de variation", REF["case-variation"]!, await mesurer(page, `${S} .moteur-rangee-variation .moteur-case-signe`), ["color", "backgroundColor", "minHeight", "display", "justifyContent"]);
+      // Ressemblance avec le tableau à compléter : mêmes rangées, mêmes hauteurs.
+      const solution = (await page.evaluate(`(${hauteurs})(${JSON.stringify(S)})`)) as Record<string, number[] | number>;
+      verifier(JSON.stringify(solution) === JSON.stringify(aCompleter), `${e} : mêmes rangées et mêmes hauteurs que le tableau à compléter (à compléter ${JSON.stringify(aCompleter)}, solution ${JSON.stringify(solution)})`);
+      verifier(solution.colonnes === 7, `${e} : 7 colonnes (${solution.colonnes})`);
+      const tailleSolution = (await page.evaluate(`[".moteur-rangee-signe .moteur-case-signe", ".moteur-rangee-variation .moteur-case-signe"].map((q) => getComputedStyle(document.querySelector(${JSON.stringify(S)} + " " + q)).fontSize)`)) as string[];
+      verifier(JSON.stringify(tailleSolution) === JSON.stringify(tailleCase), `${e} : mêmes tailles de signe que le tableau à compléter (à compléter ${tailleCase.join(" / ")}, solution ${tailleSolution.join(" / ")})`);
+      // Rempli, dessiné, lecture seule.
+      const etat = (await page.evaluate(`(() => { const t = document.querySelector(${JSON.stringify(S)}); const b = [...t.querySelectorAll(".moteur-case-signe")]; const c = t.closest(".moteur-ecran-courant").getBoundingClientRect(), r = t.getBoundingClientRect(); return { nb: b.length, vides: b.filter((x) => x.textContent.trim() === "?" || x.getAttribute("aria-label").includes("vide")).length, actifs: b.filter((x) => !x.disabled || x.tabIndex !== -1).length, fleches: t.querySelectorAll(".moteur-fleche").length, glyphes: b.filter((x) => /[\u2197\u2198]/.test(x.textContent)).length, invite: b.filter((x) => /Toucher/.test(x.getAttribute("aria-label"))).length, dedans: r.left >= c.left && r.right <= c.right + 0.5, debordePage: document.documentElement.scrollWidth > window.innerWidth, valeursX: [...t.querySelectorAll(".moteur-rangee-x td")].map((x) => x.textContent.trim()).filter(Boolean), couleurs: [...new Set(b.map((x) => getComputedStyle(x).color))] }; })()`)) as { nb: number; vides: number; actifs: number; fleches: number; glyphes: number; invite: number; dedans: boolean; debordePage: boolean; valeursX: string[]; couleurs: string[] };
+      verifier(etat.nb === 10 && etat.vides === 0, `${e} : toutes les cases sont remplies (${etat.nb} cases, ${etat.vides} vides)`);
+      verifier(etat.actifs === 0 && etat.invite === 0, `${e} : lecture seule (aucune case active ni « Toucher pour changer » : ${etat.actifs} / ${etat.invite})`);
+      verifier(etat.fleches === 2 && etat.glyphes === 0, `${e} : flèches de variation TRACÉES (${etat.fleches}), jamais un glyphe ↗/↘ (${etat.glyphes})`);
+      verifier(etat.dedans && !etat.debordePage, `${e} : le tableau tient dans la carte (${JSON.stringify({ dedans: etat.dedans, debordePage: etat.debordePage })})`);
+      verifier(etat.couleurs.length === 1 && etat.couleurs[0] === (REF["case"] as any).color, `${e} : texte des cases NEUTRE, jamais la couleur du verdict (${etat.couleurs.join(" | ")})`);
+      verifier(etat.valeursX.length === 3 && etat.valeursX.every((v) => v.length > 0), `${e} : les trois valeurs de x (vraies) sont écrites (${JSON.stringify(etat.valeursX)})`);
+      // La phrase n'est plus affichée en doublon : l'étiquette seule + le tableau.
+      verifier((await page.locator(".moteur-retour .moteur-solution").count()) === 1 && (await page.locator(".moteur-retour .moteur-solution").innerText()).trim() === "Réponse attendue :", `${e} : une seule étiquette « Réponse attendue : » suivie du tableau (pas de phrase en double)`);
+
+      // Écran récapitulatif : même tableau, dans la carte de relecture.
+      await page.getByRole("button", { name: /Voir la fin/ }).click();
+      await page.waitForSelector(".moteur-ecran-termine .moteur-tableau-solution");
+      await flou(page);
+      await page.screenshot({ path: join(CAPTURES, `fidelite-app-tableau-solution-recap-${largeur}.png`), fullPage: true });
+      const R = ".moteur-ecran-termine .moteur-resume .moteur-tableau-solution";
+      verifier((await page.locator(R).count()) === 1, `${e} / récapitulatif : le tableau rempli est dans la carte de relecture`);
+      comparer(e, "récapitulatif : cadre", REF["cadre"]!, await mesurer(page, R), ["borderTopWidth", "borderTopColor", "borderTopLeftRadius", "overflowX"]);
+      comparer(e, "récapitulatif : case de signe", REF["case"]!, await mesurer(page, `${R} .moteur-rangee-signe .moteur-case-signe`), P_CASE);
+      verifier(JSON.stringify(await page.evaluate(`(${hauteurs})(${JSON.stringify(R)})`)) === JSON.stringify(aCompleter), `${e} / récapitulatif : mêmes rangées et mêmes hauteurs que le tableau à compléter`);
+      verifier(!(await page.evaluate("document.documentElement.scrollWidth > window.innerWidth")), `${e} / récapitulatif : pas de défilement horizontal de la page`);
+      await ctx.close();
     }
   }
   await navigateur.close();

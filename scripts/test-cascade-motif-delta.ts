@@ -98,13 +98,13 @@ for (const fam of FAMILLES) {
     const yFaux = Math.round(approx(vrai.yS)) + 3; // toujours ≠ de la vraie ordonnée du sommet (écart de 3)
     const axeFaux = JSON.stringify({ axeTexte: "x = 1", xS: "1", yS: String(yFaux) });
     const avecY = projeter(ex, [{ champ: CHAMP_AXE_SOMMET, reponseBrute: axeFaux, statut: "not_equivalent" }]);
-    verifier(avecY.effectif.ordonneeAffichee && avecY.effectif.yImage !== null && avecY.effectif.yImage.n === yFaux, `${ctx} : ordonnée fausse confirmée → yImage = ${yFaux}`);
+    verifier(avecY.effectif.yImage !== null && avecY.effectif.yImage.n === yFaux, `${ctx} : ordonnée fausse confirmée → yImage = ${yFaux}`);
     verifier(verifierMotifDelta(avecY, CHAMP_DOMAINE_IMAGE, reponseBruteCorrecteMotifDelta(avecY, CHAMP_DOMAINE_IMAGE)).statut === "correct", `${ctx} : domaineImage jugé sur l'ordonnée confirmée`);
     const axeJuste = JSON.stringify({ axeTexte: "x = 1", xS: "1", yS: texteSaisieExact(vrai.yS) });
     const avecYJuste = projeter(ex, [{ champ: CHAMP_AXE_SOMMET, reponseBrute: axeJuste, statut: "correct" }]);
-    verifier(avecYJuste.effectif.yImage === null && avecYJuste.effectif.ordonneeAffichee, `${ctx} : ordonnée juste → sommet effectif, affichée`);
+    verifier(avecYJuste.effectif.yImage === null, `${ctx} : ordonnée juste → sommet effectif`);
     const axeIllisible = projeter(ex, [{ champ: CHAMP_AXE_SOMMET, reponseBrute: JSON.stringify({ axeTexte: "x = 1", xS: "1", yS: "abc" }), statut: "parse_error" }]);
-    verifier(axeIllisible.effectif.yImage === null && !axeIllisible.effectif.ordonneeAffichee, `${ctx} : ordonnée illisible → inexploitable`);
+    verifier(axeIllisible.effectif.yImage === null, `${ctx} : ordonnée illisible → inexploitable`);
 
     // 4. libellé identique juste ou faux ; ordre jamais canonique ; terme nul absent
     verifier(enonceEffectif(juste).startsWith("Étudie la fonction suivante, d'après les coefficients que tu as donnés") && enonceEffectif(proj).startsWith("Étudie la fonction suivante, d'après les coefficients que tu as donnés"), `${ctx} : même libellé, coefficients justes ou faux`);

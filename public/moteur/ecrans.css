@@ -1146,18 +1146,20 @@
   gap: var(--espace-2);
 }
 
+/* UNE SEULE LIGNE à toutes les largeurs (RAPPORT §53) : jamais de retour à la ligne ; les bornes, seules à pouvoir rétrécir (64 px → 40 px au plus), absorbent le manque de place
+   sur un petit écran (320 px). Aux largeurs de la référence (390 et 1280 px) rien ne rétrécit. */
 .moteur-intervalle-ligne {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: calc(var(--espace-1)*1.5); /* 6px, référence */
 }
 
 /* Bornes : 64px de large, texte centré, padding 8px 10px, 0,9em (référence) ; hauteur minimale de 44px conservée. */
 .moteur-ecran .moteur-champ-borne {
-  flex: none;
+  flex: 0 1 auto;
   width: calc(var(--espace-5)*1.6);
-  min-width: 0;
+  min-width: var(--espace-5);
   padding: var(--espace-2) calc(var(--espace-3)*0.625);
   font-size: 0.9em;
   text-align: center;
@@ -1247,8 +1249,8 @@
 
 /* ── Aides typées ── */
 .moteur-aide-texte.moteur-aide-typee {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--ambre-clair); /* même famille que le bouton d'aide et que l'aide en texte (RAPPORT §53) ; contraste des coefficients calculé sur ce fond (test-design-system) */
+  border: 1px solid var(--ambre-vif);
   color: var(--text);
   width: 100%;
   box-sizing: border-box;
@@ -1398,10 +1400,17 @@
   border: 2px solid var(--danger);
 }
 
-.moteur-bouton.moteur-partie-fausse::after {
+/* ✕ après le libellé d'un bouton ordinaire (mode, infini). Le crochet de l'intervalle emploie déjà son `::after` pour sa cible tactile : il prend un filet intérieur supplémentaire
+   (épaisseur, pas seulement la couleur), comme `.moteur-infini-actif`. */
+.moteur-bouton.moteur-partie-fausse:not(.moteur-bouton-crochet)::after {
   content: "\2715" / "";
   margin-left: calc(var(--espace-1)*1.5);
   font-weight: 700;
+}
+
+.moteur-ecran .moteur-bouton.moteur-bouton-crochet.moteur-partie-fausse,
+.moteur-ecran .moteur-bouton.moteur-bouton-crochet.moteur-partie-fausse:disabled {
+  box-shadow: inset 0 0 0 1px var(--danger);
 }
 
 .moteur-piece-fausse {
@@ -1409,4 +1418,70 @@
   font-weight: 700;
   text-decoration: underline wavy var(--danger);
   text-underline-offset: calc(var(--espace-1)*0.75); /* 3 px */
+}
+
+/* ── Bouton d'aide jaunâtre avec une ampoule (RAPPORT §53) : docs/reference/bouton-aide.html. Même famille ambre que la zone d'indice qu'il ouvre (`.moteur-aide-texte`). Le texte reste
+   `--text` (l'ambre sur ambre clair ne passe pas 4,5:1) ; l'ampoule est décorative. Placé en fin de fichier : il doit l'emporter sur `.moteur-bouton` et ses variantes à spécificité égale. ── */
+.moteur-ecran .moteur-bouton.moteur-bouton-aide {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espace-2);
+  color: var(--text);
+  background: var(--ambre-clair);
+  border: 2px solid var(--ambre-vif);
+}
+
+.moteur-icone-ampoule {
+  flex: none;
+  width: calc(var(--espace-3) + var(--espace-1)); /* 20px */
+  height: calc(var(--espace-3) + var(--espace-1));
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.moteur-icone-ampoule .moteur-ampoule-verre {
+  fill: var(--ambre-vif);
+}
+
+/* ── Réponse attendue DESSINÉE (RAPPORT §53) : docs/reference/tableau-solution.html. Le tableau de signes REMPLI des bonnes valeurs, en lecture seule, construit par les MÊMES fonctions que le tableau à
+   compléter (mêmes colonnes de valeur, mêmes filets, mêmes flèches tracées) : seul le cadre change. Il n'est PAS plein-bord (il vit dans la carte courante, dans le panneau gris du rappel ou dans une
+   carte de relecture : une marge négative le ferait déborder du panneau) mais encadré d'un filet et arrondi. Aucune couleur de verdict : c'est la solution, pas la réponse de l'élève. ── */
+.moteur-solution-structuree {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+  min-width: 0;
+}
+
+.moteur-rappel-corps .moteur-solution-structuree {
+  flex-basis: 100%;
+}
+
+.moteur-tableau-signes.moteur-tableau-solution {
+  margin-inline: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.moteur-tableau-solution .moteur-table-structure {
+  margin-bottom: 0;
+}
+
+.moteur-tableau-solution .moteur-titre-tableau,
+.moteur-tableau-solution .moteur-table-structure .moteur-titre-ligne {
+  padding-inline: var(--espace-3);
+}
+
+.moteur-ecran .moteur-tableau-solution .moteur-table-structure {
+  border-block: 0;
+}
+
+.moteur-tableau-solution .moteur-table-structure .moteur-case-signe:disabled,
+.moteur-tableau-solution .moteur-table-structure .moteur-case-signe.moteur-case-renseignee:disabled {
+  color: var(--text);
+  cursor: default;
 }

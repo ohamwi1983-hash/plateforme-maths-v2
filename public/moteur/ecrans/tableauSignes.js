@@ -104,7 +104,7 @@ function dessinerFleche(bouton, montante) {
  * en SVG) ou "fleches" (tableau structuré, case d'intervalle des variations : flèche tracée et pivotée). `plate` : case
  * d'un tableau structuré — une simple cellule, sans bordure ni bulle individuelle.
  */
-function creerCase({ nomCellule, rendu, alphabet, surChangement, plate }) {
+function creerCase({ nomCellule, rendu, alphabet, surChangement, plate, lecture }) {
   const bouton = element("button", plate ? "moteur-case-signe moteur-case-plate" : "moteur-case-signe");
   bouton.type = "button";
   const etat = { bouton, valeur: null, poser: (v) => {} };
@@ -121,15 +121,21 @@ function creerCase({ nomCellule, rendu, alphabet, surChangement, plate }) {
       bouton.replaceChildren(document.createTextNode(visible(etat.valeur)));
     }
     const dit = etat.valeur === null ? "vide" : nomme && Object.hasOwn(NOMS_SYMBOLES, etat.valeur) ? NOMS_SYMBOLES[etat.valeur] : etat.valeur;
-    bouton.setAttribute("aria-label", `${nomCellule} : ${dit}. Toucher pour changer.`);
+    bouton.setAttribute("aria-label", lecture ? `${nomCellule} : ${dit}.` : `${nomCellule} : ${dit}. Toucher pour changer.`);
     bouton.classList.toggle("moteur-case-renseignee", etat.valeur !== null);
   };
-  bouton.addEventListener("click", () => {
-    // Le cycle NE REVIENT JAMAIS à « ? » : après la dernière valeur, on repart de la première.
-    etat.valeur = etat.valeur === null ? alphabet[0] : alphabet[(alphabet.indexOf(etat.valeur) + 1) % alphabet.length];
-    rafraichir();
-    surChangement();
-  });
+  if (lecture) {
+    // Lecture seule (la solution dessinée, RAPPORT §53) : une cellule affichée comme les autres, mais qui ne se touche pas et n'est pas dans l'ordre de tabulation.
+    bouton.disabled = true;
+    bouton.tabIndex = -1;
+  } else {
+    bouton.addEventListener("click", () => {
+      // Le cycle NE REVIENT JAMAIS à « ? » : après la dernière valeur, on repart de la première.
+      etat.valeur = etat.valeur === null ? alphabet[0] : alphabet[(alphabet.indexOf(etat.valeur) + 1) % alphabet.length];
+      rafraichir();
+      surChangement();
+    });
+  }
   if (rendu === "fleches" && typeof ResizeObserver !== "undefined") {
     // La flèche dépend de la vraie taille du bouton : redessinée si la case change de taille (rotation de l'écran, redimensionnement).
     new ResizeObserver(() => {
@@ -153,7 +159,7 @@ function nomCellule(ligne, colonnes) {
   return `${versTexteBrut(ligne.libelle)}, ${noms.length > 1 ? `${noms[0]} à ${noms[noms.length - 1]}` : noms[0]}`;
 }
 
-function construireStructure(ecran, cases, surChangement) {
+function construireStructure(ecran, cases, surChangement, lecture) {
   const table = element("table", "moteur-table-signes moteur-table-structure");
   if (ecran.titre) {
     const legende = element("caption", "moteur-titre-tableau");
@@ -203,7 +209,7 @@ function construireStructure(ecran, cases, surChangement) {
       const td = element("td", valeur ? "moteur-cellule-valeur" : "moteur-cellule-intervalle");
       td.colSpan = couvertes.length; // > 1 UNIQUEMENT sur une ligne de variations (groupes délimités par les sommets)
       const fleches = ligne.nature === "variation" && cellule.alphabet.includes("\u2197");
-      const etat = creerCase({ nomCellule: nomCellule(ligne, couvertes), rendu: fleches ? "fleches" : "texte", alphabet: cellule.alphabet, surChangement, plate: true });
+      const etat = creerCase({ nomCellule: nomCellule(ligne, couvertes), rendu: fleches ? "fleches" : "texte", alphabet: cellule.alphabet, surChangement, plate: true, lecture });
       cases.set(rangee.ligne + "|" + cellule.ancre, etat);
       td.appendChild(etat.bouton);
       tr.appendChild(td);
@@ -214,7 +220,7 @@ function construireStructure(ecran, cases, surChangement) {
   return table;
 }
 
-function construireHeritee(ecran, cases, surChangement) {
+function construireHeritee(ecran, cases, surChangement, lecture) {
   const defilement = element("div", "moteur-tableau-defilement");
   const table = element("table", "moteur-table-signes");
   const entete = element("thead");
@@ -245,7 +251,7 @@ function construireHeritee(ecran, cases, surChangement) {
       const colonne = colonneParId.get(cellule.ancre);
       const nomColonne = versTexteBrut(colonne.libelle);
       const td = element("td");
-      const etat = creerCase({ nomCellule: `${versTexteBrut(ligne.libelle)}, ${nomColonne}`, rendu: ligne.rendu === "symboles_variation" ? "symboles" : "texte", alphabet: cellule.alphabet, surChangement });
+      const etat = creerCase({ nomCellule: `${versTexteBrut(ligne.libelle)}, ${nomColonne}`, rendu: ligne.rendu === "symboles_variation" ? "symboles" : "texte", alphabet: cellule.alphabet, surChangement, lecture });
       cases.set(rangee.ligne + "|" + cellule.ancre, etat);
       td.appendChild(etat.bouton);
       tr.appendChild(td);
@@ -257,6 +263,24 @@ function construireHeritee(ecran, cases, surChangement) {
   return defilement;
 }
 
+/**
+ * Pose dans les cases la réponse `{ [ligneId]: { [ancre]: valeur } }` (JSON) : utilisée par `valeurInitiale` (retour en arrière) ET par `solution` (RAPPORT §53). `Object.hasOwn` : clés venues de l'élève.
+ * Illisible : tableau laissé vierge, jamais d'exception.
+ */
+function poserReponse(ecran, cases, reponseBrute) {
+  try {
+    const saisie = JSON.parse(reponseBrute);
+    if (typeof saisie !== "object" || saisie === null || Array.isArray(saisie)) return;
+    for (const rangee of ecran.rangees) {
+      const ligne = Object.hasOwn(saisie, rangee.ligne) ? saisie[rangee.ligne] : null;
+      if (typeof ligne !== "object" || ligne === null) continue;
+      for (const cellule of rangee.cellules) if (Object.hasOwn(ligne, cellule.ancre)) cases.get(rangee.ligne + "|" + cellule.ancre).poser(ligne[cellule.ancre]);
+    }
+  } catch {
+    /* réponse illisible : tableau vierge */
+  }
+}
+
 export default {
   type: "tableau_signes",
 
@@ -266,21 +290,8 @@ export default {
     const structure = ecran.colonnes.some((c) => c.genre !== undefined);
     racine.classList.toggle("moteur-tableau-structure-hote", structure);
     racine.appendChild(structure ? construireStructure(ecran, cases, surChangement) : construireHeritee(ecran, cases, surChangement));
-    // Réponse déjà confirmée (retour en arrière) : `{ [ligneId]: { [ancre]: valeur } }` ; `Object.hasOwn` (clés venues de l'élève).
-    if (typeof valeurInitiale === "string") {
-      try {
-        const saisie = JSON.parse(valeurInitiale);
-        if (typeof saisie === "object" && saisie !== null && !Array.isArray(saisie)) {
-          for (const rangee of ecran.rangees) {
-            const ligne = Object.hasOwn(saisie, rangee.ligne) ? saisie[rangee.ligne] : null;
-            if (typeof ligne !== "object" || ligne === null) continue;
-            for (const cellule of rangee.cellules) if (Object.hasOwn(ligne, cellule.ancre)) cases.get(rangee.ligne + "|" + cellule.ancre).poser(ligne[cellule.ancre]);
-          }
-        }
-      } catch {
-        /* réponse illisible : tableau vierge */
-      }
-    }
+    // Réponse déjà confirmée (retour en arrière).
+    if (typeof valeurInitiale === "string") poserReponse(ecran, cases, valeurInitiale);
 
     // Parties fausses (RAPPORT §52) : `<ligne>:<ancre>` = une CASE (clés d'ancrage de la réponse) ; la changer (clic) retire sa marque. Carte, jamais un objet indexé par la clé reçue.
     const marquage = creerMarquage((id) => {
@@ -311,6 +322,30 @@ export default {
         cases.values().next().value.bouton.focus();
       },
     };
+  },
+
+  /**
+   * La SOLUTION dessinée (RAPPORT §53) : le même tableau que celui à compléter (mêmes cellules, mêmes colonnes de valeur, mêmes flèches tracées), rempli des bonnes valeurs, en lecture seule.
+   * `reponseBrute` = la forme structurée envoyée par le serveur (`solution_structuree`), au format d'une réponse. `null` si elle est illisible : l'appelant retombe sur la phrase.
+   */
+  solution(ecran, reponseBrute) {
+    let saisie;
+    try {
+      saisie = JSON.parse(reponseBrute);
+    } catch {
+      return null;
+    }
+    if (typeof saisie !== "object" || saisie === null || Array.isArray(saisie)) return null;
+    const racine = element("div", "moteur-tableau-signes moteur-tableau-solution");
+    const cases = new Map();
+    const structure = ecran.colonnes.some((c) => c.genre !== undefined);
+    racine.classList.toggle("moteur-tableau-structure-hote", structure);
+    const rien = () => {};
+    racine.appendChild(structure ? construireStructure(ecran, cases, rien, true) : construireHeritee(ecran, cases, rien, true));
+    poserReponse(ecran, cases, reponseBrute);
+    racine.setAttribute("role", "group");
+    racine.setAttribute("aria-label", "Réponse attendue : tableau rempli");
+    return racine;
   },
 
   resumer(ecran, valeurSaisie, partiesFausses) {

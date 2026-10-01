@@ -156,7 +156,7 @@ async function main(): Promise<void> {
     verifier(ok.corps.statut === "correct", "tableau juste accepté après les essais ratés");
   }
 
-  // ── 5. Aide combinée de l'écran d'allure : une seule aide, une seule ligne `aides_utilisees` ; tableau : croquis ; aide désactivée → 403 ──
+  // ── 5. Aide combinée de l'écran d'allure : une seule aide, une seule ligne `aides_utilisees` ; aucune aide sur le tableau ni sur l'ensemble-image (RAPPORT §53) ; aide désactivée → 403 ──
   {
     const x = await nouveau("af_delta_racines_rationnelles", 4242, { aide: true });
     const avant = await x.aide("allure"); // dépend de coefficients, pas encore terminé
@@ -166,6 +166,13 @@ async function main(): Promise<void> {
     verifier(a1.statut === 200 && typeof a1.corps.aide === "string" && /a > 0/.test(a1.corps.aide) && /x_S/.test(a1.corps.aide) && verifierBalisageMath(a1.corps.aide).length === 0, `aide d'allure combinée servie (${a1.statut} ${JSON.stringify(a1.corps).slice(0, 80)})`);
     const a2 = await x.aide("allure");
     verifier(x.aidesUtilisees().filter((l) => l.champ === "allure").length === 1 && a2.statut === 200, "aide d'allure : une seule ligne aides_utilisees après deux demandes");
+    // Ni le tableau ni l'ensemble-image ne servent d'aide, même une fois leurs amonts terminés (RAPPORT §53).
+    await x.poster("allure", reponseBruteCorrecteMotifDelta(x.ex, "allure"));
+    for (const champ of ["axeSommet", "domaineImage", "racines"]) await x.poster(champ, reponseBruteCorrecteMotifDelta(x.ex, champ));
+    const ecransAvecAide = (await x.lire()).ecrans.filter((e) => (e as { aide_disponible?: boolean }).aide_disponible === true).map((e) => e.champ);
+    verifier(!ecransAvecAide.includes("tableauSignes") && !ecransAvecAide.includes("domaineImage") && !ecransAvecAide.includes("racines"), `aucune aide sur domaineImage, racines ni tableauSignes (écrans avec aide : ${ecransAvecAide.join()})`);
+    const sansAideTableau = await x.aide("tableauSignes");
+    verifier(sansAideTableau.statut === 404 || sansAideTableau.statut === 409, `POST aide du tableau : refusée (${sansAideTableau.statut})`);
     const sansAide = await nouveau("af_delta_racines_rationnelles", 4242, { aide: false });
     await sansAide.poster("coefficients", reponseBruteCorrecteMotifDelta(sansAide.ex, "coefficients"));
     const refus = await sansAide.aide("allure");

@@ -60,6 +60,28 @@ function creerCrayon(nom, surClic) {
   return bouton;
 }
 
+/** Ampoule du bouton d'aide (RAPPORT §53) : icône DÉCORATIVE (le nom accessible reste le libellé), construite par le DOM comme `creerCrayon` ; verre `--ambre-vif`, contour `currentColor`. */
+function creerIconeAmpoule() {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  svg.setAttribute("class", "moteur-icone-ampoule");
+  const definitions = [
+    ["M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2V17h6v-.3c0-.8.4-1.5 1-2A7 7 0 0 0 12 2z", "moteur-ampoule-verre"],
+    ["M9 20h6", ""],
+    ["M10 23h4", ""],
+  ];
+  for (const [d, classe] of definitions) {
+    const chemin = document.createElementNS(ns, "path");
+    chemin.setAttribute("d", d);
+    if (classe) chemin.setAttribute("class", classe);
+    svg.appendChild(chemin);
+  }
+  return svg;
+}
+
 /** Nom court d'un écran (`ecran.nom`, texte d'auteur) ; à défaut « Question n ». */
 function nomDe(ecran, rang) {
   return ecran && typeof ecran.nom === "string" && ecran.nom !== "" ? ecran.nom : `Question ${rang}`;
@@ -308,6 +330,19 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
     return bloc;
   }
 
+  /**
+   * « Réponse attendue » (RAPPORT §53) : le tableau REMPLI (`solution_structuree`, servi sous la même porte que `solution_attendue`) quand le composant de l'écran sait le dessiner, sinon la
+   * PHRASE. `classe` : classe du paragraphe d'étiquette/de phrase (différente dans le rappel gris, où la solution est du texte discret).
+   */
+  function creerSolution(ecran, texte, structuree, classe) {
+    const composant = ecran ? composantPour(ecran) : null;
+    const dessin = typeof structuree === "string" && composant && typeof composant.solution === "function" ? composant.solution(ecran, structuree) : null;
+    if (dessin === null) return creer("p", classe, "Réponse attendue : " + texte, { math: true });
+    const bloc = creer("div", "moteur-solution-structuree");
+    bloc.append(creer("p", classe, "Réponse attendue :"), dessin);
+    return bloc;
+  }
+
   function ligneFaite(exercice, info, ecran, nom, retour, points) {
     const marque = MARQUES_RAPPEL[info.statut] ?? MARQUES_RAPPEL.neutre;
     const ligne = creer("li", "moteur-rappel-ligne moteur-rappel-ligne-" + marque.etat);
@@ -324,7 +359,7 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
     else rendreTexte(valeur, "pas de réponse");
     corps.appendChild(valeur);
     // Une réponse juste n'a pas besoin de « Réponse attendue » (elle lui est identique) : la solution n'est rappelée que pour un écran non réussi.
-    if (info.solution_attendue !== null && info.statut !== "correct") corps.appendChild(creer("p", "moteur-rappel-solution moteur-solution", "Réponse attendue : " + info.solution_attendue, { math: true }));
+    if (info.solution_attendue !== null && info.statut !== "correct") corps.appendChild(creerSolution(ecran, info.solution_attendue, info.solution_structuree, "moteur-rappel-solution moteur-solution"));
     ligne.append(pastille, corps);
     if (points && points.obtenus !== null) ligne.appendChild(creer("span", "moteur-rappel-score", formaterScore(points.obtenus, points.possibles)));
     if (retour && info.modifiable === true) {
@@ -394,7 +429,7 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
     }
     if (crayon) bloc.appendChild(crayon); // (jamais sans réponse en pratique : « modifiable » suppose une réponse)
     if (info.statut !== null) bloc.appendChild(creer("p", "moteur-statut moteur-statut-" + info.statut, LIBELLES_STATUT[info.statut]));
-    if (info.solution_attendue !== null) bloc.appendChild(creer("p", "moteur-solution", "Réponse attendue : " + info.solution_attendue, { math: true }));
+    if (info.solution_attendue !== null) bloc.appendChild(creerSolution(ecran, info.solution_attendue, info.solution_structuree, "moteur-solution"));
     return bloc;
   }
 
@@ -447,7 +482,7 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
       if (resultat.message_erreur) retourServeur.appendChild(creer("p", "moteur-message-syntaxe", resultat.message_erreur, { math: true }));
       // Parties fausses (RAPPORT §52) : le serveur ne les envoie que sous correction immédiate ; le composant les surligne en rouge (retirées dès que l'élève modifie la partie).
       if (typeof vue.marquer === "function") vue.marquer(resultat.parties_fausses);
-      if (resultat.solution_attendue) retourServeur.appendChild(creer("p", "moteur-solution", "Réponse attendue : " + resultat.solution_attendue, { math: true }));
+      if (resultat.solution_attendue) retourServeur.appendChild(creerSolution(ecran, resultat.solution_attendue, resultat.solution_structuree, "moteur-solution"));
       if (resultat.modifiable !== undefined) {
         // Retour en arrière : la réponse est enregistrée mais l'écran reste modifiable ; rien n'est corrigé avant la remise.
         arreterMinuterie();
@@ -525,7 +560,10 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
 
   function construireAide(exercice, ecran, info) {
     const bloc = creer("div", "moteur-aide");
-    const bouton = creer("button", "moteur-bouton moteur-bouton-secondaire", "Besoin d'un indice ?");
+    // Bouton jaunâtre avec une ampoule (RAPPORT §53) : l'icône ne change jamais, seul le LIBELLÉ est réécrit (confirmation de pénalité, « Revoir l'indice »).
+    const bouton = creer("button", "moteur-bouton moteur-bouton-aide");
+    const libelle = creer("span", "moteur-aide-libelle", "Besoin d'un indice ?");
+    bouton.append(creerIconeAmpoule(), libelle);
     bouton.type = "button";
     // Zone de l'aide : chaîne (texte d'auteur) OU aide typée (composant de `aides/`).
     const texte = creer("div", "moteur-aide-texte");
@@ -534,7 +572,7 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
     bouton.addEventListener("click", async () => {
       if (confirmation) {
         confirmation = false;
-        rendreTexte(bouton, `Confirmer : l'indice réduit ton score de ${exercice.tache.aide_penalite_pourcent} %`);
+        rendreTexte(libelle, `Confirmer : l'indice réduit ton score de ${exercice.tache.aide_penalite_pourcent} %`);
         return;
       }
       bouton.disabled = true;
@@ -550,7 +588,7 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
       }
     });
     if (info.aide_utilisee) {
-      rendreTexte(bouton, "Revoir l'indice");
+      rendreTexte(libelle, "Revoir l'indice");
       confirmation = false;
     }
     bloc.append(bouton, texte);

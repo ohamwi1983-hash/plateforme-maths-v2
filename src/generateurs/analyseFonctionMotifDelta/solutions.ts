@@ -56,3 +56,8 @@ export function reponseBruteCorrecteMotifDelta(ex: ExerciceMotifDelta, champ: st
   }
 }
 
+
+/** Forme dessinable de la solution (RAPPORT §53) : seul le tableau de signes en a une (le tableau rempli) ; les autres écrans restent une phrase. */
+export function solutionStructureeMotifDelta(ex: ExerciceMotifDelta, champ: string): string | null {
+  return champ === CHAMP_TABLEAU_SIGNES ? reponseBruteCorrecteMotifDelta(ex, champ) : null;
+}

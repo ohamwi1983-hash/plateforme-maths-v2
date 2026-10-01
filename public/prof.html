@@ -1704,7 +1704,8 @@
      */
     function libelleVariante(generateur, variante) {
       const axesDistincts = new Set(generateur.variantes.map((v) => v.axe));
-      if (axesDistincts.size > 1 && variante.axe) {
+      // Une variante rangée dans un sous-groupe (`groupe`) l'affiche déjà en en-tête : préfixer aussi par l'axe répéterait « sans discriminant » sur chaque ligne (RAPPORT §53).
+      if (axesDistincts.size > 1 && variante.axe && !variante.groupe) {
         return `[${variante.axe}] ${variante.label}`;
       }
       return variante.label;
