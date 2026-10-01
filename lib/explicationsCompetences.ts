@@ -128,6 +128,34 @@ export const EXPLICATIONS_COMPETENCES: Record<string, ExplicationCompetence> = {
       "La ligne de signe d'une expression est correcte, mais sa traduction en flèches de variation (croissante/décroissante) est fausse — ou l'inverse.",
     exemple: "Le signe d'une expression est correctement identifié +, -, + sur 3 intervalles, mais les flèches de variation données ne correspondent pas à cette alternance.",
   },
+  RACINE_NON_SIMPLIFIEE: {
+    explication:
+      "La valeur donnée est mathématiquement juste, mais la racine carrée n'est pas simplifiée : le radicande contient encore un carré parfait. La réponse est comptée fausse tant que la forme n'est pas finalisée.",
+    exemple: "Les racines de x² − 8 = 0 sont ±2√2. L'élève écrit sqrt(8) : la valeur est exacte, mais √8 se simplifie en 2√2.",
+  },
+  RACINES_NOMBRE_INCORRECT: {
+    explication:
+      "L'élève se trompe sur le NOMBRE de racines de la fonction étudiée (aucune, une ou deux), et pas seulement sur leurs valeurs : c'est le signe du discriminant (ou la forme de la fonction) qui n'est pas bien lu. Le nombre attendu est celui que donnent les coefficients confirmés par l'élève, même faux.",
+    exemple: "Pour f(x) = x² − 4x + 1, Δ = 12 > 0 : deux racines. L'élève répond « aucune racine ».",
+  },
+  TABLEAU_SIGNE_PARTIEL: {
+    explication: "Dans le tableau, la ligne de signe de f(x) est en partie juste : certaines cases sont correctes, d'autres non (et la ligne n'est pas simplement inversée).",
+    exemple: "Pour f(x) = x² − 4 (racines −2 et 2), le signe attendu est + 0 − 0 +. L'élève met + 0 + 0 + : le signe entre les racines est faux, le reste est juste.",
+  },
+  TABLEAU_VARIATION_PARTIEL: {
+    explication: "Dans le tableau, la ligne des variations de f est en partie juste : certaines cases sont correctes, d'autres non (et la ligne n'est pas simplement inversée).",
+    exemple: "Pour f(x) = x² − 4, attendu : ↘ ⌣ ↗. L'élève met ↘ ⌣ ↘ : la décroissance avant le sommet est juste, la croissance après est fausse.",
+  },
+  TABLEAU_SIGNE_INVERSE: {
+    explication:
+      "La ligne de signe de f(x) est exactement l'inverse de la bonne : chaque + est à la place d'un − et inversement (les 0 aux racines sont justes). Cela traduit souvent une confusion sur le signe de a, ou sur la règle « signe de a à l'extérieur des racines, signe contraire entre elles ».",
+    exemple: "Pour f(x) = x² − 4, attendu : + 0 − 0 +. L'élève met − 0 + 0 − : toute la ligne est inversée.",
+  },
+  TABLEAU_CONCAVITE_INCORRECTE: {
+    explication:
+      "La ligne des variations est exactement l'inverse de la bonne : les flèches ↗ ↘ sont échangées et le sommet est pris pour un maximum au lieu d'un minimum (ou inversement). L'élève confond le sens de la parabole (signe de a).",
+    exemple: "Pour f(x) = x² − 4 (a > 0, minimum au sommet), attendu : ↘ ⌣ ↗. L'élève met ↗ ⌢ ↘.",
+  },
   TRANSFORMATION_HORIZONTALE: {
     explication: "Mauvaise lecture du décalage horizontal d'une parabole ou d'une fonction de référence transformée.",
     exemple: "Une parabole décalée de 3 vers la droite (sommet en x=3) ; l'élève lit un décalage de 3 vers la gauche, ou une autre valeur.",
