@@ -1362,3 +1362,51 @@
 .croquis-indice {
   font-size: 0.7em;
 }
+
+/* ── Parties fausses (RAPPORT §52) : docs/reference/parties-fausses.html. La carte entière est déjà teintée par le verdict ; la partie fausse s'en DÉTACHE : fond blanc, filet de 2 px
+   `--danger`, texte `--danger` en gras. La couleur ne suffit jamais : filet épaissi + ✕ (alternative textuelle vide : le sens est porté par `aria-invalid` / `aria-description`),
+   soulignement ondulé pour un morceau de réponse. Placé APRÈS les règles d'état (champ verrouillé, option cochée, case renseignée) qu'il doit l'emporter sur, à spécificité égale. ── */
+.moteur-ecran .moteur-champ.moteur-partie-fausse,
+.moteur-ecran .moteur-champ.moteur-partie-fausse:disabled {
+  color: var(--danger);
+  font-weight: 600;
+  background: var(--surface);
+  border: 2px solid var(--danger);
+  padding: calc(var(--espace-2)*1.125) calc(var(--espace-3)*0.6875); /* 9px 11px : le filet passe de 1 à 2 px, le padding perd 1 px, le texte ne bouge pas */
+}
+
+.moteur-ecran .moteur-choix.moteur-partie-fausse:has(input),
+.moteur-ecran .moteur-choix.moteur-partie-fausse:has(input:checked:disabled) {
+  color: var(--danger);
+  font-weight: 600;
+  background: var(--surface);
+  border: 2px solid var(--danger);
+}
+
+.moteur-choix.moteur-partie-fausse::after {
+  content: "\2715" / "";
+  margin-left: auto;
+  font-weight: 700;
+}
+
+.moteur-ecran .moteur-bouton.moteur-partie-fausse,
+.moteur-ecran .moteur-bouton.moteur-partie-fausse:disabled,
+.moteur-ecran .moteur-case-signe.moteur-partie-fausse,
+.moteur-ecran .moteur-case-signe.moteur-partie-fausse:disabled {
+  color: var(--danger);
+  background: var(--surface);
+  border: 2px solid var(--danger);
+}
+
+.moteur-bouton.moteur-partie-fausse::after {
+  content: "\2715" / "";
+  margin-left: calc(var(--espace-1)*1.5);
+  font-weight: 700;
+}
+
+.moteur-piece-fausse {
+  color: var(--danger);
+  font-weight: 700;
+  text-decoration: underline wavy var(--danger);
+  text-underline-offset: calc(var(--espace-1)*0.75); /* 3 px */
+}

@@ -135,12 +135,14 @@ export function verifierTableauMD(f: FonctionExacte, reponseBrute: string): Resu
   const saisi: CasesTableauSignes = d.valeur;
   const classes = (ligne: string): ClasseLigne => classerLigne(saisi[ligne] as Record<string, string>, solution[ligne] as Record<string, string>);
   const [cs, cv] = [classes(ID_LIGNE_SIGNE), classes(ID_LIGNE_VARIATION)];
+  // Cases fausses (RAPPORT §52) : celles dont la valeur diffère de la solution, désignées par `<ligne>:<ancre>`.
+  const partiesFausses = rangeesTableauMD(f).flatMap((rangee) => rangee.cellules.filter((c) => (saisi[rangee.ligne] as Record<string, string>)[c.ancre] !== (solution[rangee.ligne] as Record<string, string>)[c.ancre]).map((c) => `${rangee.ligne}:${c.ancre}`));
   const codes: string[] = [];
   if (cs === "inverse") codes.push(CODE_TABLEAU_SIGNE_INVERSE);
   else if (cs === "partielle") codes.push(CODE_TABLEAU_SIGNE_PARTIEL);
   if (cv === "inverse") codes.push(CODE_TABLEAU_CONCAVITE_INCORRECTE);
   else if (cv === "partielle") codes.push(CODE_TABLEAU_VARIATION_PARTIEL);
-  return { statut: "not_equivalent", codesCompetence: codes };
+  return { statut: "not_equivalent", codesCompetence: codes, partiesFausses };
 }
 
 /** Solution lisible (texte d'auteur) : « Signe : + 0 - 0 + ; Variations : ↘ ⌣ ↗ ». */

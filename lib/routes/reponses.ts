@@ -2,6 +2,7 @@ import type { RequeteHttp, ReponseHttp } from "../httpTypes";
 import { avecGestionErreurs } from "../avecGestionErreurs";
 import { eleveAuthentifie, supabaseAdmin } from "../supabaseAdmin";
 import { verifierAvecControle } from "../registreGenerateurs";
+import { partiesFaussesDe } from "../partiesFausses";
 import { calculerEtatExercice, chargerContexteTache, chargerDonneesExercice, COLONNES_EXERCICE_ASSIGNE, projeterExercice, regenererExercice, revelationFinDeTache, tacheEstCompletePourEleve, type LigneExerciceAssigne } from "../etatExercice";
 import { calculerDureeEcouleeSecondes, horodatageDebutPertinent } from "../moteurTentatives";
 import { construireChampVue, REGLAGES_FORCEES_ANTERIEURES } from "../tableauDeBord";
@@ -180,6 +181,11 @@ export const gererReponses = avecGestionErreurs(async function handler(req: Requ
     ...(vue.statut !== null ? { statut: vue.statut } : {}),
     ...(vue.solution_attendue !== null ? { solution_attendue: vue.solution_attendue } : {}),
     ...(resultat.statut === "parse_error" && contexte.reglages.feedback_immediat ? { message_erreur: resultat.messageErreur } : {}),
+    // Parties à surligner en rouge (RAPPORT §52) : sous correction immédiate seulement (porte unique : `lib/partiesFausses.ts`).
+    ...(() => {
+      const parties = identique ? null : partiesFaussesDe(resultat, contexte.reglages.feedback_immediat);
+      return parties !== null ? { parties_fausses: parties } : {};
+    })(),
     enregistree: true,
     verrouille: verrouilleClient,
     revele: vue.revele,

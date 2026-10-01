@@ -288,6 +288,14 @@ export type ResultatVerification =
        * inchangé. Jamais exposé par une réponse HTTP (règle de révélation). Contrôlé par `verifierAvecControle`.
        */
       fractionCorrecte?: number;
+      /**
+       * Optionnel (RAPPORT §52) : les PARTIES de la réponse qui sont fausses, pour que le composant les surligne en rouge. Identifiants propres au type d'écran, que le composant
+       * sait retrouver : `champs_multiples` = id du sous-champ ; `intervalle` = `crochetGauche` | `borneGauche` | `borneDroite` | `crochetDroit` ; `liste_valeurs` = `ligne:<i>` (rang dans
+       * la liste soumise) | `mode:aucune` ; `tableau_signes` = `<ligne>:<ancre>` ; `qcm` = id du choix coché ; `champ_expression` = `champ`. Liste vide admise (le verdict reste négatif sans
+       * qu'on sache désigner une partie : ex. une racine manquante). Absent : aucun surlignage fin, seul le rouge de la carte. **N'est exposé que sous correction immédiate** (même porte
+       * que le verdict, `lib/routes/reponses.ts`) ; contrôlé par `verifierAvecControle`.
+       */
+      partiesFausses?: string[];
     }
   | {
       statut: "parse_error";

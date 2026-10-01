@@ -1562,6 +1562,8 @@ async function scenarioGen7Coupe(navigateur: any, base: string, largeur: number)
   await repondreMD(page, exEleve, "tableauSignes");
   await passer("tableauSignes", true);
   await page.waitForSelector(".moteur-fin");
+  // Parties fausses (RAPPORT §52) : JAMAIS sous correction coupée — même à la fin, quand tous les verdicts sont révélés d'un coup.
+  verifier((await page.locator(".moteur-partie-fausse, .moteur-piece-fausse").count()) === 0, `${l} gen7 coupé : aucune partie fausse surlignée, même à la fin de la tâche`);
   // La tâche ENTIÈRE est terminée : tout est révélé d'un coup, scores compris (tableau final seulement : le rappel n'existe plus).
   const rangees: string[] = await page.locator(".moteur-fin .moteur-recap-table tbody tr").allInnerTexts();
   verifier(rangees.length === 7 && /^Coefficients\s+0 \/ 1 pt$/.test(rangees[0]!) && /^Total\s+10 \/ 11 pts$/.test(rangees[6]!), `${l} gen7 coupé : à la fin de la tâche, le tableau final révèle les scores : coefficients faux = 0, le reste juste pour SA fonction, total 10 / 11 (${JSON.stringify(rangees)})`);
@@ -1818,6 +1820,224 @@ async function scenarioRetourArriereTemoin(navigateur: any, base: string, largeu
   verifier(s.base.table("reponses").length === avant, `${l} : aller-retour exact (champ texte, qcm, liste, tableau) : AUCUNE ligne écrite (${avant} -> ${s.base.table("reponses").length})`);
   verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
   await contexte.close();
+}
+
+/**
+ * PARTIES FAUSSES surlignées en rouge (RAPPORT §52), jouées dans le navigateur sur gen7 (f = x² + 3x − 4) sous correction IMMÉDIATE avec essais supplémentaires : pour chaque type de composant
+ * (champs multiples texte et choix, intervalle, liste de racines, tableau), une réponse fausse sur UNE partie surligne exactement cette partie (classe + `aria-invalid` / `aria-description`),
+ * modifier cette partie retire sa marque (jamais de marquage pendant la frappe) ; puis, essais épuisés, la relecture (rappel gris et écran récapitulatif) surligne le morceau faux de « Ta réponse ».
+ * Sans « Afficher la réponse attendue » : le surlignage est le MÊME (il ne dépend que de la correction immédiate). Sous correction coupée : jamais, y compris à la fin (`scenarioGen7Coupe`).
+ */
+async function scenarioPartiesFausses(navigateur: any, base: string, largeur: number) {
+  const l = `${largeur} parties fausses`;
+  const s: Scenario = creerScenario();
+  installerBase(s.base);
+  const { ex } = await assignerMD(s, VARIANTE_REPERE, GRAINE_REPERE, { feedback: true, visible: false, tentatives: 3 });
+  const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+  const courant = page.locator(".moteur-ecran-courant");
+  const FAUSSE = ".moteur-partie-fausse";
+  const valider = async () => {
+    await courant.getByRole("button", { name: "Valider", exact: true }).click();
+    await page.waitForSelector(".moteur-ecran-courant .moteur-retour .moteur-statut");
+  };
+  const suite = async () => {
+    const avant = (await page.evaluate(`document.querySelector(".moteur-ecran-courant .moteur-consigne").textContent`)) as string;
+    await page.getByRole("button", { name: /Question suivante|Voir la fin/ }).click();
+    await page.waitForFunction(`(() => { const c = document.querySelector(".moteur-ecran-courant .moteur-consigne"); return document.querySelector(".moteur-fin") !== null || (c !== null && c.textContent !== ${JSON.stringify(avant)}); })()`);
+  };
+  const nbMarques = () => courant.locator(FAUSSE).count();
+
+  // 1. coefficients : champs texte (b faux) — le champ désigné, et lui seul
+  await courant.locator("#mc-coefficients-a").fill("1");
+  await courant.locator("#mc-coefficients-b").fill("997");
+  await courant.locator("#mc-coefficients-c").fill("-4");
+  verifier((await nbMarques()) === 0, `${l} / coefficients : aucune marque avant « Valider » (jamais de marquage pendant la frappe)`);
+  await valider();
+  verifier((await courant.locator("#mc-coefficients-b.moteur-partie-fausse").count()) === 1 && (await nbMarques()) === 1, `${l} / coefficients : seul « b » est surligné (${await nbMarques()} marque(s))`);
+  verifier((await courant.locator("#mc-coefficients-b").getAttribute("aria-invalid")) === "true" && (await courant.locator("#mc-coefficients-a").getAttribute("aria-invalid")) === null, `${l} / coefficients : aria-invalid sur « b » seulement`);
+  await page.screenshot({ path: join(CAPTURES, `${l}-01-coefficients.png`), fullPage: true });
+  await courant.locator("#mc-coefficients-b").fill("3");
+  verifier((await nbMarques()) === 0, `${l} / coefficients : modifier « b » retire sa marque`);
+  await valider();
+  verifier((await courant.locator(".moteur-statut-correct").count()) === 1 && (await nbMarques()) === 0, `${l} / coefficients : réponse juste, aucune marque`);
+  await suite();
+
+  // 2. allure : champs multiples à CHOIX (sens faux) — c'est l'option cochée qui est surlignée
+  await courant.locator('.moteur-choix:has(input[name="mc-allure-concavite"][value="-"])').click();
+  await courant.locator('.moteur-choix:has(input[name="mc-allure-positionSommet"][value="gauche"])').click();
+  await valider();
+  verifier((await courant.locator('.moteur-choix.moteur-partie-fausse:has(input[name="mc-allure-concavite"])').count()) === 1 && (await nbMarques()) === 1, `${l} / allure : seule l'option « Vers le bas » est surlignée`);
+  verifier((await courant.locator('.moteur-choix.moteur-partie-fausse input').getAttribute("aria-invalid")) === "true", `${l} / allure : aria-invalid sur l'option surlignée`);
+  await courant.locator('.moteur-choix:has(input[name="mc-allure-concavite"][value="+"])').click();
+  verifier((await nbMarques()) === 0, `${l} / allure : choisir une autre option retire la marque`);
+  await valider();
+  await suite();
+
+  // 3. axeSommet : x_S seul faux (axe et y_S justes)
+  await courant.locator("#mc-axeSommet-axeTexte").fill("x = -3/2");
+  await courant.locator("#mc-axeSommet-xS").fill("997");
+  await courant.locator("#mc-axeSommet-yS").fill("-25/4");
+  await valider();
+  verifier((await courant.locator("#mc-axeSommet-xS.moteur-partie-fausse").count()) === 1 && (await nbMarques()) === 1, `${l} / axeSommet : seul « x_S » est surligné (${await nbMarques()})`);
+  await courant.locator("#mc-axeSommet-xS").fill("-3/2");
+  await valider();
+  await suite();
+
+  // 4. domaineImage : intervalle — crochet de gauche faux (borne et autre crochet justes)
+  const ligne = courant.locator(".moteur-intervalle-ligne");
+  const cycler = async (cote: string, voulu: string) => {
+    const bouton = ligne.getByRole("button", { name: new RegExp(`Crochet de ${cote}`) });
+    for (let k = 0; k < 2 && (await bouton.textContent()) !== voulu; k++) await bouton.click();
+  };
+  await cycler("gauche", "]"); // faux : attendu « [ »
+  await ligne.getByLabel("Borne de gauche", { exact: true }).fill("-25/4");
+  await ligne.getByRole("button", { name: "Borne de droite : plus l'infini" }).click();
+  await cycler("droite", "[");
+  await valider();
+  verifier((await ligne.locator(".moteur-bouton-crochet.moteur-partie-fausse").count()) === 1 && (await nbMarques()) === 1, `${l} / domaineImage : seul le crochet de gauche est surligné (${await nbMarques()})`);
+  verifier((await ligne.locator(".moteur-bouton-crochet.moteur-partie-fausse").first().getAttribute("aria-description")) === "Réponse incorrecte", `${l} / domaineImage : aria-description « Réponse incorrecte » sur le crochet`);
+  await page.screenshot({ path: join(CAPTURES, `${l}-04-intervalle.png`), fullPage: true });
+  await ligne.getByRole("button", { name: /Crochet de gauche/ }).click();
+  verifier((await nbMarques()) === 0, `${l} / domaineImage : modifier le crochet retire sa marque`);
+  await cycler("gauche", "[");
+  await valider();
+  await suite();
+
+  // 5. racines : liste — la 1re valeur est fausse ; puis « Pas de racine » (bouton de mode) alors qu'il y en a
+  await courant.getByRole("radio", { name: "Au moins une racine" }).click();
+  await courant.locator(".moteur-liste-ligne .moteur-champ").first().fill("997");
+  await courant.locator(".moteur-liste-zone > .moteur-bouton-secondaire").click();
+  await courant.locator(".moteur-liste-ligne .moteur-champ").nth(1).fill("1");
+  await valider();
+  verifier((await courant.locator(".moteur-liste-ligne .moteur-champ.moteur-partie-fausse").count()) === 1 && (await courant.locator(".moteur-liste-ligne").nth(0).locator(FAUSSE).count()) === 1 && (await nbMarques()) === 1, `${l} / racines : seule la 1re ligne (997) est surlignée (${await nbMarques()})`);
+  await courant.locator(".moteur-liste-ligne .moteur-champ").first().fill("-4");
+  verifier((await nbMarques()) === 0, `${l} / racines : corriger la ligne retire sa marque`);
+  await courant.getByRole("radio", { name: "Pas de racine" }).click();
+  await valider();
+  verifier((await courant.locator(".moteur-bouton-mode.moteur-partie-fausse").count()) === 1 && (await nbMarques()) === 1, `${l} / racines : « Pas de racine » est surligné (il y a des racines)`);
+  await courant.getByRole("radio", { name: "Au moins une racine" }).click();
+  verifier((await nbMarques()) === 0, `${l} / racines : changer de mode retire la marque`);
+  await valider();
+  await suite();
+
+  // 6. tableauSignes : une case fausse
+  await repondreMD(page, ex, "tableauSignes");
+  const premiereCase = courant.locator(".moteur-ligne-tableau").first().locator("td button").first();
+  await premiereCase.click(); // une valeur de plus dans le cycle : fausse
+  await valider();
+  verifier((await courant.locator(".moteur-case-signe.moteur-partie-fausse").count()) === 1 && (await nbMarques()) === 1, `${l} / tableau : une seule case surlignée (${await nbMarques()})`);
+  verifier((await premiereCase.evaluate((e: any) => e.classList.contains("moteur-partie-fausse"))) === true, `${l} / tableau : c'est la case modifiée`);
+  await page.screenshot({ path: join(CAPTURES, `${l}-06-tableau.png`), fullPage: true });
+  await premiereCase.click();
+  verifier((await nbMarques()) === 0, `${l} / tableau : modifier la case retire sa marque`);
+  await repondreMD(page, ex, "tableauSignes");
+  await valider();
+  await suite();
+  await page.waitForSelector(".moteur-fin");
+  verifier((await page.locator(FAUSSE + ", .moteur-piece-fausse").count()) === 0, `${l} : exercice entièrement juste en fin de parcours : aucune marque nulle part`);
+  await page.getByRole("button", { name: "Terminer" }).click();
+  await page.waitForSelector("#tableau-de-bord:not([hidden])");
+  verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+  await contexte.close();
+
+  // ── Relecture : essais épuisés (0 essai supplémentaire), un coefficient faux (c = 0) ; la fonction de l'élève est x² + 3x ──
+  for (const visible of [false, true]) {
+    const lv = `${l} relecture ${visible ? "avec" : "sans"} la case`;
+    const s2: Scenario = creerScenario();
+    installerBase(s2.base);
+    const { ex: ex2 } = await assignerMD(s2, VARIANTE_REPERE, GRAINE_REPERE, { feedback: true, visible, tentatives: 0 });
+    const exEleve = projeterMotifDelta(ex2, [{ champ: "coefficients", reponseBrute: JSON.stringify({ a: "1", b: "3", c: "0" }), statut: "not_equivalent" }], { correctionImmediate: true, solutionMontree: visible });
+    const c2 = await ouvrirTacheGen7(navigateur, base, largeur, s2);
+    const cur = c2.page.locator(".moteur-ecran-courant");
+    for (const k of ["a", "b", "c"] as const) await cur.locator(`#mc-coefficients-${k}`).fill({ a: "1", b: "3", c: "0" }[k]);
+    await cur.getByRole("button", { name: "Valider", exact: true }).click();
+    await c2.page.waitForSelector(".moteur-ecran-courant .moteur-retour .moteur-statut");
+    verifier((await cur.locator("#mc-coefficients-c.moteur-partie-fausse").count()) === 1 && (await cur.locator("#mc-coefficients-c").isDisabled()), `${lv} : essais épuisés, le champ verrouillé « c » reste surligné (${await cur.locator(FAUSSE).count()})`);
+    await c2.page.getByRole("button", { name: "Question suivante" }).click();
+    await c2.page.waitForFunction(`document.querySelector(".moteur-rappel-ligne-courant") !== null && document.querySelector(".moteur-question-titre").textContent === "Question 2 sur 6"`);
+    const piece = c2.page.locator(".moteur-rappel .moteur-piece-fausse");
+    verifier((await piece.count()) === 1 && ((await piece.innerText()) === "0"), `${lv} : le rappel gris surligne le seul morceau faux de « Ta réponse » (« ${await piece.allInnerTexts()} »)`);
+    await c2.page.screenshot({ path: join(CAPTURES, `${l}-07-rappel-${visible ? "case" : "sans-case"}.png`), fullPage: true });
+    if (visible) {
+      await c2.contexte.close();
+      continue;
+    }
+    // La suite du parcours (juste pour SA fonction) jusqu'à l'écran récapitulatif.
+    for (const champ of ["allure", "axeSommet", "domaineImage", "racines", "tableauSignes"]) {
+      await repondreMD(c2.page, exEleve, champ);
+      await validerEtSuivreGen7(c2.page);
+    }
+    await c2.page.waitForSelector(".moteur-fin");
+    const pieces = c2.page.locator(".moteur-ecran-termine .moteur-piece-fausse");
+    verifier((await pieces.count()) === 1 && ((await pieces.innerText()) === "0") && (await c2.page.locator(".moteur-ecran-termine").nth(0).locator(".moteur-piece-fausse").count()) === 1, `${lv} : l'écran récapitulatif surligne ce même morceau, dans la 1re carte seulement (${await pieces.count()})`);
+    verifier((await c2.page.locator(".moteur-ecran-termine .moteur-etiquette", { hasText: "Ta réponse" }).first().evaluate((e: any) => e.classList.contains("moteur-piece-fausse"))) === false, `${lv} : l'étiquette « Ta réponse : » n'est jamais surlignée`);
+    await c2.page.screenshot({ path: join(CAPTURES, `${l}-08-recapitulatif.png`), fullPage: true });
+    await c2.contexte.close();
+  }
+}
+
+/**
+ * PARTIES FAUSSES sur le TÉMOIN (RAPPORT §52) : le champ texte et le QCM, que gen7 n'utilise plus, gardent leur marquage dans le navigateur. (1) Avec essais supplémentaires : la réponse
+ * fausse surligne le champ / l'option cochée (classe + aria), la modifier retire la marque. (2) Sans essai : le champ verrouillé reste surligné, puis le RAPPORT gris surligne les morceaux
+ * faux de « Ta réponse » (texte brut pour le champ, libellé d'auteur pour l'option).
+ */
+async function scenarioPartiesFaussesTemoin(navigateur: any, base: string, largeur: number) {
+  const l = `${largeur} parties fausses témoin`;
+  const FAUSSE = ".moteur-partie-fausse";
+  for (const tentatives of [2, 0]) {
+    imposerProfilAssignation("base");
+    const s: Scenario = creerScenario();
+    installerBase(s.base);
+    const tacheId = creerTache(s, { nom: "Parties fausses témoin", feedback_immediat: true, tentatives_supplementaires: tentatives, variantes: [{ variante_id: VARIANTE_TEMOIN, nombre_exercices: 1 }] });
+    const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tacheId, eleve_ids: ["eleve-1"] } });
+    verifier(a.statut === 201, `${l} : assignation ${a.statut}`);
+    const ex = temoin.generer(Number(s.base.table("exercices_assignes")[0]!.graine));
+    const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+    const courant = page.locator(".moteur-ecran-courant");
+    const valider = async () => {
+      await courant.getByRole("button", { name: "Valider", exact: true }).click();
+      await page.waitForSelector(".moteur-ecran-courant .moteur-retour .moteur-statut");
+    };
+    const suivante = async () => {
+      const avant = (await page.evaluate(`document.querySelector(".moteur-ecran-courant .moteur-consigne").textContent`)) as string;
+      await page.getByRole("button", { name: /Question suivante/ }).click();
+      await page.waitForFunction(`document.querySelector(".moteur-ecran-courant .moteur-consigne").textContent !== ${JSON.stringify(avant)}`);
+    };
+    const e = `${l} (${tentatives} essai${tentatives > 1 ? "s" : ""} en plus)`;
+
+    // Écran 1 : champ texte (somme) faux
+    await courant.locator(".moteur-champ").fill(String(ex.a + ex.b + 1));
+    await valider();
+    verifier((await courant.locator(".moteur-champ.moteur-partie-fausse").count()) === 1 && (await courant.locator(".moteur-champ").getAttribute("aria-invalid")) === "true", `${e} / somme : le champ texte est surligné (aria-invalid)`);
+    if (tentatives > 0) {
+      await courant.locator(".moteur-champ").fill(String(ex.a + ex.b));
+      verifier((await courant.locator(FAUSSE).count()) === 0, `${e} / somme : modifier le texte retire la marque`);
+      await valider();
+    }
+    await suivante();
+
+    // Écran 2 : QCM (parité) — l'option « ni l'un ni l'autre » est fausse dans tous les cas
+    await courant.locator('.moteur-choix:has(input[value="ni"])').click();
+    await valider();
+    verifier((await courant.locator(".moteur-choix.moteur-partie-fausse").count()) === 1 && (await courant.locator('.moteur-choix.moteur-partie-fausse input[value="ni"]').count()) === 1, `${e} / parité : seule l'option cochée est surlignée`);
+    if (tentatives > 0) {
+      await courant.locator('.moteur-choix:has(input[value="pair"])').click();
+      verifier((await courant.locator(FAUSSE).count()) === 0, `${e} / parité : choisir une autre option retire la marque`);
+      await courant.locator('.moteur-choix:has(input[value="' + ((ex.a + ex.b) % 2 === 0 ? "pair" : "impair") + '"])').click();
+      await valider();
+    }
+    await suivante();
+
+    if (tentatives === 0) {
+      // Relecture : le rappel gris surligne les morceaux faux de « Ta réponse » (texte d'élève ; libellé d'auteur d'une option)
+      const pieces: string[] = await page.locator(".moteur-rappel .moteur-piece-fausse").allInnerTexts();
+      verifier(pieces.length === 2 && pieces[0] === String(ex.a + ex.b + 1), `${e} : le rappel gris surligne la somme fausse ET l'option fausse (${JSON.stringify(pieces)})`);
+      verifier((await page.locator(".moteur-rappel .moteur-piece-fausse").first().evaluate((el: any) => getComputedStyle(el).textDecorationLine)) === "underline", `${e} : morceau faux souligné (la couleur ne suffit pas)`);
+      await page.screenshot({ path: join(CAPTURES, `${l}-rappel.png`), fullPage: true });
+    }
+    verifier(journal.pageerrors.length === 0, `${e} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+    await contexte.close();
+  }
 }
 
 /**
@@ -2248,6 +2468,10 @@ async function main() {
       controlerReponsesHttp(`${largeur} gen7 coupé`);
       await scenarioGen7Prof(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} gen7 prof`);
+      await scenarioPartiesFausses(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} parties fausses`);
+      await scenarioPartiesFaussesTemoin(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} parties fausses (témoin)`);
       await scenarioGen7MotifDelta(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} gen7 motif/delta`);
       await scenarioGen7Cascade(navigateur, url, largeur);

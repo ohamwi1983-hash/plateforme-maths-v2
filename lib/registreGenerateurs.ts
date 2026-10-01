@@ -102,5 +102,13 @@ export function verifierAvecControle(generateur: Generateur<any>, exercice: unkn
       throw new Error(`${generateur.variante_id} : fractionCorrecte doit être un nombre fini avec 0 ≤ φ < 1 (reçu ${String(f)})`);
     }
   }
+  // `partiesFausses` (RAPPORT §52) : une liste de chaînes courtes, sans doublon, jamais sur un autre verdict que `not_equivalent`.
+  const parties: unknown = (resultat as { partiesFausses?: unknown }).partiesFausses;
+  if (parties !== undefined) {
+    if (resultat.statut !== "not_equivalent") throw new Error(`${generateur.variante_id} : partiesFausses n'est admise que sur not_equivalent (reçu sur ${resultat.statut})`);
+    if (!Array.isArray(parties) || parties.length > 200 || parties.some((p) => typeof p !== "string" || p.length === 0 || p.length > 60) || new Set(parties).size !== parties.length) {
+      throw new Error(`${generateur.variante_id} : partiesFausses invalide (liste de ≤ 200 chaînes de 1 à 60 caractères, sans doublon)`);
+    }
+  }
   return resultat;
 }

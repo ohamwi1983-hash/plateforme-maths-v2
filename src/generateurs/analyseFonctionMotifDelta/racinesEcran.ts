@@ -1,6 +1,6 @@
 import type { EcranListeValeurs, ResultatVerification } from "../../../lib/contratGenerateur";
 import { decoderListeValeursOuAucune } from "../../../lib/reponsesEcran";
-import { lireValeur, type ValeurLue } from "./comparaison";
+import { comparerValeur, lireValeur, type ValeurLue } from "./comparaison";
 import { CODE_RACINE_NON_SIMPLIFIEE, CODE_RACINE_PARTIELLE, CODE_RACINES_NOMBRE_INCORRECT } from "./codes";
 import { egaux, latexExact, texteSaisieExact, type Exact } from "./exact/nombreExact";
 import { CHAMP_RACINES, type FonctionExacte } from "./types";
@@ -37,8 +37,9 @@ export function verifierRacinesMD(f: Pick<FonctionExacte, "racines">, reponseBru
   const d = decoderListeValeursOuAucune(reponseBrute);
   if (!d.ok) return { statut: "parse_error", codesCompetence: [], messageErreur: d.message };
   const attendues = f.racines;
-  const incorrect = (codes: string[]): ResultatVerification => ({ statut: "not_equivalent", codesCompetence: codes });
-  if (d.valeur.aucune) return attendues.length === 0 ? { statut: "correct", codesCompetence: [] } : incorrect([CODE_RACINES_NOMBRE_INCORRECT]);
+  const incorrect = (codes: string[], partiesFausses: string[]): ResultatVerification => ({ statut: "not_equivalent", codesCompetence: codes, partiesFausses });
+  // « Pas de racine » alors qu'il y en a : c'est le CHOIX de mode qui est faux (aucune ligne n'a été proposée).
+  if (d.valeur.aucune) return attendues.length === 0 ? { statut: "correct", codesCompetence: [] } : incorrect([CODE_RACINES_NOMBRE_INCORRECT], ["mode:aucune"]);
 
   const lues: ValeurLue[] = [];
   for (const [i, texte] of d.valeur.valeurs.entries()) {
@@ -46,11 +47,20 @@ export function verifierRacinesMD(f: Pick<FonctionExacte, "racines">, reponseBru
     if (!l.ok) return { statut: "parse_error", codesCompetence: [], messageErreur: `Racine n°${i + 1} : ${l.message}` };
     lues.push(l.lu);
   }
+  // Lignes fausses (RAPPORT §52) : une valeur qui n'est aucune racine, une racine RÉPÉTÉE (à partir de la 2e occurrence), ou une valeur juste mais non simplifiée.
+  const dejaVues: Exact[] = [];
+  const partiesFausses: string[] = [];
+  for (const [i, l] of lues.entries()) {
+    const racine = attendues.find((r) => comparerValeur(r, l) !== "faux");
+    const repetee = racine !== undefined && dejaVues.some((v) => egaux(v, racine));
+    if (racine === undefined || repetee || l.nonSimplifie) partiesFausses.push(`ligne:${i}`);
+    if (racine !== undefined) dejaVues.push(racine);
+  }
   const propose = distinctes(lues.map((l) => l.valeur));
-  if (lues.length > 2 || propose.length !== attendues.length) return incorrect([CODE_RACINES_NOMBRE_INCORRECT]);
+  if (lues.length > 2 || propose.length !== attendues.length) return incorrect([CODE_RACINES_NOMBRE_INCORRECT], partiesFausses);
   const justes = attendues.filter((r) => propose.some((p) => egaux(p, r))).length;
-  if (justes === attendues.length) return lues.some((l) => l.nonSimplifie) ? incorrect([CODE_RACINE_NON_SIMPLIFIEE]) : { statut: "correct", codesCompetence: [] };
-  return incorrect(attendues.length === 2 && justes === 1 ? [CODE_RACINE_PARTIELLE] : []);
+  if (justes === attendues.length) return lues.some((l) => l.nonSimplifie) ? incorrect([CODE_RACINE_NON_SIMPLIFIEE], partiesFausses) : { statut: "correct", codesCompetence: [] };
+  return incorrect(attendues.length === 2 && justes === 1 ? [CODE_RACINE_PARTIELLE] : [], partiesFausses);
 }
 
 /** Solution lisible : texte d'auteur, racines en KaTeX. */

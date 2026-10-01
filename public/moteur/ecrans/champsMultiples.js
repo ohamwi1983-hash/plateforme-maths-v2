@@ -1,6 +1,7 @@
 import { rendreTexte } from "../rendreTexte.js";
 import { versTexteBrut } from "../texteMath.js";
 import { construireCroquisAllure } from "../croquis.js";
+import { aDesParties, creerMarquage, fausse } from "./marquage.js";
 
 /**
  * Composant d'écran « champs_multiples » : plusieurs sous-champs (texte libre ou choix fermé) validés
@@ -23,6 +24,7 @@ export default {
     const lecteurs = new Map(); // id -> () => string | null (valeur courante, rognée ; null si vide)
     const poseurs = new Map(); // id -> (valeur: string) => void (restaure une réponse déjà confirmée)
     const desactivables = [];
+    const parties = new Map(); // id -> { type: "texte", entree } | { type: "choix", radios } : ce que `marquer` surligne (RAPPORT §52)
     let premier = null;
 
     const illustration = ecran.illustration && ecran.illustration.type === "croquis_allure" ? ecran.illustration : null;
@@ -81,6 +83,7 @@ export default {
         poseurs.set(sous.id, (valeur) => {
           for (const r of radios) r.checked = r.value === valeur;
         });
+        parties.set(sous.id, { type: "choix", radios });
         desactivables.push(...radios);
         if (!premier) premier = radios[0];
       } else {
@@ -114,6 +117,7 @@ export default {
         poseurs.set(sous.id, (valeur) => {
           entree.value = valeur;
         });
+        parties.set(sous.id, { type: "texte", entree });
         desactivables.push(entree);
         if (!premier) premier = entree;
       }
@@ -134,8 +138,18 @@ export default {
       majIllustration();
     }
 
+    // Parties fausses (RAPPORT §52) : un champ texte est surligné ; pour une question à choix, c'est l'option COCHÉE qui l'est. Modifier la partie retire sa marque.
+    const marquage = creerMarquage((id) => {
+      const partie = parties.get(id);
+      if (!partie) return null;
+      if (partie.type === "texte") return { elements: [partie.entree], declencheurs: [[partie.entree, "input"]] };
+      const cochees = partie.radios.filter((r) => r.checked);
+      return { elements: cochees.map((r) => r.parentElement), controles: cochees, declencheurs: partie.radios.map((r) => [r, "change"]) };
+    });
+
     return {
       element,
+      marquer: (ids) => marquage.marquer(ids),
       lireReponse() {
         const resultat = {};
         for (const sous of ecran.champs) {
@@ -155,7 +169,7 @@ export default {
   },
 
   /** Pièces : libellé (auteur) · valeur (élève, ou libellé de choix = auteur) ; séparées par « ; ». */
-  resumer(ecran, valeurSaisie) {
+  resumer(ecran, valeurSaisie, partiesFausses) {
     let valeurs;
     try {
       valeurs = JSON.parse(valeurSaisie);
@@ -170,11 +184,13 @@ export default {
       // « a = 3 » (libellé se terminant par = : ≡) mais « Signe de a : a > 0 » (libellé sans ponctuation finale).
       const separateur = /(=|:|≡|\\equiv)\s*\$?\s*$/.test(sous.libelle) ? " " : " : ";
       pieces.push({ texte: sous.libelle, auteur: true }, { texte: separateur });
+      const aMarquer = aDesParties(partiesFausses) && partiesFausses.includes(sous.id);
+      const marque = (piece) => (aMarquer ? fausse(piece) : piece); // seule la VALEUR est surlignée, jamais le libellé
       if (sous.genre === "choix") {
         const choix = sous.choix.find((c) => c.id === v);
-        pieces.push(choix ? { texte: choix.libelle, auteur: true } : { texte: v });
+        pieces.push(marque(choix ? { texte: choix.libelle, auteur: true } : { texte: v }));
       } else {
-        pieces.push({ texte: v });
+        pieces.push(marque({ texte: v }));
       }
     });
     return pieces;

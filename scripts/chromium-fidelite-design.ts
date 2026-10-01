@@ -16,6 +16,8 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { demarrerServeur, stubSupabase } from "./support/serveurChromium";
 import { appeler, creerScenario, creerTache, imposerProfilAssignation, installerBase } from "./support/harnaisRouteur";
+import { genererExerciceMD } from "../src/generateurs/analyseFonctionMotifDelta/exercice";
+import { reponseBruteCorrecteMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/solutions";
 import { CHAMP_SOMME, CHAMP_PARITE, CHAMP_DIVISEURS, CHAMP_SIGNES, generateurTemoinTechnique as temoin, reponseBruteCorrecte, VARIANTE_TEMOIN } from "../src/generateurs/_temoinTechnique";
 
 const RACINE = join(__dirname, "..");
@@ -539,6 +541,131 @@ async function main(): Promise<void> {
           verifier((await page.locator(".moteur-rappel-score, .moteur-rappel-total, .moteur-recap").count()) === 0, `${e} : sous correction coupée, aucun score pendant la résolution`);
           await ctx.close();
         }
+      }
+    }
+  }
+
+  // ── Parties fausses (RAPPORT §52) : docs/reference/parties-fausses.html, à 390 ET 1280 px ──
+  {
+    const refPF = readFileSync(join(RACINE, "docs/reference/parties-fausses.html"), "utf8");
+    const P_FAUX = ["color", "fontWeight", "backgroundColor", "borderTopColor", "borderTopWidth", "borderTopStyle", "borderTopLeftRadius"];
+    const P_PIECE = ["color", "fontWeight", "textDecorationLine", "textDecorationStyle", "textDecorationColor"];
+    /** Contenu du pseudo-élément ::after (le ✕) : mesuré à part, `getComputedStyle(el, "::after")`. */
+    const apres = async (page: any, sel: string): Promise<string> => (await page.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); return e ? getComputedStyle(e, "::after").content : "ABSENT"; })()`)) as string;
+    /** Session gen7 (correction immédiate, essais selon `tentatives`) ; `pre` = écrans répondus par l'API avant l'ouverture. */
+    async function ouvrirGen7(largeur: number, tentatives: number, pre: [string, unknown][]) {
+      imposerProfilAssignation("aleatoire");
+      const s = creerScenario();
+      installerBase(s.base);
+      const tid = creerTache(s, { nom: "Fidélité parties fausses", feedback_immediat: true, reponse_visible: false, tentatives_supplementaires: tentatives, variantes: [{ variante_id: "af_delta_racines_rationnelles", nombre_exercices: 1 }] });
+      const o = Math.random;
+      Math.random = () => 4242 / 2 ** 32;
+      try {
+        const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tid, eleve_ids: ["eleve-1"] } });
+        if (a.statut !== 201) throw new Error("assignation " + a.statut);
+      } finally {
+        Math.random = o;
+      }
+      const ligne = s.base.table("exercices_assignes")[0]!;
+      const ex = genererExerciceMD("af_delta_racines_rationnelles", Number(ligne.graine));
+      for (const [champ, brut] of pre) {
+        const r = await appeler("reponses", "POST", { jeton: "eleve:eleve-1", corps: { exercice_assigne_id: ligne.id, champ, reponse_brute: brut === "@juste" ? reponseBruteCorrecteMotifDelta(ex, champ) : typeof brut === "string" ? brut : JSON.stringify(brut) } });
+        if (r.statut !== 200) throw new Error(`préparation ${champ} : ${r.statut} ${JSON.stringify(r.corps)}`);
+      }
+      const ctx = await navigateur.newContext({ viewport: { width: largeur, height: 900 }, hasTouch: largeur < 600 });
+      const page = await ctx.newPage();
+      await page.route("**/unpkg.com/@supabase/supabase-js**", (r: any) => r.fulfill({ contentType: "text/javascript", body: stubSupabase("eleve:eleve-1", "e1@x") }));
+      await page.route("**/fonts.googleapis.com/**", (r: any) => r.fulfill({ contentType: "text/css", body: "" }));
+      await page.route("**/fonts.gstatic.com/**", (r: any) => r.abort());
+      await page.addInitScript(`localStorage.setItem("eleve-profil-cache", JSON.stringify({ affichage: "Test eleve-1", prenom: "Test", nom: "eleve-1" }));`);
+      await page.goto(srv.url + "/eleve.html");
+      await page.waitForSelector(".carte-tache");
+      await page.locator(".carte-tache").click();
+      await page.waitForSelector(".moteur-ecran-courant");
+      return { page, ctx };
+    }
+    const valider = async (page: any) => {
+      await page.locator(".moteur-ecran-courant").getByRole("button", { name: "Valider", exact: true }).click();
+      await page.waitForSelector(".moteur-ecran-courant .moteur-retour .moteur-statut");
+    };
+
+    for (const largeur of [390, 1280]) {
+      const e = `parties fausses ${largeur} px`;
+      const ctxR = await navigateur.newContext({ viewport: { width: largeur, height: 900 } });
+      const pR = await ctxR.newPage();
+      await pR.route("**/fonts.googleapis.com/**", (r: any) => r.fulfill({ contentType: "text/css", body: "" }));
+      await pR.setContent(refPF);
+      const R = (ref: string) => mesurer(pR, `[data-ref="${ref}"]`);
+      const REF: Record<string, Element | null> = {};
+      for (const ref of ["champ", "champ-faux", "choix", "choix-faux", "bouton", "bouton-faux", "piece-fausse"]) REF[ref] = await R(ref);
+      const apresRef = async (ref: string) => (await pR.evaluate(`getComputedStyle(document.querySelector('[data-ref="${ref}"]'), "::after").content`)) as string;
+      const [croixChoixRef, croixBoutonRef] = [await apresRef("choix-faux"), await apresRef("bouton-faux")];
+      await pR.screenshot({ path: join(CAPTURES, `fidelite-ref-parties-fausses-${largeur}.png`), fullPage: true });
+      await ctxR.close();
+
+      // (a) champ texte : « b » faux ; puis le rappel gris d'un écran terminé faux (morceau de « Ta réponse »)
+      {
+        const { page, ctx } = await ouvrirGen7(largeur, 3, []);
+        for (const [k, v] of [["a", "1"], ["b", "997"], ["c", "-4"]]) await page.locator(`#mc-coefficients-${k}`).fill(v);
+        await valider(page);
+        await page.locator("#mc-coefficients-a").blur();
+        await flou(page);
+        await page.screenshot({ path: join(CAPTURES, `fidelite-app-parties-fausses-champ-${largeur}.png`), fullPage: true });
+        comparer(e, "champ faux", REF["champ-faux"]!, await mesurer(page, "#mc-coefficients-b.moteur-partie-fausse"), [...P_FAUX, "fontSize", "paddingTop", "paddingLeft"]);
+        verifier((await mesurer(page, "#mc-coefficients-a"))?.borderTopWidth !== (await mesurer(page, "#mc-coefficients-b"))?.borderTopWidth, `${e} : le champ faux se distingue (filet) d'un champ non marqué`);
+        await ctx.close();
+      }
+      {
+        const { page, ctx } = await ouvrirGen7(largeur, 0, [["coefficients", { a: "1", b: "3", c: "0" }]]);
+        await flou(page);
+        comparer(e, "morceau de réponse faux (rappel gris)", REF["piece-fausse"]!, await mesurer(page, ".moteur-rappel .moteur-piece-fausse"), P_PIECE);
+        await ctx.close();
+      }
+      // (b) option de choix : « sens » faux (allure)
+      {
+        const { page, ctx } = await ouvrirGen7(largeur, 3, [["coefficients", "@juste"]]);
+        await page.locator('.moteur-choix:has(input[name="mc-allure-concavite"][value="-"])').click();
+        await page.locator('.moteur-choix:has(input[name="mc-allure-positionSommet"][value="gauche"])').click();
+        await valider(page);
+        await flou(page);
+        await page.screenshot({ path: join(CAPTURES, `fidelite-app-parties-fausses-choix-${largeur}.png`), fullPage: true });
+        comparer(e, "option de choix fausse", REF["choix-faux"]!, await mesurer(page, ".moteur-choix.moteur-partie-fausse"), P_FAUX);
+        verifier((await apres(page, ".moteur-choix.moteur-partie-fausse")) === croixChoixRef, `${e} : ✕ de l'option (référence ${croixChoixRef}, application ${await apres(page, ".moteur-choix.moteur-partie-fausse")})`);
+        comparer(e, "option juste non marquée (inchangée)", REF["choix"]!, await mesurer(page, '.moteur-choix:has(input[name="mc-allure-positionSommet"]:checked)'), ["borderTopWidth", "borderTopStyle"]);
+        await ctx.close();
+      }
+      // (c) bouton : crochet de gauche faux (intervalle)
+      {
+        const { page, ctx } = await ouvrirGen7(largeur, 3, [["coefficients", "@juste"], ["allure", "@juste"], ["axeSommet", "@juste"]]);
+        const ligne = page.locator(".moteur-intervalle-ligne");
+        const bouton = ligne.getByRole("button", { name: /Crochet de gauche/ });
+        for (let k = 0; k < 2 && (await bouton.textContent()) !== "]"; k++) await bouton.click();
+        await ligne.getByLabel("Borne de gauche", { exact: true }).fill("-25/4");
+        await ligne.getByRole("button", { name: "Borne de droite : plus l'infini" }).click();
+        const droit = ligne.getByRole("button", { name: /Crochet de droite/ });
+        for (let k = 0; k < 2 && (await droit.textContent()) !== "["; k++) await droit.click();
+        await valider(page);
+        await flou(page);
+        comparer(e, "bouton faux (crochet)", REF["bouton-faux"]!, await mesurer(page, ".moteur-bouton-crochet.moteur-partie-fausse"), ["color", "backgroundColor", "borderTopColor", "borderTopWidth", "borderTopStyle", "fontWeight"]);
+        verifier((await apres(page, ".moteur-bouton-crochet.moteur-partie-fausse")) === croixBoutonRef, `${e} : ✕ du bouton (${await apres(page, ".moteur-bouton-crochet.moteur-partie-fausse")} contre ${croixBoutonRef})`);
+        await ctx.close();
+      }
+      // (d) case de tableau : toutes les cases cliquées une fois (valeurs quelconques, fausses pour la plupart)
+      {
+        const { page, ctx } = await ouvrirGen7(largeur, 3, [["coefficients", "@juste"], ["allure", "@juste"], ["axeSommet", "@juste"], ["domaineImage", "@juste"], ["racines", "@juste"]]);
+        const cases = page.locator(".moteur-ligne-tableau td button");
+        const n = await cases.count();
+        for (let k = 0; k < n; k++) await cases.nth(k).click();
+        await valider(page);
+        await flou(page);
+        await page.screenshot({ path: join(CAPTURES, `fidelite-app-parties-fausses-tableau-${largeur}.png`), fullPage: true });
+        // TOUTES les cases marquées (ligne des signes ET ligne des variations : leurs règles de base n'ont pas la même spécificité), jamais seulement la première.
+        const nbMarquees = (await page.evaluate(`(() => { const l = [...document.querySelectorAll(".moteur-case-signe.moteur-partie-fausse")]; l.forEach((c, i) => c.setAttribute("data-mesure-pf", String(i))); return l.length; })()`)) as number;
+        verifier(nbMarquees >= 3, `${e} : plusieurs cases marquées à mesurer (${nbMarquees})`);
+        const lignesMarquees = (await page.evaluate(`[...document.querySelectorAll(".moteur-case-signe.moteur-partie-fausse")].map((c) => c.closest("tbody").className)`)) as string[];
+        verifier(new Set(lignesMarquees).size >= 1, `${e} : lignes de tableau marquées : ${[...new Set(lignesMarquees)].join(" | ")}`);
+        for (let k = 0; k < nbMarquees; k++) comparer(e, `case de tableau fausse n°${k + 1}`, REF["bouton-faux"]!, await mesurer(page, `[data-mesure-pf="${k}"]`), ["color", "backgroundColor", "borderTopColor", "borderTopWidth", "borderTopStyle"]);
+        await ctx.close();
       }
     }
   }

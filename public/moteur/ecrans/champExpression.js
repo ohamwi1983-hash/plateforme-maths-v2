@@ -1,4 +1,5 @@
 import { versTexteBrut } from "../texteMath.js";
+import { aDesParties, creerMarquage, fausse } from "./marquage.js";
 
 /**
  * Composant d'écran « champ_expression » : un champ de saisie libre. État d'édition = la valeur du
@@ -28,8 +29,11 @@ export default {
       }
     });
     element.appendChild(entree);
+    // Partie fausse (RAPPORT §52) : l'identifiant `champ` désigne le champ ; modifier le texte retire la marque.
+    const marquage = creerMarquage((id) => (id === "champ" ? { elements: [entree], declencheurs: [[entree, "input"]] } : null));
     return {
       element,
+      marquer: (ids) => marquage.marquer(ids),
       lireReponse() {
         const valeur = entree.value.trim();
         return valeur === "" ? null : valeur;
@@ -43,7 +47,7 @@ export default {
     };
   },
 
-  resumer(_ecran, valeurSaisie) {
-    return valeurSaisie;
+  resumer(_ecran, valeurSaisie, partiesFausses) {
+    return aDesParties(partiesFausses) && partiesFausses.includes("champ") ? [fausse({ texte: valeurSaisie })] : valeurSaisie;
   },
 };

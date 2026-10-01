@@ -38,5 +38,5 @@ export function verifierAllureMD(f: Pick<FonctionExacte, "a" | "xS">, reponseBru
   const attendu = allureAttendue(f);
   const [concaviteOk, positionOk] = [d.valeur.concavite === attendu.concavite, d.valeur.positionSommet === attendu.position];
   if (concaviteOk && positionOk) return { statut: "correct", codesCompetence: [] };
-  return { statut: "not_equivalent", codesCompetence: concaviteOk !== positionOk ? [CODE_ALLURE_PARTIELLE] : [] };
+  return { statut: "not_equivalent", codesCompetence: concaviteOk !== positionOk ? [CODE_ALLURE_PARTIELLE] : [], partiesFausses: [...(concaviteOk ? [] : ["concavite"]), ...(positionOk ? [] : ["positionSommet"])] };
 }

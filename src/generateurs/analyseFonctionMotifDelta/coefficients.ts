@@ -21,15 +21,18 @@ export function verifierCoefficientsMD(vrais: { a: Coef; b: Coef; c: Coef }, rep
   const d = decoderChampsMultiples(reponseBrute, { champs: SOUS_CHAMPS_COEFFICIENTS_MD });
   if (!d.ok) return { statut: "parse_error", codesCompetence: [], messageErreur: d.message };
   const comparaisons: Comparaison[] = [];
+  const partiesFausses: string[] = [];
   for (const k of ["a", "b", "c"] as const) {
     const l = lireValeur(d.valeur[k] as string);
     if (!l.ok) return { statut: "parse_error", codesCompetence: [], messageErreur: `Pour ${NOMS[k]} : ${l.message}` };
     // Les coefficients sont des valeurs EXACTES : jamais de tolérance (même un coefficient rationnel doit être exact).
     const attendu = coefVersExact(vrais[k]);
-    comparaisons.push(egaux(l.lu.valeur, attendu) ? (l.lu.nonSimplifie ? "juste_non_simplifie" : "juste") : "faux");
+    const c: Comparaison = egaux(l.lu.valeur, attendu) ? (l.lu.nonSimplifie ? "juste_non_simplifie" : "juste") : "faux";
+    comparaisons.push(c);
+    if (c !== "juste") partiesFausses.push(k); // une valeur juste mais non simplifiée est aussi à reprendre
   }
   const s = synthese(comparaisons);
   if (s === "correct") return { statut: "correct", codesCompetence: [] };
-  return { statut: "not_equivalent", codesCompetence: s === "non_simplifie" ? [CODE_RACINE_NON_SIMPLIFIEE] : [] };
+  return { statut: "not_equivalent", codesCompetence: s === "non_simplifie" ? [CODE_RACINE_NON_SIMPLIFIEE] : [], partiesFausses };
 }
 
