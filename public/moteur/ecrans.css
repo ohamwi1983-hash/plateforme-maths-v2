@@ -891,9 +891,70 @@
   gap: var(--espace-3);
 }
 
-/* ── Retour en arrière (RAPPORT §37) : mêmes composants (carte terminée, bouton secondaire, panneau de fin) ; seul l'alignement du bouton « Modifier » est propre. ── */
-.moteur-bouton-modifier {
-  align-self: flex-start;
+/* ── Retour en arrière (RAPPORT §37) : carte terminée et panneau de fin. « Modifier ma réponse » est un CRAYON (RAPPORT §48, modèle A du propriétaire) :
+   pastille ronde de 32 px (`--violet-clair`, icône `--violet-vif`), à droite de la ligne du rappel gris et à droite du bloc « Ta réponse » de la relecture.
+   Le bouton global du site (`button`, style.css : min-height 44 px, padding 9 × 18, bord 2 px, ombre violette, marge, survol `brightness`) est NEUTRALISÉ
+   ici propriété par propriété : la mesure Chromium (`verifierCrayons`) lit le style calculé. ── */
+.moteur-crayon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--espace-4) + var(--espace-2)); /* 32px */
+  height: calc(var(--espace-4) + var(--espace-2));
+  min-height: 0;
+  margin: 0 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--violet-clair);
+  color: var(--violet-vif);
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.moteur-crayon svg {
+  display: block;
+  width: var(--espace-3); /* 16px */
+  height: var(--espace-3);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.moteur-crayon:hover:not(:disabled) {
+  filter: none;
+  background: var(--violet-vif);
+  color: var(--surface);
+}
+
+.moteur-crayon:focus-visible {
+  outline: 2px solid var(--violet-vif);
+  outline-offset: 2px;
+}
+
+/* Ligne du rappel avec crayon : hauteur mini de 32 px (le crayon ne chevauche jamais la ligne voisine) ; marque et texte restent calés sur la première ligne. */
+.moteur-rappel-ligne-modifiable .moteur-rappel-corps {
+  flex: 1;
+  padding-top: calc(var(--espace-1)*1.75); /* 7px : texte centré sur le crayon de 32px */
+}
+
+.moteur-rappel-ligne-modifiable .moteur-rappel-marque {
+  margin-top: calc(var(--espace-1)*1.5); /* 6px */
+}
+
+/* Relecture : le crayon est à droite du bloc « Ta réponse », à sa hauteur. */
+.moteur-ligne-reponse {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-2);
+}
+
+.moteur-ligne-reponse > .moteur-reponse-eleve {
+  flex: 1;
+  min-width: 0;
 }
 
 /* ══ Phase 3b-1 ══════════════════════════════════════════════════════════════════════════════════════

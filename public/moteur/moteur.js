@@ -13,6 +13,7 @@
 import { COMPOSANTS_ECRAN } from "./ecrans/index.js";
 import { AIDES_TYPEES } from "./aides/index.js";
 import { rendreTexte } from "./rendreTexte.js";
+import { versTexteBrut } from "./texteMath.js";
 
 const LIBELLES_STATUT = {
   correct: "Bonne réponse",
@@ -32,6 +33,31 @@ const MARQUES_RAPPEL = {
   neutre: { etat: "neutre", glyphe: "•" },
 };
 const LIBELLE_NEUTRE = "Réponse enregistrée";
+
+/**
+ * Crayon « Modifier ma réponse » (RAPPORT §48) : pastille ronde, SEUL point de création du bouton (rappel gris ET relecture). Icône SVG construite par le DOM
+ * (aucun innerHTML), `aria-hidden` : le nom accessible est l'`aria-label` explicite, l'infobulle « Modifier » aide à la souris.
+ */
+function creerCrayon(nom, surClic) {
+  const bouton = document.createElement("button");
+  bouton.type = "button";
+  bouton.className = "moteur-crayon";
+  bouton.setAttribute("aria-label", `Modifier ma réponse à l'écran « ${versTexteBrut(nom)} »`); // nom = texte d'AUTEUR dans un attribut : texte brut
+  bouton.title = "Modifier";
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  for (const d of ["M12 20h9", "M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"]) {
+    const chemin = document.createElementNS(ns, "path");
+    chemin.setAttribute("d", d);
+    svg.appendChild(chemin);
+  }
+  bouton.appendChild(svg);
+  bouton.addEventListener("click", surClic);
+  return bouton;
+}
 
 /** Nom court d'un écran (`ecran.nom`, texte d'auteur) ; à défaut « Question n ». */
 function nomDe(ecran, rang) {
@@ -141,15 +167,9 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
         if (!info.verrouille && info.modifiable !== true) continue; // écrans à venir : pas encore affichés
         const carte = creer("section", "moteur-ecran moteur-ecran-termine");
         carte.appendChild(creer("p", "moteur-consigne", ecran.consigne, { math: true }));
-        carte.appendChild(resumeTermine(ecran, info));
-        if (info.modifiable === true) {
-          // Écran déjà répondu mais encore modifiable : « Modifier » rouvre l'écran.
-          const modifier = creer("button", "moteur-bouton moteur-bouton-secondaire moteur-bouton-modifier", "Modifier ma réponse");
-          modifier.type = "button";
-          modifier.setAttribute("aria-label", "Modifier ma réponse à cet écran");
-          modifier.addEventListener("click", () => afficher(exercice, { edition: ecran.champ }));
-          carte.appendChild(modifier);
-        }
+        // Écran déjà répondu mais encore modifiable : le crayon, à droite de « Ta réponse », rouvre l'écran (RAPPORT §48).
+        const crayon = info.modifiable === true ? creerCrayon(nomDe(ecran, exercice.ecrans.indexOf(ecran) + 1), () => afficher(exercice, { edition: ecran.champ })) : null;
+        carte.appendChild(resumeTermine(ecran, info, crayon));
         racine.appendChild(carte);
       }
     }
@@ -265,15 +285,12 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
     corps.appendChild(valeur);
     // Une réponse juste n'a pas besoin de « Réponse attendue » (elle lui est identique) : la solution n'est rappelée que pour un écran non réussi.
     if (info.solution_attendue !== null && info.statut !== "correct") corps.appendChild(creer("p", "moteur-rappel-solution moteur-solution", "Réponse attendue : " + info.solution_attendue, { math: true }));
-    if (retour && info.modifiable === true) {
-      // Retour en arrière : la réponse actuelle (dernière réponse valide) est affichée, « Modifier » rouvre l'écran.
-      const modifier = creer("button", "moteur-bouton moteur-bouton-secondaire moteur-bouton-modifier", "Modifier ma réponse");
-      modifier.type = "button";
-      modifier.setAttribute("aria-label", `Modifier ma réponse à l'écran « ${nom} »`);
-      modifier.addEventListener("click", () => afficher(exercice, { edition: info.champ }));
-      corps.appendChild(modifier);
-    }
     ligne.append(pastille, corps);
+    if (retour && info.modifiable === true) {
+      // Retour en arrière : la réponse actuelle (dernière réponse valide) est affichée ; le crayon, à droite de la ligne, rouvre l'écran (RAPPORT §48).
+      ligne.classList.add("moteur-rappel-ligne-modifiable");
+      ligne.appendChild(creerCrayon(nom, () => afficher(exercice, { edition: info.champ })));
+    }
     return ligne;
   }
 
@@ -283,7 +300,7 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
    */
   function panneauRemise(exercice) {
     const bloc = creer("section", "moteur-fin moteur-remise");
-    bloc.appendChild(creer("p", "moteur-message", "Tu as répondu à tous les écrans. Relis tes réponses : « Modifier ma réponse » rouvre n'importe quel écran. Quand tu es prêt·e, rends l'exercice."));
+    bloc.appendChild(creer("p", "moteur-message", "Tu as répondu à tous les écrans. Relis tes réponses : le crayon à côté d'une réponse rouvre l'écran correspondant. Quand tu es prêt·e, rends l'exercice."));
     const retour = creer("div", "moteur-retour");
     retour.setAttribute("role", "status");
     retour.setAttribute("aria-live", "polite");
@@ -320,15 +337,21 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
   }
 
   /** Relecture d'un écran terminé (RAPPORT §43 : seulement sans écran courant) : ta réponse, le verdict et la solution tels que le serveur les montre. */
-  function resumeTermine(ecran, info) {
+  function resumeTermine(ecran, info, crayon) {
     const bloc = creer("div", "moteur-resume");
     if (info.valeur_saisie !== null) {
       const reponse = creer("p", "moteur-reponse-eleve");
       const valeur = creer("span", "moteur-valeur");
       rendrePieces(valeur, composantPour(ecran).resumer(ecran, info.valeur_saisie));
       reponse.append(creer("span", "moteur-etiquette", "Ta réponse : "), valeur);
-      bloc.appendChild(reponse);
+      if (crayon) {
+        const ligne = creer("div", "moteur-ligne-reponse");
+        ligne.append(reponse, crayon);
+        bloc.appendChild(ligne);
+        crayon = null;
+      } else bloc.appendChild(reponse);
     }
+    if (crayon) bloc.appendChild(crayon); // (jamais sans réponse en pratique : « modifiable » suppose une réponse)
     if (info.statut !== null) bloc.appendChild(creer("p", "moteur-statut moteur-statut-" + info.statut, LIBELLES_STATUT[info.statut]));
     if (info.solution_attendue !== null) bloc.appendChild(creer("p", "moteur-solution", "Réponse attendue : " + info.solution_attendue, { math: true }));
     return bloc;

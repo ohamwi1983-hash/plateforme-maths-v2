@@ -16,7 +16,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { demarrerServeur, stubSupabase } from "./support/serveurChromium";
 import { appeler, creerScenario, creerTache, imposerProfilAssignation, installerBase } from "./support/harnaisRouteur";
-import { CHAMP_SOMME, CHAMP_PARITE, CHAMP_DIVISEURS, generateurTemoinTechnique as temoin, reponseBruteCorrecte, VARIANTE_TEMOIN } from "../src/generateurs/_temoinTechnique";
+import { CHAMP_SOMME, CHAMP_PARITE, CHAMP_DIVISEURS, CHAMP_SIGNES, generateurTemoinTechnique as temoin, reponseBruteCorrecte, VARIANTE_TEMOIN } from "../src/generateurs/_temoinTechnique";
 
 const RACINE = join(__dirname, "..");
 const CAPTURES = process.env.CAPTURES_DIR ?? join(RACINE, "captures-chromium");
@@ -280,11 +280,11 @@ async function main(): Promise<void> {
     const P_MARQUE = [...P_ROND, "display", "alignItems", "justifyContent"];
     const taille = (m: Element | null): string => `${m?._largeur}×${m?._hauteur}`;
     /** Session du témoin : réglages de tâche + réponses déjà données (JSON brut par champ), puis ouverture du moteur. */
-    async function ouvrirEnveloppe(largeur: number, reglages: { feedback: boolean }, reponses: [string, string][]) {
+    async function ouvrirEnveloppe(largeur: number, reglages: { feedback: boolean; retour?: boolean }, reponses: [string, string][]) {
       imposerProfilAssignation("base");
       const s = creerScenario();
       installerBase(s.base);
-      const tid = creerTache(s, { nom: "Fidélité enveloppe", feedback_immediat: reglages.feedback, reponse_visible: false, tentatives_supplementaires: 0, variantes: [{ variante_id: VARIANTE_TEMOIN, nombre_exercices: 2 }] });
+      const tid = creerTache(s, { nom: "Fidélité enveloppe", feedback_immediat: reglages.feedback, autoriser_retour_arriere: reglages.retour ?? false, reponse_visible: false, tentatives_supplementaires: 0, variantes: [{ variante_id: VARIANTE_TEMOIN, nombre_exercices: 2 }] });
       const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tid, eleve_ids: ["eleve-1"] } });
       if (a.statut !== 201) throw new Error("assignation " + a.statut);
       const ligne = s.base.table("exercices_assignes")[0]!;
@@ -303,7 +303,7 @@ async function main(): Promise<void> {
       await page.goto(srv.url + "/eleve.html");
       await page.waitForSelector(".carte-tache");
       await page.locator(".carte-tache").click();
-      await page.waitForSelector(".moteur-ecran-courant > .moteur-rappel");
+      await page.waitForSelector(reponses.length >= 4 ? ".moteur-ecran-termine" : ".moteur-ecran-courant > .moteur-rappel");
       return { page, ctx };
     }
 
@@ -407,6 +407,49 @@ async function main(): Promise<void> {
         verifier((await page.locator(".moteur-rappel-marque-neutre").innerText()) === "•" && (await page.locator(".moteur-segment-fait-neutre").count()) === 1, `enveloppe ${l} (coupée) : marque neutre « • » et segment neutre`);
         verifier((await page.locator(".moteur-rappel-marque-correct, .moteur-rappel-marque-not_equivalent, .moteur-rappel-marque-parse_error, .moteur-segment-fait-correct, .moteur-segment-fait-not_equivalent, .moteur-segment-fait-parse_error").count()) === 0, `enveloppe ${l} (coupée) : aucune couleur de verdict avant la fin de la tâche`);
         await ctx.close();
+      }
+      // ── Crayon « Modifier ma réponse » (RAPPORT §48) : docs/reference/crayon-modifier.html, dans le rappel gris ET dans la relecture ──
+      {
+        const refCrayon = readFileSync(join(RACINE, "docs/reference/crayon-modifier.html"), "utf8");
+        const ctxC = await navigateur.newContext({ viewport: { width: largeur, height: 700 } });
+        const pC = await ctxC.newPage();
+        await pC.route("**/fonts.googleapis.com/**", (r: any) => r.fulfill({ contentType: "text/css", body: "" }));
+        await pC.setContent(refCrayon);
+        const CM: Record<string, Element | null> = {};
+        for (const ref of ["rappel", "ligne", "marque", "corps", "crayon", "icone", "relecture", "reponse", "crayon-relecture"]) CM[ref] = await mesurer(pC, `[data-ref="${ref}"]`);
+        const cdist = {
+          "ligne|haut du panneau→crayon": await decalageHaut(pC, '[data-ref="rappel"]', '[data-ref="crayon"]'),
+          "relecture|réponse→crayon (haut à haut)": await decalageHaut(pC, '[data-ref="reponse"]', '[data-ref="crayon-relecture"]'),
+        };
+        await ctxC.close();
+        const P_CRAYON = ["display", "alignItems", "justifyContent", "width", "height", "minHeight", "borderTopLeftRadius", "backgroundColor", "color", "boxShadow", "borderTopWidth", "marginTop", "marginRight", "marginBottom", "marginLeft", ...PADDING];
+        for (const [etat, reglages, reponses] of [
+          ["rappel", { feedback: false, retour: true }, [[CHAMP_SOMME, "@juste"], [CHAMP_PARITE, "@juste"], [CHAMP_DIVISEURS, "@juste"]]],
+          ["relecture", { feedback: false, retour: true }, [[CHAMP_SOMME, "@juste"], [CHAMP_PARITE, "@juste"], [CHAMP_DIVISEURS, "@juste"], [CHAMP_SIGNES, "@juste"]]],
+        ] as const) {
+          const { page, ctx } = await ouvrirEnveloppe(largeur, reglages, reponses as unknown as [string, string][]);
+          await flou(page);
+          const e = `crayon ${l} (${etat})`;
+          const sel = etat === "rappel" ? ".moteur-rappel .moteur-crayon" : ".moteur-ecran-termine .moteur-crayon";
+          const refBouton = etat === "rappel" ? CM["crayon"]! : CM["crayon-relecture"]!;
+          comparer(e, "crayon", refBouton, await mesurer(page, sel), P_CRAYON);
+          comparer(e, "icône", CM["icone"]!, await mesurer(page, sel + " svg"), ["width", "height", "strokeWidth", "stroke", "fill", "display"]);
+          verifier(taille(refBouton) === taille(await mesurer(page, sel)), `${e} : taille ${taille(refBouton)} attendue, ${taille(await mesurer(page, sel))} obtenue`);
+          if (etat === "rappel") {
+            comparer(e, "ligne", CM["ligne"]!, await mesurer(page, ".moteur-rappel-ligne-modifiable"), ["display", "alignItems", "gap"]);
+            comparer(e, "marque", CM["marque"]!, await mesurer(page, ".moteur-rappel-ligne-modifiable .moteur-rappel-marque"), ["marginTop", "width", "height"]);
+            comparer(e, "corps", CM["corps"]!, await mesurer(page, ".moteur-rappel-ligne-modifiable .moteur-rappel-corps"), ["paddingTop", "flexGrow", "display", "flexWrap", "alignItems"]);
+            const d = await decalageHaut(page, ".moteur-rappel", ".moteur-rappel-ligne-modifiable .moteur-crayon");
+            // 1er crayon : sous le titre et la piste de progression (hauteur propre à l'application) ; la référence ne porte que le panneau d'une ligne
+            verifier(d !== null && d > 0, `${e} : le crayon est dans le panneau gris (décalage ${d})`);
+          } else {
+            comparer(e, "ligne de réponse", CM["relecture"]!, await mesurer(page, ".moteur-ligne-reponse"), ["display", "alignItems", "gap"]);
+            const dr = await decalageHaut(page, ".moteur-ligne-reponse .moteur-reponse-eleve", ".moteur-ligne-reponse .moteur-crayon");
+            verifier(Math.abs((dr ?? 99) - (cdist["relecture|réponse→crayon (haut à haut)"] ?? 0)) <= 6, `${e} : crayon centré sur le bloc « Ta réponse » (décalage haut à haut ${dr}, référence ${cdist["relecture|réponse→crayon (haut à haut)"]} ± 6 : la hauteur du bloc dépend de son texte)`);
+          }
+          await page.screenshot({ path: join(CAPTURES, `fidelite-app-crayon-${etat}-${largeur}.png`), fullPage: true });
+          await ctx.close();
+        }
       }
     }
   }
