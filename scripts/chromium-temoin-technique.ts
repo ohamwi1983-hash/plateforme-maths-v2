@@ -29,6 +29,12 @@ import {
   champsAnalyseFonction, factorisationVersLatex, fonctionEffective, genererExercice as genererGen7, projeterAnalyseFonction as projeterGen7, rangeesTableau, solutionTableau as solutionTableauGen7, reponseBruteCorrecteAnalyseFonction as reponseGen7, type CategorieAnalyseFonction, type ExerciceAnalyseFonction,
 } from "../src/generateurs/analyseFonction";
 
+import { FAMILLES } from "../src/generateurs/analyseFonctionMotifDelta/familles";
+import { genererExerciceMD } from "../src/generateurs/analyseFonctionMotifDelta/exercice";
+import { reponseBruteCorrecteMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/solutions";
+import { rangeesTableauMD } from "../src/generateurs/analyseFonctionMotifDelta/tableauSignes";
+import { fonctionVraie, type ExerciceMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/types";
+
 const RACINE = join(__dirname, "..");
 const CAPTURES = process.env.CAPTURES_DIR ?? join(RACINE, "captures-chromium");
 mkdirSync(CAPTURES, { recursive: true });
@@ -589,7 +595,7 @@ async function scenarioProf(navigateur: any, base: string, largeur: number) {
     const badgesSurActifs = actifs.filter((c) => c.closest(".stepper")?.querySelector(".etiquette-bientot-disponible")).length;
     return { total: champs.length, actifs: actifs.map((c) => c.dataset.varianteId), nbInactifs: inactifs.length, badgesSurInactifs, badgesSurActifs, contientTemoin: document.body.innerHTML.includes("temoin") };
   })()`)) as { total: number; actifs: string[]; nbInactifs: number; badgesSurInactifs: number; badgesSurActifs: number; contientTemoin: boolean };
-  verifier(rapport.actifs.length === 4 && rapport.actifs.includes("af_mise_en_evidence"), `${l} prof : les 4 variantes gen7 doivent rester actives (non disabled), obtenu ${JSON.stringify(rapport.actifs)}`);
+  verifier(rapport.actifs.length === 10 && rapport.actifs.includes("af_motif_aucune_racine") && rapport.actifs.includes("af_delta_racines_irrationnelles") && !rapport.actifs.some((v: string) => ["af_mise_en_evidence", "af_binome_conjugue", "af_produit_remarquable", "af_irreductible"].includes(v)), `${l} prof : les 10 variantes gen7 motif/delta sont actives (non disabled) et les 4 anciennes ne sont plus proposées, obtenu ${JSON.stringify(rapport.actifs)}`);
   verifier(rapport.nbInactifs > 0 && rapport.badgesSurInactifs === rapport.nbInactifs, `${l} prof : chaque entrée non câblée porte l'étiquette « bientôt disponible » (${rapport.badgesSurInactifs}/${rapport.nbInactifs})`);
   verifier(rapport.badgesSurActifs === 0, `${l} prof : aucune étiquette sur une entrée câblée`);
   verifier(!rapport.contientTemoin, `${l} prof : aucune trace du témoin technique dans la page professeur`);
@@ -1895,7 +1901,7 @@ async function scenarioApercuRetour(navigateur: any, base: string, largeur: numb
     await page.locator('button[data-onglet="taches"]').click();
     await page.locator("#bouton-accordeon-creer").click();
     await page.waitForSelector("#composition-dynamique input.stepper-valeur", { state: "attached" });
-    await page.evaluate(`(() => { const i = document.querySelector('#composition-dynamique input[data-variante-id="af_mise_en_evidence"]'); i.value = "1"; i.dispatchEvent(new Event("input", { bubbles: true })); i.dispatchEvent(new Event("change", { bubbles: true })); })()`);
+    await page.evaluate(`(() => { const i = document.querySelector('#composition-dynamique input[data-variante-id="af_motif_racine_double_rationnelle"]'); i.value = "1"; i.dispatchEvent(new Event("input", { bubbles: true })); i.dispatchEvent(new Event("change", { bubbles: true })); })()`);
     // La case « retour en arrière » est visible mais GRISÉE tant que la correction immédiate est cochée.
     verifier(await page.locator("#autoriser-retour-arriere").isDisabled(), `${l} : case grisée sous correction immédiate`);
     await page.locator("#feedback-immediat").uncheck({ force: true });
@@ -1913,8 +1919,8 @@ async function scenarioApercuRetour(navigateur: any, base: string, largeur: numb
     const tache = s.base.table("taches")[0]!;
     verifier(tache.est_apercu === true && tache.feedback_immediat === false && tache.autoriser_retour_arriere === retour, `${l} : la tâche d'aperçu reprend le formulaire (retour = ${String(tache.autoriser_retour_arriere)})`);
     const premier = s.base.table("exercices_assignes")[0]!;
-    const ex = genererGen7("mise_en_evidence", Number(premier.graine));
-    await repondreGen7(popup, ex, "coefficients");
+    const ex = genererExerciceMD("af_motif_racine_double_rationnelle", Number(premier.graine));
+    await repondreMD(popup, ex, "coefficients");
     await popup.locator(".moteur-ecran-courant").getByRole("button", { name: "Valider", exact: true }).click();
     await popup.waitForSelector(".moteur-ecran-courant .moteur-retour .moteur-statut");
     if (retour) {
@@ -1998,40 +2004,198 @@ async function scenarioGen7Prof(navigateur: any, base: string, largeur: number) 
   await page.locator('button[data-onglet="taches"]').click();
   await page.locator("#bouton-accordeon-creer").click();
   await page.waitForSelector("#composition-dynamique input.stepper-valeur", { state: "attached" });
-  const variantes = ["af_mise_en_evidence", "af_binome_conjugue", "af_produit_remarquable", "af_irreductible"];
-  const etat = (await page.evaluate(`(${JSON.stringify(variantes)}).map((v) => { const i = document.querySelector('#composition-dynamique input[data-variante-id="' + v + '"]'); return i ? { v, desactive: i.disabled } : { v, absent: true }; })`)) as { v: string; desactive?: boolean; absent?: boolean }[];
-  verifier(etat.every((e) => !e.absent && e.desactive === false), `${l} prof gen7 : les 4 champs « nombre d'exercices » existent et ne sont PAS disabled (${JSON.stringify(etat)})`);
+  // Discipline de câblage (CLAUDE.md) : les DIX variantes ont leur champ « nombre d'exercices » ET il n'est pas `disabled` (CORRESPONDANCE_JSON_VERS_PILOTE) ; les 4 anciennes n'existent plus dans l'arbre.
+  const variantes: string[] = FAMILLES.map((f) => f.id);
+  const retirees = ["af_mise_en_evidence", "af_binome_conjugue", "af_produit_remarquable", "af_irreductible"];
+  const etat = (await page.evaluate(`(${JSON.stringify([...variantes, ...retirees])}).map((v) => { const i = document.querySelector('#composition-dynamique input[data-variante-id="' + v + '"]'); return i ? { v, desactive: i.disabled } : { v, absent: true }; })`)) as { v: string; desactive?: boolean; absent?: boolean }[];
+  verifier(etat.filter((e) => variantes.includes(e.v)).every((e) => !e.absent && e.desactive === false), `${l} prof gen7 : les 10 champs « nombre d'exercices » existent et ne sont PAS disabled (${JSON.stringify(etat.filter((e) => variantes.includes(e.v)))})`);
+  verifier(etat.filter((e) => retirees.includes(e.v)).every((e) => e.absent === true), `${l} prof gen7 : les 4 anciennes variantes ne sont plus proposées (${JSON.stringify(etat.filter((e) => retirees.includes(e.v)))})`);
   await page.locator("#nom-tache").fill("Étude de fonctions");
-  for (const v of ["af_mise_en_evidence", "af_irreductible"]) {
+  const choisies = ["af_motif_racine_double_irrationnelle", "af_delta_aucune_racine"];
+  for (const v of choisies) {
     await page.evaluate(`(() => { const i = document.querySelector('#composition-dynamique input[data-variante-id="${v}"]'); i.value = "1"; i.dispatchEvent(new Event("input", { bubbles: true })); i.dispatchEvent(new Event("change", { bubbles: true })); })()`);
   }
   verifier(await page.locator("#btn-creer-tache").isEnabled(), `${l} prof gen7 : « Créer » est actif dès que le nom et un exercice gen7 sont saisis`);
   await page.locator("#btn-creer-tache").click();
   await page.waitForFunction(`document.getElementById("nom-tache").value === ""`);
   const composition = s.base.table("taches_composition");
-  verifier(composition.length === 2 && composition.every((c) => c.generateur_id === "gen7") && composition.map((c) => c.variante_id).sort().join() === "af_irreductible,af_mise_en_evidence", `${l} prof gen7 : la tâche créée par l'interface contient les 2 variantes gen7 (${JSON.stringify(composition.map((c) => c.variante_id))})`);
+  verifier(composition.length === 2 && composition.every((c) => c.generateur_id === "gen7") && composition.map((c) => c.variante_id).sort().join() === [...choisies].sort().join(), `${l} prof gen7 : la tâche créée par l'interface contient les 2 variantes choisies (${composition.map((c) => c.variante_id).join()})`);
   const tacheId = s.base.table("taches").find((t) => t.nom === "Étude de fonctions")!.id as string;
-  // Assignation par la route réelle (la même que le bouton « Assigner »), puis l'élève reçoit deux exercices de deux catégories.
+  // Assignation par la route réelle (la même que le bouton « Assigner »), puis l'élève reçoit deux exercices de deux sous-variantes.
   const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tacheId, eleve_ids: ["eleve-1"] } });
   verifier(a.statut === 201 && a.corps.nombre_exercices_generes === 2, `${l} prof gen7 : assignation de la tâche créée : ${a.statut} ${JSON.stringify(a.corps)}`);
   const lignes = s.base.table("exercices_assignes").filter((x) => x.tache_id === tacheId);
-  verifier(lignes.map((x) => x.variante_id).sort().join() === "af_irreductible,af_mise_en_evidence" && lignes.every((x) => x.generateur_id === "gen7"), `${l} prof gen7 : les exercices assignés portent les bonnes variantes`);
+  verifier(lignes.map((x) => x.variante_id as string).sort().join() === [...choisies].sort().join() && lignes.every((x) => x.generateur_id === "gen7"), `${l} prof gen7 : les exercices assignés portent les bonnes variantes`);
   await page.screenshot({ path: join(CAPTURES, `${l}-gen7-prof-tache-creee.png`), fullPage: false });
   verifier(journal.pageerrors.length === 0, `${l} prof gen7 : erreurs JS : ${journal.pageerrors.join(" | ")}`);
   await contexte.close();
 
   // L'élève résout le PREMIER exercice de la tâche composée par le professeur.
   const premiere = lignes[0]!;
-  const categorie = (premiere.variante_id as string).slice(3) as CategorieAnalyseFonction;
-  const ex = genererGen7(categorie, Number(premiere.graine));
+  const ex = genererExerciceMD(premiere.variante_id as ExerciceMotifDelta["famille"], Number(premiere.graine));
   const { page: p2, contexte: c2 } = await ouvrirTacheGen7(navigateur, base, largeur, s);
   const courant = p2.locator(".moteur-ecran-courant");
-  verifier((await courant.locator(".moteur-consigne").innerText()).startsWith("Étudie la fonction suivante :") && (await courant.locator(".moteur-consigne .katex").count()) >= 1, `${l} prof gen7 : l'élève voit l'énoncé de la tâche composée par le professeur`);
-  await repondreGen7(p2, ex, "coefficients");
+  verifier((await courant.locator(".moteur-consigne").innerText()).startsWith("Étudie la fonction suivante :") && (await courant.locator(".moteur-consigne .katex").count()) >= 1, `${l} prof gen7 : l'élève voit l'énoncé de la tâche composée par le professeur, rendu par KaTeX`);
+  await repondreMD(p2, ex, "coefficients");
   await courant.getByRole("button", { name: "Valider", exact: true }).click();
   await p2.waitForSelector(".moteur-statut-correct");
   await c2.close();
 }
+
+// ══ gen7 « motif / delta » (RAPPORT §49) : les DIX sous-variantes, jouées au clic dans le navigateur (vrai routeur, vraie base en mémoire) ══
+
+/** Réponse à un écran de gen7 « motif / delta » par l'interface (même gestes qu'un élève). */
+async function repondreMD(page: any, ex: ExerciceMotifDelta, champ: string): Promise<void> {
+  const courant = page.locator(".moteur-ecran-courant");
+  const brute = reponseBruteCorrecteMotifDelta(ex, champ);
+  if (champ === "coefficients") {
+    const v = JSON.parse(brute);
+    for (const k of ["a", "b", "c"]) await courant.locator(`#mc-coefficients-${k}`).fill(v[k]);
+  } else if (champ === "allure") {
+    for (const [id, valeur] of Object.entries(JSON.parse(brute))) await courant.locator(`.moteur-choix:has(input[name="mc-allure-${id}"][value="${valeur}"])`).click();
+  } else if (champ === "axeSommet") {
+    const v = JSON.parse(brute);
+    await courant.locator("#mc-axeSommet-axeTexte").fill(v.axeTexte);
+    await courant.locator("#mc-axeSommet-xS").fill(v.xS);
+    await courant.locator("#mc-axeSommet-yS").fill(v.yS);
+  } else if (champ === "domaineImage") {
+    const v = JSON.parse(brute);
+    const ligne = courant.locator(".moteur-intervalle-ligne");
+    for (const [cote, crochet] of [["gauche", v.crochetGauche], ["droite", v.crochetDroit]]) {
+      const bouton = ligne.getByRole("button", { name: new RegExp(`Crochet de ${cote}`) });
+      for (let k = 0; k < 2 && (await bouton.textContent()) !== crochet; k++) await bouton.click();
+    }
+    if (v.borneGauche === "-inf") await ligne.getByRole("button", { name: "Borne de gauche : moins l'infini" }).click();
+    else await ligne.getByLabel("Borne de gauche", { exact: true }).fill(v.borneGauche);
+    if (v.borneDroite === "+inf") await ligne.getByRole("button", { name: "Borne de droite : plus l'infini" }).click();
+    else await ligne.getByLabel("Borne de droite", { exact: true }).fill(v.borneDroite);
+  } else if (champ === "racines") {
+    const valeurs = JSON.parse(brute) as string[];
+    if (valeurs.length === 0) {
+      await courant.getByRole("radio", { name: "Pas de racine" }).click();
+    } else {
+      await courant.getByRole("radio", { name: "Au moins une racine" }).click();
+      for (const [i, valeur] of valeurs.entries()) {
+        if ((await courant.locator(".moteur-liste-ligne").count()) <= i) await courant.locator(".moteur-liste-zone > .moteur-bouton-secondaire").click();
+        await courant.locator(".moteur-liste-ligne .moteur-champ").nth(i).fill(valeur);
+      }
+    }
+  } else if (champ === "tableauSignes") {
+    const lignes = page.locator(".moteur-ecran-courant .moteur-ligne-tableau");
+    const sol = JSON.parse(brute) as Record<string, Record<string, string>>;
+    for (const [i, rangee] of rangeesTableauMD(fonctionVraie(ex)).entries()) {
+      const boutons = lignes.nth(i).locator("td button");
+      for (const [c, cellule] of rangee.cellules.entries()) {
+        const attendu = (sol[rangee.ligne] as Record<string, string>)[cellule.ancre] as string;
+        const nom = Object.hasOwn(NOMS_SYMBOLES_GEN7, attendu) ? NOMS_SYMBOLES_GEN7[attendu] : attendu;
+        for (let k = 0; k < 6 && (await valeurDeCase(boutons.nth(c))) !== nom; k++) await boutons.nth(c).click();
+      }
+    }
+  } else {
+    throw new Error(`champ gen7 motif/delta inconnu « ${champ} »`);
+  }
+}
+
+/**
+ * Une partie COMPLÈTE par sous-variante (10 × 2 largeurs), au clic : six écrans, mathématiques (dont les racines carrées) rendues par KaTeX sans repli en source ; sur l'écran d'allure,
+ * les DEUX réglages (sens de la parabole, position du sommet) pilotent le même croquis en direct ; sur l'ensemble-image, l'aperçu « im f = » est AU-DESSUS de la saisie et suit la frappe, sans aide ; aide
+ * combinée de l'allure puis croquis de parabole (coefficients réels) sur le tableau ; tableau à 3 ou 7 colonnes selon le nombre de racines ; six réponses correctes enregistrées.
+ */
+async function scenarioGen7MotifDelta(navigateur: any, base: string, largeur: number) {
+  const l = `${largeur}`;
+  for (const [i, fam] of FAMILLES.entries()) {
+    const s: Scenario = creerScenario();
+    installerBase(s.base);
+    const tacheId = creerTache(s, { nom: `md ${fam.numero}`, variantes: [{ variante_id: fam.id, nombre_exercices: 1 }], aide_activee: true });
+    const origine = Math.random;
+    Math.random = () => (7001 + 13 * i) / 2 ** 32;
+    try {
+      const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tacheId, eleve_ids: ["eleve-1"] } });
+      verifier(a.statut === 201, `${l} md ${fam.numero} : assignation ${a.statut}`);
+    } finally {
+      Math.random = origine;
+    }
+    const ligne = s.base.table("exercices_assignes").find((x) => x.tache_id === tacheId)!;
+    const ex = genererExerciceMD(fam.id, Number(ligne.graine));
+    const f = fonctionVraie(ex);
+    const e = `${l} md ${fam.numero} ${fam.id}`;
+    const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+    const courant = page.locator(".moteur-ecran-courant");
+    const champs = ["coefficients", "allure", "axeSommet", "domaineImage", "racines", "tableauSignes"];
+    const cap = (nom: string) => join(CAPTURES, `${l}-md-${fam.numero}-${nom}.png`);
+    for (const [k, champ] of champs.entries()) {
+      await page.waitForFunction(`document.querySelectorAll(".moteur-ecran-courant").length === 1`);
+      const consigne: string = await lireConsigneGen7(page);
+      verifier(consigne.startsWith("Étudie la fonction suivante") && (await courant.locator(".moteur-consigne .katex").count()) >= 1 && (await page.locator(".moteur-math-source").count()) === 0, `${e} / ${champ} : énoncé rendu par KaTeX, aucun repli en source (« ${consigne.slice(0, 50)} »)`);
+      verifier((await page.locator(".moteur-question-titre").innerText()) === `Question ${k + 1} sur 6` && (await page.locator(".moteur-rappel-ligne-correct").count()) === k, `${e} / ${champ} : « Question ${k + 1} sur 6 », ${k} ligne(s) de rappel validée(s)`);
+      if (champ === "coefficients") await page.screenshot({ path: cap("01-coefficients"), fullPage: true });
+
+      if (champ === "allure") {
+        // Deux réglages réactifs : un seul dessin, deux commandes indépendantes.
+        const dessin = () => page.evaluate(`(() => { const v = document.querySelector(".moteur-ecran-courant .moteur-illustration svg"); return { label: v.getAttribute("aria-label"), courbe: v.querySelector("polyline").getAttribute("points") }; })()`) as Promise<{ label: string; courbe: string }>;
+        const choisir = (id: string, valeur: string) => courant.locator(`.moteur-choix:has(input[name="mc-allure-${id}"][value="${valeur}"])`).click();
+        const initial = await dessin();
+        await choisir("concavite", "+");
+        await choisir("positionSommet", "gauche");
+        const gauche = await dessin();
+        await choisir("positionSommet", "axe");
+        const axe = await dessin();
+        await choisir("positionSommet", "droite");
+        const droite = await dessin();
+        await choisir("concavite", "-");
+        const bas = await dessin();
+        verifier(new Set([gauche.courbe, axe.courbe, droite.courbe]).size === 3, `${e} : la position du sommet pilote le croquis (3 dessins distincts)`);
+        verifier(bas.courbe !== droite.courbe && bas.label !== droite.label, `${e} : le sens de la parabole pilote le même croquis`);
+        verifier(initial.courbe !== gauche.courbe && initial.label !== gauche.label, `${e} : avant tout choix, le croquis est neutre`);
+        // aide combinée : un seul bouton, un seul texte qui couvre les deux questions
+        verifier((await courant.locator(".moteur-aide button").count()) === 1, `${e} : une seule aide sur l'écran d'allure`);
+        await courant.locator(".moteur-aide button").click();
+        await page.waitForSelector(".moteur-ecran-courant .moteur-aide-texte:not([hidden])");
+        const aide: string = await courant.locator(".moteur-aide-texte").innerText();
+        verifier(/parabole/.test(aide) && (await courant.locator(".moteur-aide-texte .katex").count()) >= 2, `${e} : l'aide d'allure (sens ET position) est rendue par KaTeX`);
+        await page.screenshot({ path: cap("02-allure-aide"), fullPage: true });
+      }
+      if (champ === "domaineImage") {
+        const apercu = courant.locator(".moteur-apercu-dessus");
+        verifier((await apercu.count()) === 1 && /im\s*f/.test(await apercu.innerText()), `${e} : l'aperçu « im f = » est présent`);
+        const yApercu = (await apercu.boundingBox()).y;
+        const yLigne = (await courant.locator(".moteur-intervalle-ligne").boundingBox()).y;
+        verifier(yApercu < yLigne, `${e} : l'aperçu est AU-DESSUS de la saisie (${yApercu.toFixed(0)} < ${yLigne.toFixed(0)})`);
+        verifier((await courant.locator(".moteur-aide").count()) === 0, `${e} : aucune aide sur l'ensemble-image`);
+        await courant.locator(".moteur-intervalle-ligne").getByLabel("Borne de gauche", { exact: true }).fill("7$x");
+        verifier((await apercu.innerText()).includes("7$x") && (await apercu.locator(".moteur-apercu-valeur .katex").count()) === 0, `${e} : l'aperçu reprend la saisie de l'élève sans l'interpréter`);
+        await courant.locator(".moteur-intervalle-ligne").getByLabel("Borne de gauche", { exact: true }).fill("");
+      }
+      if (champ === "tableauSignes") {
+        const n = f.racines.length === 2 ? 7 : 3;
+        verifier((await courant.locator(".moteur-ligne-tableau").first().locator("td button").count()) === n, `${e} : la ligne de signe compte ${n} cases`);
+        // Sans « Afficher la réponse attendue » (réglage de ce scénario), les valeurs de x restent SYMBOLIQUES : x_S seul (racine double ou aucune), x_1, x_S, x_2 sinon (RAPPORT §42).
+        const symboles = (await courant.locator(".moteur-table-structure .katex-mathml annotation").allTextContents()).map((t: string) => t.trim()).filter((t: string) => /^x_(1|2|S)$/.test(t));
+        verifier(symboles.length >= (n === 7 ? 3 : 1) && (await courant.locator(".moteur-table-structure .moteur-math-source").count()) === 0, `${e} : valeurs de x symboliques rendues par KaTeX (${symboles.join(",")})`);
+        const noms: string[] = await page.locator(".moteur-rappel-ligne-correct .moteur-rappel-nom").allInnerTexts();
+        verifier(noms.length === 5 && noms[0]!.startsWith("Coefficients") && noms.some((x) => x.startsWith("Racines")), `${e} : le rappel liste les 5 écrans précédents (${noms.join(" | ")})`);
+        await courant.locator(".moteur-aide button").click();
+        await page.waitForSelector(".moteur-ecran-courant .moteur-aide-texte svg");
+        verifier((await courant.locator(".moteur-aide-texte svg").count()) >= 1 && (await courant.locator(".moteur-aide-texte .moteur-math-source").count()) === 0, `${e} : l'aide du tableau est un croquis de parabole (coefficients réels)`);
+        await verifierPleinBord(page, `${e} : tableau`, largeur);
+        await page.screenshot({ path: cap("06-tableau-aide"), fullPage: true });
+      }
+      await repondreMD(page, ex, champ);
+      if (champ === "racines") await page.screenshot({ path: cap("05-racines"), fullPage: true });
+      await validerEtSuivreGen7(page);
+    }
+    await page.waitForSelector(".moteur-fin");
+    await page.getByRole("button", { name: "Terminer" }).click();
+    await page.waitForSelector("#tableau-de-bord:not([hidden])");
+    const lignes = s.base.table("reponses");
+    verifier(lignes.length === 6 && lignes.every((r) => r.statut === "correct"), `${e} : 6 réponses enregistrées, toutes correctes (${lignes.map((r) => `${r.champ}:${r.statut}`).join()})`);
+    verifier(s.base.table("aides_utilisees").length === 2, `${e} : deux aides enregistrées (allure, tableau) : ${s.base.table("aides_utilisees").length}`);
+    verifier(journal.pageerrors.length === 0, `${e} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+    verifier(journal.erreursConsole.filter((m) => !/fonts\.g|net::ERR_FAILED/.test(m)).length === 0, `${e} : erreurs console : ${journal.erreursConsole.join(" | ")}`);
+    await contexte.close();
+  }
+}
+
 
 /**
  * « Aperçu » du formulaire de tâche (RAPPORT §36), au clic, sur une tâche gen7 composée dans l'interface : le bouton n'est actif que si la
@@ -2056,13 +2220,13 @@ async function scenarioApercu(navigateur: any, base: string, largeur: number) {
   const quantite = (variante: string, valeur: number) => page.evaluate(`(() => { const i = document.querySelector('#composition-dynamique input[data-variante-id="${variante}"]'); i.value = "${valeur}"; i.dispatchEvent(new Event("input", { bubbles: true })); i.dispatchEvent(new Event("change", { bubbles: true })); })()`);
 
   verifier(await bouton.isDisabled() && /au moins un exercice/.test((await bouton.getAttribute("title")) ?? ""), `${l} : sans exercice, « Aperçu » est inactif et dit pourquoi`);
-  await quantite("af_mise_en_evidence", 1);
-  await quantite("af_irreductible", 1);
+  await quantite("af_motif_aucune_racine", 1);
+  await quantite("af_delta_aucune_racine", 1);
   verifier(await bouton.isEnabled() && /comme l'élève/.test((await bouton.getAttribute("title")) ?? ""), `${l} : composition gen7 non vide -> « Aperçu » actif SANS nom de tâche saisi`);
 
   // Garde par le registre : une variante composée sans générateur exécutable rend le bouton inactif, avec la raison.
   const registre = require("../lib/registreGenerateurs").REGISTRE_GENERATEURS as { variante_id: string }[];
-  const rang = registre.findIndex((g) => g.variante_id === "af_irreductible");
+  const rang = registre.findIndex((g) => g.variante_id === "af_delta_aucune_racine");
   const [retire] = registre.splice(rang, 1);
   try {
     await page.reload();
@@ -2070,11 +2234,11 @@ async function scenarioApercu(navigateur: any, base: string, largeur: number) {
     await page.locator('button[data-onglet="taches"]').click();
     await page.locator("#bouton-accordeon-creer").click();
     await page.waitForSelector("#composition-dynamique input.stepper-valeur", { state: "attached" });
-    await quantite("af_mise_en_evidence", 1);
+    await quantite("af_motif_aucune_racine", 1);
     verifier(await bouton.isEnabled(), `${l} : variante exécutable seule -> actif même si une autre est retirée du registre`);
-    await quantite("af_irreductible", 1);
-    verifier(await bouton.isDisabled() && /af_irreductible/.test((await bouton.getAttribute("title")) ?? ""), `${l} : variante sans générateur composée -> inactif et nommée dans l'infobulle (${await bouton.getAttribute("title")})`);
-    await quantite("af_irreductible", 0);
+    await quantite("af_delta_aucune_racine", 1);
+    verifier(await bouton.isDisabled() && /af_delta_aucune_racine/.test((await bouton.getAttribute("title")) ?? ""), `${l} : variante sans générateur composée -> inactif et nommée dans l'infobulle (${await bouton.getAttribute("title")})`);
+    await quantite("af_delta_aucune_racine", 0);
     verifier(await bouton.isEnabled(), `${l} : la variante retirée de la composition, le bouton se réactive`);
   } finally {
     registre.splice(rang, 0, retire!);
@@ -2084,8 +2248,8 @@ async function scenarioApercu(navigateur: any, base: string, largeur: number) {
   await page.locator('button[data-onglet="taches"]').click();
   await page.locator("#bouton-accordeon-creer").click();
   await page.waitForSelector("#composition-dynamique input.stepper-valeur", { state: "attached" });
-  await quantite("af_mise_en_evidence", 1);
-  await quantite("af_irreductible", 1);
+  await quantite("af_motif_aucune_racine", 1);
+  await quantite("af_delta_aucune_racine", 1);
   await page.locator("#feedback-immediat").uncheck({ force: true }); // correction coupée : le réglage doit se retrouver dans l'aperçu
   await page.screenshot({ path: join(CAPTURES, `${largeur}-apercu-01-formulaire.png`), fullPage: false });
 
@@ -2113,8 +2277,8 @@ async function scenarioApercu(navigateur: any, base: string, largeur: number) {
 
   // Le moteur, tel quel : première réponse juste (réglage « correction coupée » : aucun verdict affiché).
   const premier = s.base.table("exercices_assignes")[0]!;
-  const ex = genererGen7(String(premier.variante_id).slice(3) as CategorieAnalyseFonction, Number(premier.graine));
-  await repondreGen7(popup, ex, "coefficients");
+  const ex = genererExerciceMD(premier.variante_id as ExerciceMotifDelta["famille"], Number(premier.graine));
+  await repondreMD(popup, ex, "coefficients");
   await popup.locator(".moteur-ecran-courant").getByRole("button", { name: "Valider", exact: true }).click();
   await popup.waitForSelector(".moteur-statut");
   verifier((await popup.locator(".moteur-statut-correct, .moteur-statut-not_equivalent, .moteur-statut-parse_error").count()) === 0, `${l} : correction coupée du formulaire respectée dans l'aperçu (aucun verdict affiché)`);
@@ -2179,6 +2343,8 @@ async function main() {
       controlerReponsesHttp(`${largeur} gen7 coupé`);
       await scenarioGen7Prof(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} gen7 prof`);
+      await scenarioGen7MotifDelta(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} gen7 motif/delta`);
       await scenarioGen7Cascade(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} gen7 cascade`);
       await scenarioGen7CascadeTableau(navigateur, url, largeur);
