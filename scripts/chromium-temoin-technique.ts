@@ -22,7 +22,7 @@ import { join } from "node:path";
 import { demarrerServeur, stubSupabase } from "./support/serveurChromium";
 import { appeler, creerScenario, creerTache, imposerProfilAssignation, installerBase, type Scenario } from "./support/harnaisRouteur";
 import {
-  CHAMP_ALLURE, CHAMP_AXE, CHAMP_COEFFICIENTS, CHAMP_DIVISEURS, CHAMP_EXTREMUM, CHAMP_IMAGE, CHAMP_PARITE, CHAMP_QUOTIENT, CHAMP_RACINES, CHAMP_SIGNES, CHAMP_SIGNES_VARIATION, CHAMP_SOMME,
+  CHAMP_ALLURE, CHAMP_AXE, CHAMP_COEFFICIENTS, CHAMP_COURBE, CHAMP_DIVISEURS, CHAMP_EXTREMUM, CHAMP_IMAGE, CHAMP_PARITE, CHAMP_QUOTIENT, CHAMP_RACINES, CHAMP_SIGNES, CHAMP_SIGNES_VARIATION, CHAMP_SOMME,
   generateurTemoinTechnique as temoin, graineDeProfil, reponseBruteCorrecte, VARIANTE_TEMOIN, type ExerciceEtendu, type ExerciceTemoin,
 } from "../src/generateurs/_temoinTechnique";
 
@@ -2150,6 +2150,62 @@ async function scenarioApercuRetour(navigateur: any, base: string, largeur: numb
 }
 
 /**
+ * Graphique d'écran et aide PAR PALIERS (RAPPORT §56) sur le TÉMOIN (profil `graphe`) : le graphique est servi sans annotation ; l'aide à deux paliers pose S puis A et les vecteurs SUR ce
+ * graphique ; recharger la page efface les annotations (état local) et « Revoir l'indice » rejoue le palier ATTEINT sans nouvelle pénalité ; en relecture le graphique reste, sans annotation.
+ */
+async function scenarioFigureAidePaliers(navigateur: any, base: string, largeur: number) {
+  const l = `${largeur} figure aide paliers`;
+  imposerProfilAssignation("graphe");
+  const s: Scenario = creerScenario();
+  installerBase(s.base);
+  const tacheId = creerTache(s, { nom: "Figure et paliers", aide_activee: true, aide_penalite_pourcent: 25, reponse_visible: true, variantes: [{ variante_id: VARIANTE_TEMOIN, nombre_exercices: 1 }] });
+  const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tacheId, eleve_ids: ["eleve-1"] } });
+  verifier(a.statut === 201, `${l} : assignation ${a.statut}`);
+  const ligne = s.base.table("exercices_assignes")[0]!;
+  const ex = temoin.generer(Number(ligne.graine));
+  const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+  const courant = page.locator(".moteur-ecran-courant");
+  const SVG = ".moteur-ecran-courant .figure-svg";
+  await page.waitForSelector(SVG);
+  verifier((await page.locator(`${SVG} .figure-annotations > *`).count()) === 0 && (await page.locator(".moteur-aide-texte").isHidden()), `${l} : graphique sans annotation, zone d'aide fermée`);
+  const demander = async () => {
+    const bouton = courant.locator(".moteur-aide button");
+    await bouton.click();
+    if ((await bouton.innerText()).startsWith("Confirmer")) await bouton.click();
+  };
+  await demander();
+  await page.waitForSelector(`${SVG} .figure-point-annote`, { state: "attached" });
+  verifier((await page.locator(`${SVG} .figure-point-annote`).count()) === 1, `${l} : palier 1 : S sur le graphique`);
+  await courant.locator(".moteur-aide button").click();
+  await page.waitForSelector(`${SVG} .figure-vecteur`, { state: "attached" });
+  verifier((await page.locator(`${SVG} .figure-point-annote`).count()) === 2 && (await page.locator(`${SVG} .figure-vecteur`).count()) === 2, `${l} : palier 2 : A et deux vecteurs en plus de S`);
+  verifier(journal.requetes.filter((r: any) => r.url.endsWith("/api/reponses/aide")).map((r: any) => JSON.parse(r.corps ?? "{}").palier).join() === ",2", `${l} : première demande SANS palier (le serveur choisit), la suivante palier 2 (${journal.requetes.filter((r: any) => r.url.endsWith("/api/reponses/aide")).map((r: any) => r.corps).join(" | ")})`);
+  // Rechargement : les annotations sont un état local, elles disparaissent ; « Revoir l'indice » rejoue le palier atteint (2), gratuitement.
+  await page.reload();
+  await page.waitForSelector(".carte-tache");
+  await page.locator(".carte-tache").click();
+  await page.waitForSelector(SVG);
+  verifier((await page.locator(`${SVG} .figure-annotations > *`).count()) === 0, `${l} : après rechargement, aucune annotation (état local)`);
+  verifier(/Revoir l'indice/.test(await courant.locator(".moteur-aide button").innerText()), `${l} : « Revoir l'indice » proposé (l'usage est enregistré côté serveur)`);
+  await courant.locator(".moteur-aide button").click();
+  await page.waitForSelector(`${SVG} .figure-vecteur`, { state: "attached" });
+  verifier((await page.locator(`${SVG} .figure-point-annote`).count()) === 2 && (await courant.locator(".moteur-aide button:visible").count()) === 0, `${l} : « Revoir » rejoue le palier ATTEINT (2) ; plus d'indice à proposer`);
+  verifier(s.base.table("aides_utilisees").length === 1 && s.base.table("aides_utilisees")[0]!.palier === 2, `${l} : une seule ligne d'usage, palier 2`);
+  // Réponse juste.
+  await courant.locator(".moteur-champ").fill(reponseBruteCorrecte(ex, CHAMP_COURBE));
+  await courant.getByRole("button", { name: "Valider", exact: true }).click();
+  await page.waitForSelector(".moteur-statut-correct");
+  await page.screenshot({ path: join(CAPTURES, `${l}-reponse.png`), fullPage: true });
+  await page.getByRole("button", { name: /Voir la fin/ }).click();
+  await page.waitForSelector(".moteur-ecran-termine");
+  verifier((await page.locator(".moteur-ecran-termine .figure-svg").count()) === 1 && (await page.locator(".moteur-ecran-termine .figure-annotations > *").count()) === 0, `${l} : relecture : le graphique reste sous l'énoncé, sans annotation`);
+  verifier(!(await page.evaluate("document.documentElement.scrollWidth > window.innerWidth")), `${l} : pas de défilement horizontal`);
+  verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+  await contexte.close();
+  imposerProfilAssignation("aleatoire");
+}
+
+/**
  * Configuration PAR LIGNE de composition (RAPPORT §55) dans le formulaire du professeur, avec le générateur de TEST à configuration (scripts/support/generateurConfigurable.ts) :
  * il n'est ni dans le catalogue réel ni dans l'arbre JSON, donc injecté ici au registre/catalogue du serveur ET dans la page (arbre JSON + table de correspondance, par interception).
  * Vérifie : lignes ajoutées/retirées, nouvelle ligne VIDE (jamais pré-cochée), message et bouton « Créer » désactivé, cases exclusives, doublons signalés, envoi et stockage de la
@@ -2624,6 +2680,8 @@ async function main() {
       controlerReponsesHttp(`${largeur} gen7 prof`);
       await scenarioConfigurationLigne(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} config ligne`);
+      await scenarioFigureAidePaliers(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} figure aide paliers`);
       await scenarioPartiesFausses(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} parties fausses`);
       await scenarioPartiesFaussesTemoin(navigateur, url, largeur);

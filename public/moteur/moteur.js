@@ -12,6 +12,7 @@
  */
 import { COMPOSANTS_ECRAN } from "./ecrans/index.js";
 import { AIDES_TYPEES } from "./aides/index.js";
+import { FIGURES } from "./figures/index.js";
 import { rendreTexte } from "./rendreTexte.js";
 import { versTexteBrut } from "./texteMath.js";
 import { formaterScore, pointsParChamp, totalPoints } from "./pointsEcran.js";
@@ -155,6 +156,15 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
     await afficher(exercice, contexte);
   }
 
+  /**
+   * Figure d'un écran (RAPPORT §56) : créée par la table `FIGURES` (jamais par une chaîne de tests sur le type). `null` si l'écran n'en déclare pas, ou si le type est inconnu (jamais fatal).
+   * Une figure est TOUJOURS neuve (état local : les annotations d'une aide ne se reportent pas d'un affichage à l'autre).
+   */
+  function creerFigure(ecran) {
+    const composant = ecran.figure && typeof ecran.figure === "object" ? FIGURES[ecran.figure.type] : undefined;
+    return composant ? composant.creer(ecran.figure) : null;
+  }
+
   async function afficher(exercice, contexte = {}) {
     const racine = creer("div", "moteur-exercice");
     const infosParChamp = new Map(exercice.champs.map((c) => [c.champ, c]));
@@ -181,7 +191,9 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
       const carte = creer("section", "moteur-ecran moteur-ecran-courant");
       carte.appendChild(construireRappel(exercice, { infosParChamp, ecransParChamp, indexCourant, retour }));
       carte.appendChild(creer("p", "moteur-consigne", ecranCourant.consigne, { math: true }));
-      carteCourante = { carte, ecran: ecranCourant, info: infosParChamp.get(ecranCourant.champ), modification: edition !== null };
+      const figure = creerFigure(ecranCourant);
+      if (figure) carte.appendChild(figure.element);
+      carteCourante = { carte, ecran: ecranCourant, info: infosParChamp.get(ecranCourant.champ), modification: edition !== null, figure };
       racine.appendChild(carte);
     } else {
       // Exercice terminé, relecture d'une tâche antérieure, ou remise à venir (retour en arrière) : la RELECTURE de chaque écran — énoncé,
@@ -191,6 +203,8 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
         if (!info.verrouille && info.modifiable !== true) continue; // écrans à venir : pas encore affichés
         const carte = creer("section", "moteur-ecran moteur-ecran-termine");
         carte.appendChild(creer("p", "moteur-consigne", ecran.consigne, { math: true }));
+        const figureRelecture = creerFigure(ecran); // le graphique reste sous l'énoncé en relecture (sans annotations)
+        if (figureRelecture) carte.appendChild(figureRelecture.element);
         // Écran déjà répondu mais encore modifiable : le crayon, à droite de « Ta réponse », rouvre l'écran (RAPPORT §48).
         const crayon = info.modifiable === true ? creerCrayon(nomDe(ecran, exercice.ecrans.indexOf(ecran) + 1), () => afficher(exercice, { edition: ecran.champ })) : null;
         carte.appendChild(resumeTermine(ecran, info, crayon));
@@ -439,7 +453,7 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
     return bloc;
   }
 
-  async function activerEcranCourant(exercice, { carte, ecran, info, modification }) {
+  async function activerEcranCourant(exercice, { carte, ecran, info, modification, figure }) {
     const composant = composantPour(ecran);
     let enCours = false;
     const valider = creer("button", "moteur-bouton moteur-bouton-principal", "Valider");
@@ -524,7 +538,7 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
     }
 
     carte.append(vue.element);
-    if (ecran.aide_disponible) carte.appendChild(construireAide(exercice, ecran, info));
+    if (ecran.aide_disponible) carte.appendChild(construireAide(exercice, ecran, info, figure));
     const zoneChrono = exercice.tache.chrono_mode !== "aucun" ? creer("p", "moteur-chrono") : null;
     if (zoneChrono) carte.appendChild(zoneChrono);
     const actions = creer("div", "moteur-actions");
@@ -564,7 +578,7 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
     minuterie = setInterval(maj, 1000);
   }
 
-  function construireAide(exercice, ecran, info) {
+  function construireAide(exercice, ecran, info, figure) {
     const bloc = creer("div", "moteur-aide");
     // Bouton jaunâtre avec une ampoule (RAPPORT §53) : l'icône ne change jamais, seul le LIBELLÉ est réécrit (confirmation de pénalité, « Revoir l'indice »).
     const bouton = creer("button", "moteur-bouton moteur-bouton-aide");
@@ -575,6 +589,9 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
     const texte = creer("div", "moteur-aide-texte");
     texte.hidden = true;
     let confirmation = exercice.tache.aide_penalite_pourcent > 0 && !info.aide_utilisee;
+    // Aide PAR PALIERS (RAPPORT §56) : le serveur dit, dans sa réponse, quel palier est servi et combien il y en a. `prochainPalier` : palier suivant à demander (aucune nouvelle pénalité :
+    // l'usage est déjà enregistré) ; `undefined` à la première demande (le serveur choisit le premier palier, ou rejoue le palier atteint).
+    let prochainPalier;
     bouton.addEventListener("click", async () => {
       if (confirmation) {
         confirmation = false;
@@ -583,10 +600,15 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
       }
       bouton.disabled = true;
       try {
-        const resultat = await api.demanderAide(exercice.id, ecran.champ);
-        afficherAide(texte, resultat.aide);
+        const resultat = await api.demanderAide(exercice.id, ecran.champ, prochainPalier);
+        afficherAide(texte, resultat.aide, figure);
         texte.hidden = false;
-        bouton.hidden = true;
+        const a = resultat.aide;
+        if (a && typeof a === "object" && a.type === "annotations_figure" && a.palier < a.palierTotal) {
+          prochainPalier = a.palier + 1;
+          rendreTexte(libelle, "Un indice de plus ?");
+          bouton.disabled = false;
+        } else bouton.hidden = true;
       } catch (e) {
         bouton.disabled = false;
         rendreTexte(texte, e.message);
@@ -602,7 +624,7 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
   }
 
   /** Affiche l'aide servie par le serveur : chaîne d'auteur, ou aide typée par la table `AIDES_TYPEES` (type inconnu : message neutre). */
-  function afficherAide(zone, aide) {
+  function afficherAide(zone, aide, figure) {
     zone.classList.remove("moteur-aide-typee");
     if (typeof aide === "string") {
       rendreTexte(zone, aide, { math: true });
@@ -614,7 +636,7 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
       return;
     }
     zone.classList.add("moteur-aide-typee");
-    zone.replaceChildren(composant.creer(aide));
+    zone.replaceChildren(composant.creer(aide, { figure }));
   }
 
   await recharger();

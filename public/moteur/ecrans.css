@@ -1431,6 +1431,11 @@
   border: 2px solid var(--ambre-vif);
 }
 
+/* `display: inline-flex` ci-dessus l'emporte sur le `[hidden]` natif du navigateur : sans cette règle, le bouton d'indice restait VISIBLE après avoir servi son aide (défaut de §53, trouvé en §56). */
+.moteur-ecran .moteur-bouton.moteur-bouton-aide[hidden] {
+  display: none;
+}
+
 .moteur-icone-ampoule {
   flex: none;
   width: calc(var(--espace-3) + var(--espace-1)); /* 20px */
@@ -1484,4 +1489,86 @@
 .moteur-tableau-solution .moteur-table-structure .moteur-case-signe.moteur-case-renseignee:disabled:not(.moteur-partie-fausse) {
   color: var(--text);
   cursor: default;
+}
+
+/* ── Figure d'un écran (RAPPORT §56) : docs/reference/graphe-parabole.html. Graphique statique d'une parabole dans un repère gradué + marques d'une aide (`annotations_figure`) posées
+   SUR ce graphique. Classes uniquement ; couleurs, épaisseurs et espacements par tokens. Les annotations sont ambre comme l'aide qui les produit (bouton et zone d'indice, §53). ── */
+.moteur-figure {
+  display: block;
+  width: 100%;
+  max-width: calc(var(--espace-5) * 14);
+  margin: var(--espace-2) 0;
+}
+
+.figure-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  font-family: var(--font-corps);
+}
+
+.figure-cadre {
+  fill: var(--surface);
+  stroke: var(--border);
+  stroke-width: 1px;
+}
+
+.figure-grille-fine {
+  stroke: var(--surface-sunken);
+  stroke-width: 1px;
+}
+
+.figure-grille {
+  stroke: var(--border);
+  stroke-width: 1px;
+}
+
+.figure-axe {
+  stroke: var(--text-muted);
+  stroke-width: 2px;
+}
+
+.figure-graduation {
+  fill: var(--text-muted);
+  font-size: 0.7em;
+}
+
+.figure-courbe {
+  fill: none;
+  stroke: var(--violet-vif);
+  stroke-width: calc(var(--espace-1)*0.75);
+  stroke-linecap: round;
+}
+
+.figure-point-annote {
+  fill: var(--ambre-vif);
+  stroke: var(--text);
+  stroke-width: 2px;
+}
+
+.figure-vecteur {
+  stroke: var(--ambre);
+  stroke-width: 2px;
+}
+
+.figure-vecteur-pointe {
+  fill: var(--ambre);
+}
+
+.figure-etiquette {
+  fill: var(--text);
+  font-size: 0.8em;
+  /* Halo de la couleur du fond : lisible même quand la courbe ou la grille passe derrière. */
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: var(--espace-1);
+  stroke-linejoin: round;
+}
+
+.figure-etiquette-forte {
+  font-weight: 600;
+}
+
+.moteur-aide-legende {
+  margin: 0;
 }

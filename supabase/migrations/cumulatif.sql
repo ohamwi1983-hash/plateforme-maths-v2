@@ -200,3 +200,6 @@ alter table exercices_assignes add column if not exists remis_le timestamptz;
 alter table taches_composition add column if not exists configuration jsonb;
 alter table exercices_assignes add column if not exists composition_id uuid references taches_composition(id) on delete set null;
 alter table exercices_assignes add column if not exists configuration jsonb;
+
+-- Aide par PALIERS (RAPPORT §56) : voir supabase/schema.sql. Idempotent. À exécuter avant le déploiement : `chargerDonneesExercice` lit `aides_utilisees.palier`.
+alter table aides_utilisees add column if not exists palier int not null default 1;

@@ -271,6 +271,9 @@ create table aides_utilisees (
   exercice_assigne_id uuid not null references exercices_assignes(id),
   champ text not null,
   horodatage timestamptz not null default now(),
+  -- RAPPORT §56 : palier le plus élevé atteint pour une aide PAR PALIERS (`annotations_figure`). Une aide sans paliers reste à 1. La pénalité reste binaire et unique
+  -- (`aideUtilisee`) : utiliser un palier ou deux coûte la même chose (décision D2 du propriétaire).
+  palier int not null default 1,
   primary key (exercice_assigne_id, champ)
 );
 

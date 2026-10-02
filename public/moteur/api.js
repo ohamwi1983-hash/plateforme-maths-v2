@@ -38,7 +38,8 @@ export function creerClientApi(lireJeton, fetchImpl = (...args) => fetch(...args
     envoyerReponse: (exerciceId, champ, reponseBrute) =>
       appeler("POST", "/api/reponses", { exercice_assigne_id: exerciceId, champ, reponse_brute: reponseBrute }),
     rendreExercice: (exerciceId) => appeler("POST", "/api/exercices/" + encodeURIComponent(exerciceId) + "/remise"),
-    demanderAide: (exerciceId, champ) => appeler("POST", "/api/reponses/aide", { exercice_assigne_id: exerciceId, champ }),
+    // `palier` (RAPPORT §56) : seulement pour une aide par paliers ; absent = le serveur choisit (premier palier, ou rejeu gratuit du palier atteint).
+    demanderAide: (exerciceId, champ, palier) => appeler("POST", "/api/reponses/aide", { exercice_assigne_id: exerciceId, champ, ...(palier === undefined ? {} : { palier }) }),
     signalerDebutEcran: (exerciceId, champ) => appeler("POST", "/api/reponses/debut-ecran", { exercice_assigne_id: exerciceId, champ }),
   };
 }

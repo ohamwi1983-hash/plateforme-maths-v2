@@ -173,6 +173,8 @@ export interface DonneesExercice {
   reponsesParChamp: Map<string, LigneReponse[]>;
   debuts: LigneDebutEcran[];
   champsAvecAide: Set<string>;
+  /** Palier d'aide atteint par champ (RAPPORT §56) ; absent = aide sans paliers (palier 1 dès qu'elle est utilisée). */
+  paliersAide?: Map<string, number>;
 }
 
 /** Lecture bornée à UN exercice (jamais soumise au plafond de 1000 lignes). */
@@ -185,14 +187,16 @@ export async function chargerDonneesExercice(admin: AdminClient, exerciceId: str
   if (erreurReponses) throw new Error(erreurReponses.message);
   const { data: debuts, error: erreurDebuts } = await admin.from("debuts_ecran").select("champ, horodatage_debut").eq("exercice_assigne_id", exerciceId);
   if (erreurDebuts) throw new Error(erreurDebuts.message);
-  const { data: aides, error: erreurAides } = await admin.from("aides_utilisees").select("champ").eq("exercice_assigne_id", exerciceId);
+  const { data: aides, error: erreurAides } = await admin.from("aides_utilisees").select("champ, palier").eq("exercice_assigne_id", exerciceId);
   if (erreurAides) throw new Error(erreurAides.message);
 
-  return donneesDepuisLignes(
+  const donnees = donneesDepuisLignes(
     (reponses ?? []) as LigneReponse[],
     (debuts ?? []) as LigneDebutEcran[],
     new Set((aides ?? []).map((a) => a.champ as string)),
   );
+  donnees.paliersAide = new Map((aides ?? []).map((a) => [a.champ as string, typeof a.palier === "number" ? a.palier : 1]));
+  return donnees;
 }
 
 /** Construit `DonneesExercice` depuis les lignes brutes (chronologique croissant) — point unique du regroupement par champ. */

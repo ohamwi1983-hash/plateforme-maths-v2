@@ -70,6 +70,23 @@ import type { AideTypee } from "./aideTypee";
 
 export type TypeEcran = "champ_expression" | "qcm" | "liste_valeurs" | "tableau_signes" | "champs_multiples" | "intervalle";
 
+/**
+ * FIGURE d'un écran (RAPPORT §56) : un graphique STATIQUE, calculé par le générateur à partir de l'exercice BRUT (jamais d'une réponse de l'élève : il est identique sur tous les écrans de
+ * l'exercice), rendu par le moteur entre la consigne et la zone de réponse. Donnée pure, jamais du SVG. La parabole est transmise comme un arc de Bézier quadratique EXACT (départ,
+ * contrôle, arrivée) : aucun coefficient ni point remarquable n'est servi, et les marques posées ensuite par une aide (`annotations_figure`) sont sur la courbe par construction.
+ * `description` : texte alternatif GÉNÉRIQUE (« Graphique d'une parabole… »), jamais une indication sur la réponse.
+ */
+export interface FigureGrapheParabole {
+  type: "graphe_parabole";
+  fenetre: { xMin: number; xMax: number; yMin: number; yMax: number };
+  /** Graduations ÉTIQUETÉES (entiers du repère), dans la fenêtre. */
+  graduations: { x: number[]; y: number[] };
+  courbe: { x0: number; y0: number; xc: number; yc: number; x1: number; y1: number };
+  description: string;
+}
+
+export type FigureDeclaree = FigureGrapheParabole;
+
 interface EcranCommun {
   /** Identifiant du champ = `reponses.champ` en base. Unique dans un exercice. */
   champ: string;
@@ -86,6 +103,8 @@ interface EcranCommun {
    * l'usage côté serveur (pénalité calculée serveur, jamais déclarée par le client).
    */
   aide?: string | AideTypee;
+  /** Figure affichée au-dessus de la zone de réponse (RAPPORT §56) ; absente = comportement inchangé. Identique d'un écran à l'autre d'un même exercice si le générateur le veut. */
+  figure?: FigureDeclaree;
   /**
    * Poids de CET écran dans le score de l'exercice (RAPPORT §17) : entier ≥ 1 ; absent = 1. Sert
    * uniquement à pondérer l'agrégation « champs corrects / champs comptés » (lib/poidsEcran.ts, seule
