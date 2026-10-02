@@ -410,13 +410,35 @@
   }
 }
 
-.moteur-consigne {
+.moteur-consigne,
+.moteur-question {
   margin: 0;
   white-space: pre-line; /* une consigne d'auteur peut porter des retours à la ligne (énoncé / « Ce que tu sais déjà » / question) */
   font-weight: 600;
   color: var(--text);
   line-height: 1.4;
   overflow-wrap: anywhere;
+}
+
+/* ── Aperçu LaTeX de la saisie (RAPPORT §58) : docs/reference/ecran-expression-graphe.html. « f(x) = » suivi de ce que l'élève tape, au-dessus du champ. Un encadré discret de hauteur
+   minimale fixe (pas de saut de mise en page quand la saisie s'allonge) ; jamais un verdict (aucune couleur d'état). ── */
+.moteur-champ-expression {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+}
+
+.moteur-apercu-expression {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  min-height: calc(var(--espace-5) + var(--espace-2)); /* 48px */
+  padding: var(--espace-2) var(--espace-3);
+  overflow-x: auto;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
 }
 
 /* ── Verdicts du serveur, sur la carte entière ── */
@@ -1369,7 +1391,9 @@
    `--danger`, texte `--danger` en gras. La couleur ne suffit jamais : filet épaissi + ✕ (alternative textuelle vide : le sens est porté par `aria-invalid` / `aria-description`),
    soulignement ondulé pour un morceau de réponse. Placé APRÈS les règles d'état (champ verrouillé, option cochée, case renseignée) qu'il doit l'emporter sur, à spécificité égale. ── */
 .moteur-ecran .moteur-champ.moteur-partie-fausse,
-.moteur-ecran .moteur-champ.moteur-partie-fausse:disabled {
+.moteur-ecran .moteur-champ.moteur-partie-fausse:disabled,
+.moteur-ecran .moteur-select.moteur-partie-fausse,
+.moteur-ecran .moteur-select.moteur-partie-fausse:disabled {
   color: var(--danger);
   font-weight: 600;
   background: var(--surface);
@@ -1573,8 +1597,8 @@
   margin: 0;
 }
 
-/* ── Chaîne de transformations (RAPPORT §56) : docs/reference/chaine-transformations.html. Une étape = un bloc (numéro, expression, choix de la transformation). Le champ et les
-   choix réutilisent `.moteur-champ` et `.moteur-choix` (références des composants) : seuls l'enveloppe de l'étape et le numéro sont nouveaux. ── */
+/* ── Chaîne de transformations (RAPPORT §56, refaite en §58) : docs/reference/chaine-transformations.html. Une étape = un bloc : en-tête (« Étape k » + pastille « ? »), légende dévoilée,
+   ligne « f_k(x) [transformation ▾] : [valeur] », ligne « f_k(x) = [expression] ». Le champ est `.moteur-champ` (référence des composants) ; la liste déroulante a son aspect. ── */
 .moteur-chaine {
   display: flex;
   flex-direction: column;
@@ -1610,6 +1634,18 @@
   border-radius: var(--radius-sm);
 }
 
+.moteur-chaine-etape [hidden] {
+  display: none;
+}
+
+.moteur-chaine-entete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espace-2);
+  min-height: calc(var(--espace-4) + var(--espace-2)); /* 32px : la hauteur de la pastille « ? » */
+}
+
 .moteur-chaine-numero {
   color: var(--violet);
   font-size: 0.8em;
@@ -1617,15 +1653,121 @@
   letter-spacing: 0.03em;
 }
 
-.moteur-chaine-choix {
+/* Pastille « ? » : même gabarit que le crayon « Modifier ma réponse » (32 px, ronde) ; le bouton global du site (`button` : hauteur 44 px, bord, ombre, marge) est neutralisé propriété par
+   propriété, comme pour `.moteur-crayon`. Un rappel de vocabulaire, jamais une aide pénalisée : style NEUTRE (violet clair), pas d'ambre. */
+.moteur-chaine-aide {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--espace-4) + var(--espace-2));
+  height: calc(var(--espace-4) + var(--espace-2));
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--violet-clair);
+  color: var(--violet-vif);
+  box-shadow: none;
+  font-family: var(--font-corps);
+  font-size: 1em;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.moteur-chaine-aide:hover:not(:disabled) {
+  filter: none;
+  background: var(--violet-vif);
+  color: var(--surface);
+}
+
+.moteur-chaine-aide:focus-visible {
+  outline: 2px solid var(--violet-vif);
+  outline-offset: 2px;
+}
+
+/* Question avec son « ? » global (RAPPORT §58) : la pastille à droite de la question, la légende en dessous. */
+.moteur-question-bloc {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: var(--espace-2);
 }
 
-.moteur-chaine-choix .moteur-choix {
-  flex: 0 1 auto;
+.moteur-question-ligne {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: var(--espace-2);
+}
+
+.moteur-question-ligne .moteur-question {
+  flex: 1;
+  min-width: 0;
+}
+
+.moteur-chaine-legende {
+  margin: 0;
+  padding: var(--espace-2) var(--espace-3);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 0.9em;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.moteur-chaine-ligne {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--espace-2);
+}
+
+.moteur-chaine-nom {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.moteur-chaine-separateur {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* Liste déroulante des transformations : l'aspect du champ (`.moteur-champ`), hauteur tactile de 44 px. `.moteur-ecran .moteur-select` (0,2,0) l'emporte sur `select` de `style.css`
+   (marge haute, fond blanc, padding 8 × 12). */
+.moteur-ecran .moteur-select {
+  box-sizing: border-box;
+  flex: none;
+  margin: 0;
+  min-height: calc(var(--espace-5) + var(--espace-1));
+  padding: calc(var(--espace-2)*1.25) calc(var(--espace-3)*0.75);
+  font-family: var(--font-corps);
+  font-size: 0.95em;
+  color: var(--text);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.moteur-ecran .moteur-select:disabled {
+  color: var(--text);
+  background: var(--surface);
+  border-color: var(--etat-filet);
+}
+
+.moteur-ecran .moteur-champ.moteur-chaine-valeur {
+  flex: 1 1 calc(var(--espace-5)*3); /* 120px */
+  width: auto;
+  min-width: 0;
+}
+
+.moteur-ecran .moteur-champ.moteur-chaine-expression {
+  flex: 1 1 calc(var(--espace-5)*4); /* 160px */
+  width: auto;
+  min-width: 0;
 }
 
 .moteur-chaine-actions {

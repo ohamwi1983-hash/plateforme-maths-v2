@@ -108,6 +108,8 @@ for (const actives of CONFIGURATIONS) {
     const e0 = ecrans[0]!;
     verifier(e0.poids === 3 && e0.figure !== undefined && e0.aide !== undefined && e0.dependDe === undefined, `${nom} : poids 3 (inversé : décision du propriétaire), figure, aide, indépendant`);
     verifier(e0.consigne.startsWith("Détermine l'expression analytique de la parabole ci-dessous."), `${nom} : consigne globale`);
+    verifier(e0.question === "Écris $f(x)$ sous la forme canonique $a(x - p)^2 + q$." && !e0.consigne.includes("forme canonique"), `${nom} : la question est séparée de la consigne (affichée sous le graphe)`);
+    verifier(e0.type === "champ_expression" && e0.apercu?.libelle === "f(x) =", `${nom} : aperçu LaTeX « f(x) = » déclaré`);
     verifier(JSON.stringify(e0.figure) === JSON.stringify(figure), `${nom} : figure de l'écran = figure de l'exercice`);
     const aide = e0.aide as AideAnnotationsFigure;
     verifier(validerAide(aide).length === 0, `${nom} : aide valide (${validerAide(aide).join(" ; ")})`);
@@ -316,7 +318,7 @@ for (const graine of GRAINES) {
 }
 
 // ── 8. Codes : déclarés, au dictionnaire, expliqués, catégorisés ──
-verifier(JSON.stringify([...G.codesCompetenceDeclares].sort()) === JSON.stringify([...CODES_FX].sort()) && G.codesCompetenceDeclares.length === 5, "cinq codes déclarés (quatre de l'écran 1 + TRANSFORMATION_HORS_SUJET)");
+verifier(JSON.stringify([...G.codesCompetenceDeclares].sort()) === JSON.stringify([...CODES_FX].sort()) && G.codesCompetenceDeclares.length === 6, "six codes déclarés (quatre de l'écran 1 + TRANSFORMATION_HORS_SUJET + VALEUR_DECLAREE_INCORRECTE)");
 for (const code of CODES_FX_ECRAN_EXPRESSION) {
   verifier(Object.hasOwn(DICTIONNAIRE_COMPETENCES, code), `${code} : dictionnaire`);
   verifier(Object.hasOwn(EXPLICATIONS_COMPETENCES, code) && EXPLICATIONS_COMPETENCES[code]!.explication.length > 20 && EXPLICATIONS_COMPETENCES[code]!.exemple.length > 10, `${code} : explication professeur`);

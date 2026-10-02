@@ -7,6 +7,7 @@ import type { EcranDeclare } from "../../lib/contratGenerateur";
 
 export function textesAuteurDe(e: EcranDeclare): string[] {
   const t = [e.consigne];
+  if (e.question) t.push(e.question);
   if (e.nom) t.push(e.nom);
   if (typeof e.aide === "string") t.push(e.aide);
   if (e.type === "qcm") t.push(...e.choix.map((c) => c.libelle));
@@ -17,7 +18,8 @@ export function textesAuteurDe(e: EcranDeclare): string[] {
       else if (s.placeholder) t.push(s.placeholder);
     }
   }
-  if (e.type === "intervalle" && e.apercu) t.push(e.apercu.libelle);
+  if ((e.type === "intervalle" || e.type === "champ_expression") && e.apercu) t.push(e.apercu.libelle);
+  if (e.type === "chaine_transformations") t.push(e.depart, ...(e.legende ? [e.legende] : []), ...e.choix.map((c) => c.libelle));
   if (e.type === "liste_valeurs") t.push(e.etiquetteAjout, ...(e.etiquetteAucune ? [e.etiquetteAucune] : []), ...(e.etiquetteAuMoinsUne ? [e.etiquetteAuMoinsUne] : []));
   if (e.type === "tableau_signes") {
     if (e.titre) t.push(e.titre);

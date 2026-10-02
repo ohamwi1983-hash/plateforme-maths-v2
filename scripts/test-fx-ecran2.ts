@@ -5,6 +5,7 @@
 
 export {}; // module
 
+import type { EcranChaineTransformations } from "../lib/contratGenerateur";
 import type { ReponseConfirmee } from "../lib/contratGenerateur";
 import { verifierBalisageMath } from "./support/texteMath";
 import { validerDependances } from "../lib/cascadeEcrans";
@@ -14,12 +15,12 @@ import { verifierAvecControle } from "../lib/registreGenerateurs";
 import { creerPrng } from "../lib/prng";
 import { generateurFxDepuisGraphe as G } from "../src/generateurs/fxDepuisGraphe/generateur";
 import { effectifDepuisReponses, parametresDepuisReponse, projeterFx } from "../src/generateurs/fxDepuisGraphe/cascade";
-import { POLYNOME_DEPART, chaineCanonique, estXCarre, etapeLocalementValide, longueurMinimale, necessaires, transformationsAdmises } from "../src/generateurs/fxDepuisGraphe/chaine";
+import { POLYNOME_DEPART, chaineCanonique, estXCarre, etapeLocalementValide, longueurMinimale, necessaires, parametreEtape, transformationsAdmises } from "../src/generateurs/fxDepuisGraphe/chaine";
 import { CHAMP_CHAINE, CHAMP_EXPRESSION, CHOIX_CHAINE, POIDS_CHAINE, POIDS_EXPRESSION } from "../src/generateurs/fxDepuisGraphe/ecrans";
 import { latexFonction } from "../src/generateurs/fxDepuisGraphe/formatage";
 import { genererExerciceFx } from "../src/generateurs/fxDepuisGraphe/generation";
 import { coefficient, constante, decalerP, degre, egalP, foisScalaire, lirePolynome, plusP, type Polynome } from "../src/generateurs/fxDepuisGraphe/polynome";
-import { TRANSFORMATIONS, depuisJson, parametres, parametresRepli, polynomeDe, versJson, type ExerciceFx, type Parametres, type Transformation } from "../src/generateurs/fxDepuisGraphe/types";
+import { TRANSFORMATIONS, depuisJson, estTransformation, parametres, parametresRepli, polynomeDe, versJson, type ExerciceFx, type Parametres, type Transformation } from "../src/generateurs/fxDepuisGraphe/types";
 import { egalR, oppR, rat, signeR, type Rat } from "../src/generateurs/analyseFonctionMotifDelta/exact/rationnel";
 
 const echecs: string[] = [];
@@ -50,7 +51,18 @@ function saisie(p: Polynome): string {
   }
   return termes.join("+");
 }
-const brute = (etapes: { t: string; e: Polynome }[]): string => JSON.stringify({ etapes: etapes.map(({ t, e }) => ({ expression: saisie(e), transformation: t })) });
+// Valeur déclarée (RAPPORT §58) : par défaut la VRAIE valeur de l'étape (`parametreEtape`), `v` la remplace ; « 1 » si la règle de l'étape est fausse (étape mal étiquetée) ; aucune pour SOX.
+const saisieRat = (r: Rat): string => (r.d === 1 ? String(r.n) : `${r.n}/${r.d}`);
+function brute(etapes: { t: string; e: Polynome; v?: string }[]): string {
+  let avant: Polynome = POLYNOME_DEPART;
+  return JSON.stringify({
+    etapes: etapes.map(({ t, e, v }) => {
+      const parametre = estTransformation(t) ? parametreEtape(t, avant, e) : null;
+      avant = e;
+      return { expression: saisie(e), transformation: t, valeur: v ?? (t === "SOX" ? "" : parametre === null ? "1" : saisieRat(parametre)) };
+    }),
+  });
+}
 
 // Construction d'une étape : l'ÉTIQUETTE de construction est la vérité de l'oracle.
 type Etape = { t: Transformation; e: Polynome };
@@ -245,12 +257,12 @@ verifier(chainesJugees === CONFIGURATIONS.length * GRAINES.length, "toutes les c
 {
   const brut = genererExerciceFx(5, cfg(["TH"]));
   const ex = exProjete(brut, parametres(brut));
-  const E = (expr: string, t = "TH") => JSON.stringify({ etapes: [{ expression: expr, transformation: t }] });
-  for (const mauvaise of ["", "pas du json", "[]", "{}", JSON.stringify({ etapes: [] }), JSON.stringify({ etapes: Array.from({ length: 6 }, () => ({ expression: "x^2", transformation: "TH" })) }), E("(x-2", "TH"), E("", "TH"), E("x^2", "XX"), E("3+", "TH"), E("sqrt(2)", "TH"), JSON.stringify({ etapes: [{ expression: "x^2" }] }), JSON.stringify({ etapes: [{ expression: "x^2", transformation: "TH", extra: 1 }] })]) {
+  const E = (expr: string, t = "TH") => JSON.stringify({ etapes: [{ expression: expr, transformation: t, valeur: t === "SOX" ? "" : "1" }] });
+  for (const mauvaise of ["", "pas du json", "[]", "{}", JSON.stringify({ etapes: [] }), JSON.stringify({ etapes: Array.from({ length: 6 }, () => ({ expression: "x^2", transformation: "TH", valeur: "1" })) }), E("(x-2", "TH"), E("", "TH"), E("x^2", "XX"), E("3+", "TH"), E("sqrt(2)", "TH"), JSON.stringify({ etapes: [{ expression: "x^2" }] }), JSON.stringify({ etapes: [{ expression: "x^2", transformation: "TH", extra: 1 }] })]) {
     const r = G.verifier(ex, CHAMP_CHAINE, mauvaise);
     verifier(r.statut === "parse_error" && r.codesCompetence.length === 0 && r.messageErreur.length > 0, `lecture : « ${mauvaise.slice(0, 40)} » → parse_error`);
   }
-  const r2 = G.verifier(ex, CHAMP_CHAINE, JSON.stringify({ etapes: [{ expression: "(x-2)^2", transformation: "TH" }, { expression: "x^2+", transformation: "TV" }] }));
+  const r2 = G.verifier(ex, CHAMP_CHAINE, JSON.stringify({ etapes: [{ expression: "(x-2)^2", transformation: "TH", valeur: "2" }, { expression: "x^2+", transformation: "TV", valeur: "1" }] }));
   verifier(r2.statut === "parse_error" && r2.messageErreur.startsWith("Étape 2 : "), "le message désigne l'étape illisible");
   // Valeurs démesurées : jamais d'exception, étape fausse.
   const enorme = "9007199254740991";
@@ -271,6 +283,107 @@ verifier(chainesJugees === CONFIGURATIONS.length * GRAINES.length, "toutes les c
   // Exercice BRUT : jugement refusé bruyamment (jamais sur la vraie fonction).
   verifier((() => { try { G.verifier(brut, CHAMP_CHAINE, E("x^2")); return false; } catch { return true; } })(), "exercice non projeté : refus bruyant");
   verifier((() => { try { G.solutionAttendue(brut, CHAMP_CHAINE); return false; } catch { return true; } })(), "solution d'un exercice non projeté : refus bruyant");
+}
+
+// ── 5b. Valeur DÉCLARÉE de chaque étape (RAPPORT §58) : TH = h de f(x − h) (positif vers la droite), TV = constante ajoutée, EV | CV = facteur, SOX = aucune valeur ──
+{
+  const brut = genererExerciceFx(3, cfg(["TH", "TV", "EV", "SOX"]));
+  const g = P([2], [3], [4]); // 2(x − 3)² + 4 : TH 3, EV 2, TV 4
+  const ex = exProjete(brut, g);
+  const bonne = construire([{ t: "TH", param: rat(3) }, { t: "EV", param: rat(2) }, { t: "TV", param: rat(4) }]);
+  verifier(G.verifier(ex, CHAMP_CHAINE, brute(bonne)).statut === "correct", "valeurs déclarées justes : chaîne juste");
+  const avecValeur = (i: number, v: string) => brute(bonne.map((e, k) => (k === i ? { ...e, v } : e)));
+  // Mauvaise valeur sur une règle vraie : étape fausse, jamais un code « hors sujet », jamais une erreur de lecture.
+  for (const [i, v, nomCas] of [[0, "-3", "TH : signe inversé (vers la gauche)"], [0, "2", "TH : autre valeur"], [1, "3", "EV : autre facteur"], [2, "-4", "TV : signe inversé"]] as [number, string, string][]) {
+    const r = G.verifier(ex, CHAMP_CHAINE, avecValeur(i, v));
+    verifier(r.statut === "not_equivalent" && r.codesCompetence.join() === "VALEUR_DECLAREE_INCORRECTE" && r.partiesFausses?.join() === `etape:${i}`, `${nomCas} : seule l'étape ${i} est fausse, avec le seul code VALEUR_DECLAREE_INCORRECTE`);
+    verifier(r.statut === "not_equivalent" && Math.abs((r.fractionCorrecte ?? -1) - (Math.min(2, longueurMinimale(g)) + 1) / 4) < 1e-12, `${nomCas} : crédit partiel (deux étapes valides + arrivée)`);
+  }
+  // Valeur HORS DOMAINE de la transformation choisie (TH, TV ≠ 0 ; EV > 1 ; CV dans ]0 ; 1[) : parse_error IMMÉDIAT (aucune tentative), avant toute comparaison à la règle ou à f ; le message est
+  // une propriété de la transformation, identique pour tous les exercices, et ne cite aucune valeur attendue.
+  const horsDomaine: [number, string, string][] = [[0, "0", "TH"], [2, "0", "TV"], [1, "1", "EV : 1 exactement"], [1, "1/2", "EV : l'inverse du facteur"], [1, "-2", "EV : négatif"], [1, "0", "EV : zéro"]];
+  for (const [i, v, nomCas] of horsDomaine) {
+    const r = G.verifier(ex, CHAMP_CHAINE, avecValeur(i, v));
+    verifier(r.statut === "parse_error" && r.codesCompetence.length === 0 && r.messageErreur.startsWith(`Étape ${i + 1} : pour `), `valeur hors domaine (${nomCas}) : parse_error sur l'étape ${i + 1}, sans code`);
+  }
+  {
+    const gCv = P([1, 3], [0], [0]); // x² comprimée : CV exigée
+    const exCv = exProjete(genererExerciceFx(3, cfg(["CV"])), gCv);
+    const chaineCv = construire([{ t: "CV", param: rat(1, 3) }]);
+    verifier(G.verifier(exCv, CHAMP_CHAINE, brute(chaineCv)).statut === "correct", "CV 1/3 : juste");
+    for (const v of ["3", "1", "0", "-1/3", "2"]) {
+      const r = G.verifier(exCv, CHAMP_CHAINE, brute(chaineCv.map((e) => ({ ...e, v }))));
+      verifier(r.statut === "parse_error" && r.messageErreur === "Étape 1 : pour CV, la valeur doit être un facteur compris entre 0 et 1 (exclus).", `CV « ${v} » : hors domaine -> parse_error`);
+    }
+    const memeMessage = G.verifier(ex, CHAMP_CHAINE, avecValeur(1, "1/2"));
+    const autre = G.verifier(exProjete(brut, P([5], [-2], [1])), CHAMP_CHAINE, avecValeur(1, "1/2"));
+    verifier(memeMessage.statut === "parse_error" && autre.statut === "parse_error" && memeMessage.messageErreur === autre.messageErreur, "le message hors domaine ne dépend pas de l'exercice");
+    // L'ordre : un domaine refusé l'est AVANT le jugement, même si l'expression de l'étape est fausse.
+    const fausseEtDomaine = G.verifier(ex, CHAMP_CHAINE, JSON.stringify({ etapes: [{ expression: "x^2+7", transformation: "EV", valeur: "1/2" }] }));
+    verifier(fausseEtDomaine.statut === "parse_error", "valeur hors domaine + expression fausse : parse_error, pas un verdict");
+  }
+  // Le code VALEUR_DECLAREE_INCORRECTE PARTITIONNE (signal pur) : règle vraie + valeur différente (dans le domaine) -> ce code et lui seul ; règle fausse -> aucun ; tout juste -> aucun ;
+  // jamais sur un parse_error ; il ne change ni les étapes fausses ni fractionCorrecte.
+  {
+    let verdicts = 0;
+    for (const actives of CONFIGURATIONS) for (const graine of GRAINES.slice(0, 4)) {
+      const b = genererExerciceFx(graine, cfg(actives));
+      const f = parametres(b);
+      const exF = exProjete(b, f);
+      const canon = chaineCanonique(f, transformationsAdmises(actives, f))!.map((c) => ({ t: c.transformation, e: polynomeDe(c.apres) }));
+      let avant: Polynome = POLYNOME_DEPART;
+      canon.forEach((etape, i) => {
+        const vrai = parametreEtape(etape.t as Transformation, avant, etape.e);
+        avant = etape.e;
+        if (vrai === null || etape.t === "SOX") return;
+        const faux = etape.t === "TH" || etape.t === "TV" ? rat(-vrai.n, vrai.d) : etape.t === "EV" ? rat(vrai.n + vrai.d, vrai.d) : rat(vrai.n + vrai.d, 2 * vrai.d); // ≠ vrai et dans le domaine
+        const juste = G.verifier(exF, CHAMP_CHAINE, brute(canon));
+        const r = G.verifier(exF, CHAMP_CHAINE, brute(canon.map((e, k) => (k === i ? { ...e, v: saisieRat(faux) } : e))));
+        verdicts++;
+        verifier(juste.statut === "correct" && juste.codesCompetence.length === 0, `${actives.join("+")} g=${graine} : chaîne juste, aucun code`);
+        verifier(r.statut === "not_equivalent" && r.codesCompetence.join() === "VALEUR_DECLAREE_INCORRECTE" && r.partiesFausses?.join() === `etape:${i}`, `${actives.join("+")} g=${graine} étape ${i} (${etape.t}) : valeur fausse -> seul code VALEUR_DECLAREE_INCORRECTE`);
+        if (r.statut === "not_equivalent") {
+          const k = longueurMinimale(f);
+          verifier(Math.abs((r.fractionCorrecte ?? -1) - (Math.min(canon.length - 1, k) + 1) / (canon.length + 1)) < 1e-12, `${actives.join("+")} g=${graine} étape ${i} : le code ne change pas la fraction (${r.fractionCorrecte})`);
+        }
+      });
+    }
+    verifier(verdicts > 100, `partition de VALEUR_DECLAREE_INCORRECTE : ${verdicts} cas`);
+  }
+  // Toute écriture équivalente de la bonne valeur est acceptée (lecture exacte, pas de comparaison de texte).
+  for (const [i, v] of [[0, "3.0"], [0, "+3"], [0, "6/2"], [0, "03"], [1, "4/2"], [1, "2,0"], [1, "(2)"], [2, "8/2"], [2, "4"]] as [number, string][]) {
+    verifier(G.verifier(ex, CHAMP_CHAINE, avecValeur(i, v)).statut === "correct", `valeur équivalente acceptée : étape ${i} « ${v} »`);
+  }
+  // Valeur illisible ou qui n'est pas un nombre : parse_error (aucune tentative consommée), message désignant l'étape.
+  for (const v of ["x", "2x", "trois", "1/0", "3 vers la droite", "((", "3+", "x^2"]) {
+    const r = G.verifier(ex, CHAMP_CHAINE, avecValeur(1, v));
+    verifier(r.statut === "parse_error" && r.codesCompetence.length === 0 && r.messageErreur.startsWith("Étape 2 : la valeur"), `valeur illisible « ${v} » : parse_error sur l'étape 2`);
+  }
+  // Structure : valeur absente (clé manquante), vide pour TH, ou fournie pour SOX → refus à la lecture.
+  const sansCle = JSON.stringify({ etapes: [{ expression: "(x-3)^2", transformation: "TH" }] });
+  const vide = JSON.stringify({ etapes: [{ expression: "(x-3)^2", transformation: "TH", valeur: "  " }] });
+  const soxAvecValeur = JSON.stringify({ etapes: [{ expression: "-x^2", transformation: "SOX", valeur: "-1" }] });
+  for (const [nomCas, corps] of [["clé « valeur » manquante", sansCle], ["valeur vide pour TH", vide], ["valeur fournie pour SOX", soxAvecValeur]] as [string, string][]) {
+    const r = G.verifier(ex, CHAMP_CHAINE, corps);
+    verifier(r.statut === "parse_error" && r.codesCompetence.length === 0, `${nomCas} : parse_error`);
+  }
+  // SOX : aucune valeur, jugé par la règle seule.
+  const gNeg = P([-1], [0], [0]);
+  verifier(G.verifier(exProjete(brut, gNeg), CHAMP_CHAINE, brute(construire([{ t: "SOX" }]))).statut === "correct", "SOX seule, sans valeur : juste pour −x²");
+  // Hors sujet ET valeur fausse : le code reste « hors sujet » (la règle est vraie, la transformation non admise).
+  const brutPeu = genererExerciceFx(7, cfg(["TH"]));
+  const gPeu = parametres(brutPeu);
+  const canonique = chaineCanonique(gPeu, transformationsAdmises(brutPeu.actives, gPeu))!.map((c) => ({ t: c.transformation, e: polynomeDe(c.apres) }));
+  const horsSujet = G.verifier(exProjete(brutPeu, gPeu), CHAMP_CHAINE, brute([...construire([{ t: "TV", param: rat(3) }]), ...canonique].map((e, i) => (i === 0 ? { ...e, v: "99" } : e))));
+  verifier(horsSujet.statut === "not_equivalent" && horsSujet.codesCompetence.join() === "TRANSFORMATION_HORS_SUJET,VALEUR_DECLAREE_INCORRECTE", "règle vraie + transformation non admise + valeur fausse : les DEUX codes, dans cet ordre (deux erreurs distinctes)");
+  // La solution écrite cite les valeurs (TH, TV, EV, CV) mais pas SOX.
+  const sol = G.solutionAttendue(ex, CHAMP_CHAINE);
+  verifier(/TH \(valeur \$3\$\)/.test(sol) && /EV \(valeur \$2\$\)/.test(sol) && /TV \(valeur \$4\$\)/.test(sol), `la solution cite les valeurs : ${sol}`);
+  verifier(!/SOX \(valeur/.test(G.solutionAttendue(exProjete(brut, gNeg), CHAMP_CHAINE)), "la solution ne cite aucune valeur pour SOX");
+  // Un résultat de vérification n'expose jamais la valeur attendue (le message d'une valeur illisible n'en cite aucune).
+  const illisible = G.verifier(ex, CHAMP_CHAINE, avecValeur(0, "trois"));
+  const autreExercice = G.verifier(exProjete(brut, P([5], [-2], [1])), CHAMP_CHAINE, avecValeur(0, "trois"));
+  verifier(illisible.statut === "parse_error" && autreExercice.statut === "parse_error" && illisible.messageErreur === autreExercice.messageErreur, "le message d'une valeur illisible est le même pour tous les exercices (aucune valeur attendue n'y figure)");
 }
 
 // ── 6. Cascade : fonction effective dans TOUS les régimes (projeterExercice réel) ──
@@ -316,10 +429,12 @@ for (const actives of CONFIGURATIONS) {
   const textes = new Set<string>();
   for (const actives of CONFIGURATIONS) for (const graine of GRAINES.slice(0, 2)) {
     const brut = genererExerciceFx(graine, cfg(actives));
-    const e2 = G.ecrans(exProjete(brut, g))[1]!;
-    textes.add(e2.consigne);
-    verifier(e2.consigne.includes(`$f(x) = ${latexFonction(g)}$`), "l'énoncé reprend la fonction effective re-sérialisée");
-    verifier(verifierBalisageMath(e2.consigne).length === 0, "énoncé de l'écran 2 : balisage admis");
+    const e2 = G.ecrans(exProjete(brut, g))[1]! as EcranChaineTransformations;
+    textes.add(e2.question ?? "");
+    verifier(e2.consigne.startsWith("Détermine l'expression analytique") && !e2.consigne.includes("$f(x) ="), "la consigne reste générale : la fonction visée est dans la QUESTION, sous le graphe");
+    verifier((e2.question ?? "").includes(`$f(x) = ${latexFonction(g)}$`), "l'énoncé reprend la fonction effective re-sérialisée");
+    verifier(verifierBalisageMath(e2.consigne).length === 0 && verifierBalisageMath(e2.question ?? "").length === 0 && verifierBalisageMath(e2.legende ?? "").length === 0, "énoncé de l'écran 2 : balisage admis");
+    verifier(e2.legende === "TH : translation horizontale · TV : translation verticale · EV : étirement vertical · CV : compression verticale · SOX : symétrie d'axe Ox." && !e2.consigne.includes("TH :") && !(e2.question ?? "").includes("TH :"), "la légende des abréviations est séparée (révélée par le « ? » de l'étape), jamais dans la consigne ni la question");
   }
   verifier(textes.size === 1, `énoncé identique pour toute configuration (${textes.size} variantes)`);
   // Une réponse brute écrite autrement donne le même énoncé (décoder puis re-sérialiser).
@@ -329,7 +444,7 @@ for (const actives of CONFIGURATIONS) {
   // L'exercice BRUT ne nomme aucune fonction.
   const brut = genererExerciceFx(9, cfg(["TH", "TV"]));
   const e2brut = G.ecrans(brut)[1]!;
-  verifier(!e2brut.consigne.includes(latexFonction(parametres(brut))) && !/\(x [-+]/.test(e2brut.consigne), "écran 2 de l'exercice brut : aucune fonction nommée");
+  verifier(!(e2brut.question ?? "").includes(latexFonction(parametres(brut))) && !/\(x [-+]/.test(e2brut.question ?? "") && !/\(x [-+]/.test(e2brut.consigne), "écran 2 de l'exercice brut : aucune fonction nommée");
   verifier(e2brut.dependDe?.join() === CHAMP_EXPRESSION && e2brut.aide === undefined, "écran 2 : dépend de l'écran 1, aucune aide");
   verifier(JSON.stringify(e2brut.figure) === JSON.stringify(G.ecrans(brut)[0]!.figure), "la MÊME figure sur les deux écrans");
   verifier(e2brut.type === "chaine_transformations" && JSON.stringify((e2brut as { choix: unknown }).choix) === JSON.stringify(CHOIX_CHAINE) && CHOIX_CHAINE.length === 5, "le menu a toujours les cinq choix");

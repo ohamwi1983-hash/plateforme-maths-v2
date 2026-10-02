@@ -310,4 +310,8 @@ export const DICTIONNAIRE_COMPETENCES: Record<string, { libelle: string; descrip
     libelle: "Transformation hors sujet",
     description: "Étape de la chaîne bien formée algébriquement, mais utilisant une transformation que ni la ligne de la tâche ni la fonction visée ne justifient",
   },
+  VALEUR_DECLAREE_INCORRECTE: {
+    libelle: "Valeur de la transformation incorrecte",
+    description: "Étape de la chaîne dont la fonction obtenue est bien celle de la transformation choisie, mais dont la valeur déclarée (décalage, facteur) n'est pas celle qui produit cette étape",
+  },
 };

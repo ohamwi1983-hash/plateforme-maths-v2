@@ -86,38 +86,43 @@ export function chaineCanonique(g: Parametres, admises: ReadonlySet<Transformati
 }
 
 /**
- * Règle LOCALE d'une étape `E_{i-1} → E_i` pour la transformation CHOISIE (conception §3.4) :
- *  - `TH`  : `E_i(x) = E_{i-1}(x − h)`, `h ≠ 0` (`E_{i-1}` non constant : sur une constante la « translation » ne ferait rien) ;
- *  - `TV`  : `E_i − E_{i-1}` est une constante non nulle ;
- *  - `EV` / `CV` : `E_i = m·E_{i-1}` avec `m > 1` / `0 < m < 1` ; `SOX` : `m = −1` exactement.
- * Jamais d'exception : un dépassement d'entiers sûrs (saisie démesurée) rend l'étape fausse.
+ * Règle LOCALE d'une étape `E_{i-1} → E_i` pour la transformation CHOISIE (conception §3.4), qui renvoie aussi son PARAMÈTRE (RAPPORT §58) — la valeur que l'élève doit déclarer :
+ *  - `TH`  : `E_i(x) = E_{i-1}(x − h)`, `h ≠ 0` (`E_{i-1}` non constant : sur une constante la « translation » ne ferait rien) ; paramètre `h` (positif = vers la droite) ;
+ *  - `TV`  : `E_i − E_{i-1}` est une constante `k` non nulle ; paramètre `k` (positif = vers le haut) ;
+ *  - `EV` / `CV` : `E_i = m·E_{i-1}` avec `m > 1` / `0 < m < 1` ; paramètre `m` (le facteur, jamais « 1/m ») ; `SOX` : `m = −1` exactement ; paramètre `−1` (jamais déclaré).
+ * `null` : la règle est fausse. Jamais d'exception : un dépassement d'entiers sûrs (saisie démesurée) rend l'étape fausse.
  */
-export function etapeLocalementValide(transformation: Transformation, avant: Polynome, apres: Polynome): boolean {
+export function parametreEtape(transformation: Transformation, avant: Polynome, apres: Polynome): Rat | null {
   try {
     switch (transformation) {
       case "TH": {
         const n = degre(avant);
-        if (n < 1 || degre(apres) !== n) return false;
+        if (n < 1 || degre(apres) !== n) return null;
         const h = diviserR(soustraireR(coefficient(avant, n - 1), coefficient(apres, n - 1)), multiplierR(rat(n), coefficient(avant, n)));
-        return signeR(h) !== 0 && egalP(decalerP(avant, h), apres);
+        return signeR(h) !== 0 && egalP(decalerP(avant, h), apres) ? h : null;
       }
-      case "TV":
-        return moinsP(apres, avant).length === 1;
+      case "TV": {
+        const difference = moinsP(apres, avant);
+        return difference.length === 1 ? coefficient(difference, 0) : null;
+      }
       case "EV":
       case "CV":
       case "SOX": {
         const m = rapportProportionnel(avant, apres);
-        if (m === null) return false;
-        if (transformation === "SOX") return egalR(m, rat(-1));
-        if (signeR(m) <= 0) return false;
-        return transformation === "EV" ? m.n > m.d : m.n < m.d;
+        if (m === null) return null;
+        if (transformation === "SOX") return egalR(m, rat(-1)) ? m : null;
+        if (signeR(m) <= 0) return null;
+        return (transformation === "EV" ? m.n > m.d : m.n < m.d) ? m : null;
       }
     }
   } catch (e) {
-    if (e instanceof DebordementExact) return false;
+    if (e instanceof DebordementExact) return null;
     throw e;
   }
 }
+
+/** La règle locale seule (sans la valeur déclarée). */
+export const etapeLocalementValide = (transformation: Transformation, avant: Polynome, apres: Polynome): boolean => parametreEtape(transformation, avant, apres) !== null;
 
 /** `x²` : le point de départ de toute chaîne. */
 export const POLYNOME_DEPART: Polynome = puissanceP(X, 2);

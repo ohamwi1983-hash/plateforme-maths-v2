@@ -14,15 +14,18 @@ function verifier(condition: boolean, message: string): void {
   if (!condition) echecs.push(message);
 }
 
-const CHOIX = ["TH", "TV", "EV", "CV", "SOX"].map((id) => ({ id, libelle: id }));
+const CHOIX = ["TH", "TV", "EV", "CV", "SOX"].map((id) => (id === "SOX" ? { id, libelle: id } : { id, libelle: id, valeur: { placeholder: "valeur" } }));
 const ECRAN = { choix: CHOIX, etapesMin: 1, etapesMax: 5 };
-const etape = (expression: string, transformation: string) => ({ expression, transformation });
+// `valeur` (RAPPORT §58) : « 1 » par défaut pour une transformation à valeur, « » pour SOX (qui n'en prend pas).
+const etape = (expression: string, transformation: string, valeur = transformation === "SOX" ? "" : "1") => ({ expression, transformation, valeur });
 const brute = (etapes: unknown) => JSON.stringify({ etapes });
 
 async function main(): Promise<void> {
   // ── 1. Décodeur ──
-  const ok = decoderChaineTransformations(brute([etape(" (x-2)^2 ", "TH"), etape("3(x-2)^2", "EV")]), ECRAN);
-  verifier(ok.ok && ok.valeur.length === 2 && ok.valeur[0]!.expression === "(x-2)^2" && ok.valeur[1]!.transformation === "EV", "chaîne valide : expressions rognées, ordre conservé");
+  const ok = decoderChaineTransformations(brute([etape(" (x-2)^2 ", "TH", " 2 "), etape("3(x-2)^2", "EV", "3")]), ECRAN);
+  verifier(ok.ok && ok.valeur.length === 2 && ok.valeur[0]!.expression === "(x-2)^2" && ok.valeur[0]!.valeur === "2" && ok.valeur[1]!.transformation === "EV", "chaîne valide : expressions et valeurs rognées, ordre conservé");
+  const sox = decoderChaineTransformations(brute([etape("-x^2", "SOX"), etape("-x^2+1", "TV", "1")]), ECRAN);
+  verifier(sox.ok && sox.valeur[0]!.valeur === "", "SOX : valeur vide admise (et exigée)");
   verifier(decoderChaineTransformations(brute(Array.from({ length: 5 }, () => etape("x", "TH"))), ECRAN).ok, "5 étapes : admis");
   const refus: [string, string][] = [
     ["JSON illisible", "pas du json"],
@@ -38,6 +41,12 @@ async function main(): Promise<void> {
     ["étape tableau", brute([["x", "TH"]])],
     ["clé d'étape en trop", brute([{ expression: "x", transformation: "TH", plus: 1 }])],
     ["clé d'étape manquante", brute([{ expression: "x" }])],
+    ["clé « valeur » manquante", brute([{ expression: "x", transformation: "TH" }])],
+    ["valeur non texte", brute([{ expression: "x", transformation: "TH", valeur: 1 }])],
+    ["valeur nulle", brute([{ expression: "x", transformation: "TH", valeur: null }])],
+    ["valeur vide pour TH", brute([etape("x", "TH", "   ")])],
+    ["valeur fournie pour SOX", brute([etape("x", "SOX", "-1")])],
+    ["valeur trop longue", brute([etape("x", "TH", "1".repeat(41))])],
     ["expression non texte", brute([{ expression: 3, transformation: "TH" }])],
     ["expression vide", brute([etape("   ", "TH")])],
     ["expression trop longue", brute([etape("x".repeat(121), "TH")])],
@@ -50,7 +59,7 @@ async function main(): Promise<void> {
     const d = decoderChaineTransformations(b, ECRAN);
     verifier(d.ok === false && d.message.length > 0, `décodeur refuse : ${nom}`);
   }
-  const hostile = decoderChaineTransformations('{"etapes":[{"expression":"x","transformation":"TH"}],"__proto__":{"etapes":[]}}', ECRAN);
+  const hostile = decoderChaineTransformations('{"etapes":[{"expression":"x","transformation":"TH","valeur":"1"}],"__proto__":{"etapes":[]}}', ECRAN);
   verifier(hostile.ok === false, "décodeur : clé __proto__ en trop refusée");
   verifier(decoderChaineTransformations(brute([etape("x", "TH"), etape("x", "TV")]), { ...ECRAN, etapesMin: 3 }).ok === false && decoderChaineTransformations(brute([etape("x", "TH")]), { ...ECRAN, etapesMin: 2, etapesMax: 2 }).ok === false, "bornes de l'écran respectées");
   verifier(decoderChaineTransformations(brute([etape("<b>x</b> $a$", "TH")]), ECRAN).ok, "le texte d'élève est lu tel quel (jamais interprété, jamais rejeté pour ses caractères)");
@@ -83,6 +92,7 @@ async function main(): Promise<void> {
   verifier(apres.every((e: any) => JSON.stringify(e.figure) === avant), "figure identique sur tous les écrans et inchangée par une réponse fausse");
   await m.poster(CHAMP_COURBE, reponseBruteCorrecte(m.ex, CHAMP_COURBE));
   const ecranChaine = (await m.lire()).ecrans.find((e: any) => e.champ === CHAMP_CHAINE);
+  verifier(ecranChaine?.question?.includes("(x-1)^2") && typeof ecranChaine.legende === "string" && ecranChaine.legende.startsWith("TH : translation horizontale") && ecranChaine.choix.filter((c: any) => c.valeur !== undefined).map((c: any) => c.id).join() === "TH,TV,EV,CV", "écran chaîne servi avec sa question, sa légende et la valeur de TH, TV, EV, CV (pas de SOX)");
   verifier(ecranChaine?.type === "chaine_transformations" && ecranChaine.choix.length === 5 && ecranChaine.etapesMin === 1 && ecranChaine.etapesMax === 5 && ecranChaine.depart.includes("f_0"), "écran chaîne servi avec ses cinq choix et ses bornes");
   verifier(ecranChaine.aide === undefined && ecranChaine.aide_disponible === false, "écran chaîne : aucune aide (délibéré)");
   verifier(JSON.stringify(ecranChaine.figure) === avant, "écran chaîne : même figure que l'écran 1");

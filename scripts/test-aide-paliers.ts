@@ -103,7 +103,9 @@ async function main(): Promise<void> {
   verifier(vue.ecrans.length === 2 && ecran.champ === CHAMP_COURBE && ecran.type === "champ_expression" && vue.ecrans[1].champ === "chaine", "deux écrans : champ_expression (courbe) puis chaîne");
   verifier(JSON.stringify(vue.ecrans[0].figure) === JSON.stringify(vue.ecrans[1].figure), "la MÊME figure sur les deux écrans");
   verifier(ecran.figure?.type === "graphe_parabole" && validerFigure(ecran.figure).length === 0, "la figure est servie avec l'écran, valide");
-  const texteVue = JSON.stringify(vue);
+  // La `legende` de l'écran CHAÎNE est la légende des abréviations (RAPPORT §58), servie avec l'écran : ce n'est pas la légende d'un palier d'aide. On l'écarte avant de chercher une fuite d'aide.
+  const texteVue = JSON.stringify({ ...vue, ecrans: vue.ecrans.map((e: any) => (e.type === "chaine_transformations" ? { ...e, legende: undefined } : e)) });
+  verifier(typeof vue.ecrans[1].legende === "string" && vue.ecrans[1].legende.startsWith("TH : translation horizontale"), "la légende des abréviations de la chaîne est servie avec l'écran (elle n'est pas une aide)");
   verifier(ecran.aide === undefined && !texteVue.includes("annotations") && !texteVue.replace(/aide_paliers/g, "").includes("paliers") && !texteVue.includes("etiquette") && !texteVue.includes("legende"), "l'aide n'est JAMAIS envoyée avec l'écran (ni annotations, ni paliers, ni étiquettes)");
   verifier(ecran.aide_disponible === true && ecran.aide_paliers === 2 && vue.champs[0].aide_palier === 0 && vue.champs[0].aide_utilisee === false, "aide disponible, 2 paliers, palier atteint 0");
   const { sommet, pointA } = (() => {

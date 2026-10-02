@@ -264,6 +264,11 @@ export const EXPLICATIONS_COMPETENCES: Record<string, ExplicationCompetence> = {
     explication: "a et q sont justes mais l'abscisse du sommet est fausse sans être l'opposée de la vraie : lecture erronée de la valeur de p sur l'axe des abscisses.",
     exemple: "Sommet en (3 ; 1), a = 2 : attendu 2(x − 3)² + 1. L'élève écrit 2(x − 4)² + 1.",
   },
+  VALEUR_DECLAREE_INCORRECTE: {
+    explication:
+      "Dans une étape de la chaîne, la fonction écrite découle bien de la fonction précédente par la transformation choisie, mais la valeur déclarée à côté (décalage de TH ou TV, facteur de EV ou CV) n'est pas celle de cette transformation : confusion de signe pour un décalage (f(x − h) décale vers la droite si h > 0), facteur inversé, ou valeur recopiée d'une autre étape. Signal sans effet sur la note : l'étape est comptée fausse, avec ou sans ce code.",
+    exemple: "De x² à (x − 3)² par TH : l'élève déclare −3 (il lit « x − 3 » comme un décalage vers la gauche) ; ou, de (x − 3)² à 2(x − 3)² par EV, il déclare 1/2.",
+  },
   TRANSFORMATION_HORS_SUJET: {
     explication:
       "Une étape de la chaîne est algébriquement correcte pour la transformation choisie, mais cette transformation ne fait pas partie de celles que la ligne de la tâche travaille ni de celles que la fonction visée exige. Le détail compte : deux étapes hors sujet qui s'annulent (par exemple +3 puis −3) restent chacune hors sujet, même si la chaîne retombe sur la bonne expression.",
