@@ -68,7 +68,7 @@ export function effectifDepuisReponsesMD(ex: Pick<ExerciceMotifDelta, "a" | "b" 
   const y = axe !== undefined && axe.statut === "not_equivalent" ? lireOrdonneeSommet(axe.reponseBrute) : null;
   const fe = fonctionExacte(base.a, base.b, base.c) ?? fonctionVraie(ex);
   const ecarte = y !== null && Math.abs(approx(moins(coefVersExact(y), fe.yS))) > TOLERANCE_SAISIE;
-  return { ...base, yImage: ecarte ? y : null, ordonneeAffichee: axe !== undefined && (axe.statut === "correct" || y !== null) };
+  return { ...base, yImage: ecarte ? y : null };
 }
 
 /**

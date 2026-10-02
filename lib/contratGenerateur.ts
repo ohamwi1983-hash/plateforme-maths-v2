@@ -350,6 +350,12 @@ export interface Generateur<TExercice = unknown> {
   projeter?(exercice: TExercice, reponsesConfirmees: ReponseConfirmee[], contexte: ContexteProjection): TExercice;
   /** Solution lisible d'un champ (affichée seulement si le réglage de tâche ou la révélation le permet). */
   solutionAttendue(exercice: TExercice, champ: string): string;
+  /**
+   * OPTIONNELLE (RAPPORT §53) — la même solution, mais sous la forme d'une `reponse_brute` valide de l'écran (le format que le composant d'écran sait relire :
+   * `valeurInitiale`), pour que le navigateur la DESSINE comme l'écran lui-même (tableau de signes rempli) au lieu d'une phrase. Aucune porte propre : elle n'est servie que si
+   * `solution_attendue` l'est (`solutionStructureeSiMontree`, `lib/solutionStructuree.ts`, seul site de décision). `null` : pas de forme structurée pour ce champ.
+   */
+  solutionStructuree?(exercice: TExercice, champ: string): string | null;
 }
 
 /** `etatActuel` par défaut pour un enchaînement séquentiel : premier écran non encore confirmé. */

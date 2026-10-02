@@ -1232,7 +1232,8 @@ async function scenarioEtendu(navigateur: any, base: string, largeur: number) {
   await page.getByRole("button", { name: "Terminer" }).click();
 
   // ── Exercice 2 : le tableau passe de 3 à 7 colonnes — l'état local d'édition doit repartir de zéro ──
-  await page.waitForSelector(".moteur-table-structure col:nth-of-type(7)", { state: "attached" });
+  // On attend l'exercice 2 lui-même (et non « un tableau à 7 colonnes » : la solution dessinée du quotient de l'exercice 1, RAPPORT §53, en est un aussi et peut encore être à l'écran).
+  await page.waitForFunction(`/EXERCICE 2 SUR/.test(document.querySelector(".moteur-suivi")?.textContent ?? "") && document.querySelectorAll(".moteur-ecran-courant .moteur-table-structure col").length === 7`);
   verifier((await courant.locator(".moteur-table-structure col").count()) === 7 && (await courant.locator("tbody td button").count()) === 10, `${l} étendu : 3 puis 7 colonnes : 7 cases de signe + 3 cases de variation FUSIONNÉES = 10 cases de réponse`);
   const etats = await courant.locator("tbody td button").allInnerTexts();
   verifier(etats.length === 10 && etats.every((e: string) => e === "?"), `${l} étendu : aucune case ne garde l'état de l'exercice précédent (${JSON.stringify(etats)})`);
@@ -1615,7 +1616,7 @@ async function scenarioGen7Cascade(navigateur: any, base: string, largeur: numbe
     await (await valider())();
     // 4. domaineImage : ]−∞ ; 0]
     const consigneImage = await lireConsigneGen7(page);
-    verifier(/-\s?x\^2/.test(consigneImage) && consigneImage.includes("y_S = 0"), `${l} : domaineImage rappelle SA fonction et SON ordonnée du sommet (« ${consigneImage.slice(0, 200).replace(/\n/g, " / ")} »)`);
+    verifier(/-\s?x\^2/.test(consigneImage) && !consigneImage.includes("y_S"), `${l} : domaineImage rappelle SA fonction mais JAMAIS l'ordonnée du sommet (RAPPORT §53) (« ${consigneImage.slice(0, 200).replace(/\n/g, " / ")} »)`);
     const ligne = courant.locator(".moteur-intervalle-ligne");
     for (const cote of ["gauche", "droite"]) {
       const bouton = ligne.getByRole("button", { name: new RegExp(`Crochet de ${cote}`) });
@@ -1727,7 +1728,7 @@ async function scenarioRetourArriere(navigateur: any, base: string, largeur: num
   verifier(message.includes("Réponse modifiée.") && message.includes("à refaire (2)"), `${l} : la modification annonce 2 écrans à refaire (« ${message} »)`);
   await page.waitForSelector(".moteur-ecran-courant");
   verifier((await page.locator(".moteur-message-succes").first().textContent())?.includes("2 écrans qui en dépendent") === true, `${l} : la notice de tête le rappelle`);
-  verifier((await lireConsigneGen7(page)).includes("y_S"), `${l} : domaineImage est re-servi (son énoncé rappelle l'ordonnée du sommet confirmée)`);
+  verifier((await lireConsigneGen7(page)).includes("ensemble-image") && !(await lireConsigneGen7(page)).includes("y_S"), `${l} : domaineImage est re-servi (sans ordonnée du sommet dans l'énoncé)`);
   verifier((await page.locator(".moteur-remise").count()) === 0 && (await page.getByRole("button", { name: "Modifier ma réponse" }).count()) === 4, `${l} : plus de « Rendre » ; 4 écrans intacts restent modifiables`);
   verifier((await page.locator(".moteur-table-structure").count()) === 0, `${l} : le tableau (aval) n'est pas affiché : un seul écran à la fois`);
   await page.screenshot({ path: join(CAPTURES, `${l}-03-aval-perime.png`), fullPage: true });
@@ -2041,6 +2042,58 @@ async function scenarioPartiesFaussesTemoin(navigateur: any, base: string, large
 }
 
 /**
+ * « Réponse attendue » dessinée (RAPPORT §53) sur le TÉMOIN (deux tableaux structurés consécutifs) : un tableau de signes faux sous « Afficher la réponse attendue » → le tableau rempli s'affiche sous
+ * « Valider », PUIS reste dans le rappel gris de l'écran suivant (chemin `ligneFaite`, inaccessible avec gen7 dont le tableau est le dernier écran). Sans la case : jamais de tableau.
+ */
+async function scenarioSolutionTableauTemoin(navigateur: any, base: string, largeur: number) {
+  const l = `${largeur} solution tableau témoin`;
+  for (const visible of [true, false]) {
+    imposerProfilAssignation("etendu");
+    const s: Scenario = creerScenario();
+    installerBase(s.base);
+    const tacheId = creerTache(s, { nom: "Solution tableau témoin", feedback_immediat: true, reponse_visible: visible, tentatives_supplementaires: 0, variantes: [{ variante_id: VARIANTE_TEMOIN, nombre_exercices: 1 }] });
+    const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tacheId, eleve_ids: ["eleve-1"] } });
+    verifier(a.statut === 201, `${l} : assignation ${a.statut}`);
+    const ligne = s.base.table("exercices_assignes")[0]!;
+    const graine = graineDeProfil("etendu", 0, { large: true });
+    ligne.graine = graine;
+    const ex = genE(graine);
+    for (const champ of [CHAMP_COEFFICIENTS, CHAMP_ALLURE, CHAMP_EXTREMUM, CHAMP_AXE, CHAMP_IMAGE, CHAMP_RACINES]) {
+      const r = await appeler("reponses", "POST", { jeton: "eleve:eleve-1", corps: { exercice_assigne_id: ligne.id, champ, reponse_brute: reponseBruteCorrecte(U(ex), champ) } });
+      verifier(r.statut === 200, `${l} : préparation ${champ} : ${r.statut}`);
+    }
+    const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+    const courant = page.locator(".moteur-ecran-courant");
+    const e = `${l} (réponse attendue ${visible ? "affichée" : "NON affichée"})`;
+    await page.waitForSelector(".moteur-ecran-courant .moteur-table-signes");
+    const cases = courant.locator(".moteur-ligne-tableau td button");
+    const n = await cases.count();
+    for (let k = 0; k < n; k++) await cases.nth(k).click();
+    await courant.getByRole("button", { name: "Valider", exact: true }).click();
+    await page.waitForSelector(".moteur-ecran-courant .moteur-retour .moteur-statut");
+    if (visible) {
+      await page.waitForSelector(".moteur-retour .moteur-tableau-solution");
+      const attendu = JSON.parse(reponseBruteCorrecte(U(ex), CHAMP_SIGNES_VARIATION)) as Record<string, Record<string, string>>;
+      const nbAttendu = Object.values(attendu).reduce((t, c) => t + Object.keys(c).length, 0);
+      const vus = (await page.evaluate(`[...document.querySelectorAll(".moteur-retour .moteur-tableau-solution .moteur-case-signe")].map((b) => b.getAttribute("aria-label"))`)) as string[];
+      verifier(vus.length === nbAttendu && vus.every((v) => !v.includes("vide") && !v.includes("Toucher")), `${e} : tableau rempli et en lecture seule sous « Valider » (${vus.length} cases attendues ${nbAttendu})`);
+      const valeursSolution = Object.values(attendu).flatMap((c) => Object.values(c)).filter((v) => !["↗", "↘"].includes(v)).map((v) => (v === "-" ? "moins" : v));
+      verifier(valeursSolution.length > 0, `${e} : (sanité) la solution contient des valeurs`);
+      await page.screenshot({ path: join(CAPTURES, `${l}-${visible ? "visible" : "masquee"}-direct.png`), fullPage: true });
+      await page.getByRole("button", { name: /Question suivante/ }).click();
+      await page.waitForFunction(`document.querySelectorAll(".moteur-rappel .moteur-tableau-solution").length === 1`);
+      const dansRappel = (await page.evaluate(`(() => { const t = document.querySelector(".moteur-rappel .moteur-rappel-ligne .moteur-tableau-solution"); const p = document.querySelector(".moteur-rappel").getBoundingClientRect(), r = t.getBoundingClientRect(); return { dedans: r.left >= p.left - 0.5 && r.right <= p.right + 0.5, debordePage: document.documentElement.scrollWidth > window.innerWidth, lignes: document.querySelectorAll(".moteur-rappel .moteur-tableau-solution").length }; })()`)) as { dedans: boolean; debordePage: boolean; lignes: number };
+      verifier(dansRappel.dedans && !dansRappel.debordePage && dansRappel.lignes === 1, `${e} : dans le rappel gris le tableau rempli reste DANS le panneau, sans défilement horizontal (${JSON.stringify(dansRappel)})`);
+      await page.screenshot({ path: join(CAPTURES, `${l}-rappel.png`), fullPage: true });
+    } else {
+      verifier((await page.locator(".moteur-tableau-solution").count()) === 0 && (await courant.locator(".moteur-retour .moteur-solution").count()) === 0, `${e} : ni tableau ni phrase de solution (case décochée)`);
+    }
+    verifier(journal.pageerrors.length === 0, `${e} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+    await contexte.close();
+  }
+}
+
+/**
  * « Aperçu » d'une tâche AVEC retour en arrière (RAPPORT §39) : le professeur décoche la correction immédiate, coche « Autoriser le retour en
  * arrière », clique « Aperçu » ; dans l'onglet élève, après une réponse, l'écran reste modifiable (« Modifier ma réponse ») et rien n'est corrigé.
  * Sans la case cochée : comportement d'origine (« Question suivante »).
@@ -2112,6 +2165,11 @@ async function scenarioGen7Prof(navigateur: any, base: string, largeur: number) 
   const etat = (await page.evaluate(`(${JSON.stringify([...variantes, ...retirees])}).map((v) => { const i = document.querySelector('#composition-dynamique input[data-variante-id="' + v + '"]'); return i ? { v, desactive: i.disabled } : { v, absent: true }; })`)) as { v: string; desactive?: boolean; absent?: boolean }[];
   verifier(etat.filter((e) => variantes.includes(e.v)).every((e) => !e.absent && e.desactive === false), `${l} prof gen7 : les 10 champs « nombre d'exercices » existent et ne sont PAS disabled (${JSON.stringify(etat.filter((e) => variantes.includes(e.v)))})`);
   verifier(etat.filter((e) => retirees.includes(e.v)).every((e) => e.absent === true), `${l} prof gen7 : les 4 anciennes variantes ne sont plus proposées (${JSON.stringify(etat.filter((e) => retirees.includes(e.v)))})`);
+  // Présentation (RAPPORT §53) : DEUX variantes (sous-groupes repliables « Sans / Avec discriminant ») contenant chacune leurs sous-variantes, sans préfixe « [axe] » répété sur chaque ligne.
+  const arbre = (await page.evaluate(`(() => { const g = [...document.querySelectorAll("#composition-dynamique details.arbre-generateur")].find((d) => d.querySelector('input[data-variante-id="af_motif_racine_double_irrationnelle"]')); if (!g) return null; return { groupes: [...g.querySelectorAll(":scope > details.arbre-famille")].map((f) => ({ titre: f.querySelector(":scope > summary").textContent.trim(), ids: [...f.querySelectorAll("input[data-variante-id]")].map((i) => i.dataset.varianteId), prefixes: [...f.querySelectorAll(".ligne-variante")].filter((l) => l.textContent.trim().startsWith("[")).length })), directes: g.querySelectorAll(":scope > .ligne-variante").length }; })()`)) as { groupes: { titre: string; ids: string[]; prefixes: number }[]; directes: number } | null;
+  verifier(arbre !== null && arbre.directes === 0 && arbre.groupes.map((g) => g.titre).join("|") === "Sans discriminant|Avec discriminant", `${l} prof gen7 : deux sous-groupes « Sans discriminant » puis « Avec discriminant », aucune ligne hors groupe (${JSON.stringify(arbre)})`);
+  verifier(arbre !== null && arbre.groupes[0]?.ids.join() === variantes.slice(0, 7).join() && arbre.groupes[1]?.ids.join() === variantes.slice(7).join(), `${l} prof gen7 : les sept « motif » dans le premier groupe, les trois « delta » dans le second`);
+  verifier(arbre !== null && arbre.groupes.every((g) => g.prefixes === 0), `${l} prof gen7 : aucune ligne ne répète « [sans/avec discriminant] » devant son libellé`);
   await page.locator("#nom-tache").fill("Étude de fonctions");
   const choisies = ["af_motif_racine_double_irrationnelle", "af_delta_aucune_racine"];
   for (const v of choisies) {
@@ -2201,7 +2259,7 @@ async function repondreMD(page: any, ex: ExerciceMotifDelta, champ: string): Pro
 /**
  * Une partie COMPLÈTE par sous-variante (10 × 2 largeurs), au clic : six écrans, mathématiques (dont les racines carrées) rendues par KaTeX sans repli en source ; sur l'écran d'allure,
  * les DEUX réglages (sens de la parabole, position du sommet) pilotent le même croquis en direct ; sur l'ensemble-image, l'aperçu « im f = » est AU-DESSUS de la saisie et suit la frappe, sans aide ; aide
- * combinée de l'allure puis croquis de parabole (coefficients réels) sur le tableau ; tableau à 3 ou 7 colonnes selon le nombre de racines ; six réponses correctes enregistrées.
+ * combinée de l'allure (ni le tableau ni l'ensemble-image n'ont d'aide, RAPPORT §53) ; tableau à 3 ou 7 colonnes selon le nombre de racines ; six réponses correctes enregistrées.
  */
 async function scenarioGen7MotifDelta(navigateur: any, base: string, largeur: number) {
   const l = `${largeur}`;
@@ -2294,11 +2352,9 @@ async function scenarioGen7MotifDelta(navigateur: any, base: string, largeur: nu
         verifier(symboles.length >= (n === 7 ? 3 : 1) && (await courant.locator(".moteur-table-structure .moteur-math-source").count()) === 0, `${e} : valeurs de x symboliques rendues par KaTeX (${symboles.join(",")})`);
         const noms: string[] = await page.locator(".moteur-rappel-ligne-correct .moteur-rappel-nom").allInnerTexts();
         verifier(noms.length === 5 && noms[0]!.startsWith("Coefficients") && noms.some((x) => x.startsWith("Racines")), `${e} : le rappel liste les 5 écrans précédents (${noms.join(" | ")})`);
-        await demanderIndice(courant);
-        await page.waitForSelector(".moteur-ecran-courant .moteur-aide-texte svg");
-        verifier((await courant.locator(".moteur-aide-texte svg").count()) >= 1 && (await courant.locator(".moteur-aide-texte .moteur-math-source").count()) === 0, `${e} : l'aide du tableau est un croquis de parabole (coefficients réels)`);
+        verifier((await courant.locator(".moteur-aide").count()) === 0, `${e} : aucune aide sur le tableau (RAPPORT §53)`);
         await verifierPleinBord(page, `${e} : tableau`, largeur);
-        await page.screenshot({ path: cap("06-tableau-aide"), fullPage: true });
+        await page.screenshot({ path: cap("06-tableau"), fullPage: true });
       }
       await repondreMD(page, ex, champ);
       if (champ === "racines") await page.screenshot({ path: cap("05-racines"), fullPage: true });
@@ -2307,7 +2363,7 @@ async function scenarioGen7MotifDelta(navigateur: any, base: string, largeur: nu
     await page.waitForSelector(".moteur-fin");
     if (avecScores) {
       const rangees: string[] = await page.locator(".moteur-fin .moteur-recap-table tbody tr").allInnerTexts();
-      verifier(rangees.length === 7 && /Total\s+9,6 \/ 10 pts/.test(rangees[6]!) && /Tableau de signes\s+2,7 \/ 3 pts/.test(rangees[5]!) && /Allure\s+0,9 \/ 1 pt/.test(rangees[1]!), `${e} : tableau final : 6 écrans + total « 9,6 / 10 pts » (${JSON.stringify(rangees)})`);
+      verifier(rangees.length === 7 && /Total\s+9,9 \/ 10 pts/.test(rangees[6]!) && /Tableau de signes\s+3 \/ 3 pts/.test(rangees[5]!) && /Allure\s+0,9 \/ 1 pt/.test(rangees[1]!), `${e} : tableau final : 6 écrans + total « 9,9 / 10 pts » (${JSON.stringify(rangees)})`);
       await page.screenshot({ path: cap("07-fin-resultat"), fullPage: true });
     } else {
       verifier((await page.locator(".moteur-recap").count()) === 0, `${e} : pas de tableau final sans « Afficher la réponse attendue »`);
@@ -2316,7 +2372,7 @@ async function scenarioGen7MotifDelta(navigateur: any, base: string, largeur: nu
     await page.waitForSelector("#tableau-de-bord:not([hidden])");
     const lignes = s.base.table("reponses");
     verifier(lignes.length === 6 && lignes.every((r) => r.statut === "correct"), `${e} : 6 réponses enregistrées, toutes correctes (${lignes.map((r) => `${r.champ}:${r.statut}`).join()})`);
-    verifier(s.base.table("aides_utilisees").length === 2, `${e} : deux aides enregistrées (allure, tableau) : ${s.base.table("aides_utilisees").length}`);
+    verifier(s.base.table("aides_utilisees").length === 1, `${e} : une seule aide enregistrée (allure ; ni tableau ni ensemble-image) : ${s.base.table("aides_utilisees").length}`);
     verifier(journal.pageerrors.length === 0, `${e} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
     verifier(journal.erreursConsole.filter((m) => !/fonts\.g|net::ERR_FAILED/.test(m)).length === 0, `${e} : erreurs console : ${journal.erreursConsole.join(" | ")}`);
     await contexte.close();
@@ -2471,6 +2527,7 @@ async function main() {
       await scenarioPartiesFausses(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} parties fausses`);
       await scenarioPartiesFaussesTemoin(navigateur, url, largeur);
+      await scenarioSolutionTableauTemoin(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} parties fausses (témoin)`);
       await scenarioGen7MotifDelta(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} gen7 motif/delta`);

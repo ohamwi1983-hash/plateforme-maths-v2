@@ -219,13 +219,13 @@ for (const fam of FAMILLES) {
       const poids = ecrans.map((e) => e.poids).join();
       verifier(poids === `1,1,2,1,${fam.poidsRacines},3`, `${ctx} : poids 1, 1, 2, 1, ${fam.poidsRacines}, 3 (obtenu ${poids})`);
       const tabEcran = ecrans.find((e) => e.champ === CHAMP_TABLEAU_SIGNES);
-      verifier(tabEcran?.type === "tableau_signes" && tabEcran.dependDe?.join() === `${CHAMP_COEFFICIENTS},${CHAMP_AXE_SOMMET},${CHAMP_RACINES}` && typeof tabEcran.aide === "object" && tabEcran.aide.type === "croquis_parabole" && tabEcran.aide.marquesOx === true, `${ctx} : tableau : dépendances, aide croquis_parabole (coefficients réels)`);
+      verifier(tabEcran?.type === "tableau_signes" && tabEcran.dependDe?.join() === `${CHAMP_COEFFICIENTS},${CHAMP_AXE_SOMMET},${CHAMP_RACINES}` && tabEcran.aide === undefined, `${ctx} : tableau : dépendances, AUCUNE aide (RAPPORT §53)`);
       const rac = ecrans.find((e) => e.champ === CHAMP_RACINES);
       verifier(rac?.type === "liste_valeurs" && rac.permetAucune === true && rac.aide === undefined && rac.dependDe?.join() === CHAMP_COEFFICIENTS, `${ctx} : racines : liste_valeurs permetAucune, aucune aide, dépend des coefficients`);
       const allure = ecrans.find((e) => e.champ === CHAMP_ALLURE);
       verifier(allure?.type === "champs_multiples" && allure.illustration?.champPositionSommet === "positionSommet" && allure.illustration.champSigneAB === undefined && typeof allure.aide === "string", `${ctx} : allure : illustration « position du sommet » et UNE aide combinée`);
       const img = ecrans.find((e) => e.champ === CHAMP_DOMAINE_IMAGE);
-      verifier(img?.type === "intervalle" && img.apercu?.auDessus === true && img.apercu.libelle.includes("\\mathrm{im}") && img.aide === undefined, `${ctx} : ensemble-image : aperçu « im f = » au-dessus, aucune aide`);
+      verifier(img?.type === "intervalle" && img.apercu?.auDessus === true && img.apercu.libelle.includes("\\mathrm{im}") && img.aide === undefined && !img.consigne.includes("y_S"), `${ctx} : ensemble-image : aperçu « im f = » au-dessus, aucune aide, aucune ordonnée du sommet dans l'énoncé (RAPPORT §53)`);
     }
   }
 }

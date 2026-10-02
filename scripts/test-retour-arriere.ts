@@ -170,7 +170,10 @@ async function main(): Promise<void> {
     for (const champ of ["coefficients", "allure", "axeSommet", "racines"]) verifier(champDe(g, champ).modifiable === true, `${champ} : intact`);
     verifier((await x.rendre()).statut === 409, "rendre : refusé tant que les écrans périmés ne sont pas re-répondus");
     // l'énoncé de domaineImage suit la NOUVELLE ordonnée confirmée (cascade)
-    verifier(g.ecrans.find((e: any) => e.champ === "domaineImage").consigne.includes("y_S = -7"), "cascade : domaineImage est bâti sur la NOUVELLE réponse confirmée");
+    verifier(!g.ecrans.find((e: any) => e.champ === "domaineImage").consigne.includes("y_S"), "domaineImage : l'énoncé ne rappelle pas l'ordonnée du sommet (RAPPORT §53)");
+    // cascade : domaineImage est jugé sur la NOUVELLE ordonnée confirmée (−7) — le verdict est enregistré côté serveur (rien n'est montré avant la remise)
+    await x.poster("domaineImage", JSON.stringify({ crochetGauche: "[", borneGauche: "-7", crochetDroit: "[", borneDroite: "+inf" }));
+    verifier(x.lignes().filter((l) => l.champ === "domaineImage").at(-1)?.statut === "correct", "cascade : [−7 ; +∞[ est juste pour la NOUVELLE ordonnée confirmée (−7)");
     const r2 = await x.poster("domaineImage", x.bonne("domaineImage"));
     verifier(r2.statut === 200 && r2.corps.pret_a_rendre === false && r2.corps.champ_courant === "tableauSignes", "re-répondre domaineImage : le tableau redevient courant");
     const r3 = await x.poster("tableauSignes", x.bonne("tableauSignes"));

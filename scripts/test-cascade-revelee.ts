@@ -148,15 +148,16 @@ async function main(): Promise<void> {
     }
   }
 
-  // ── 5. Ordonnée du sommet fausse : domaineImage ne la reprend plus sous « réponse affichée » ──
+  // ── 5. Ordonnée du sommet fausse : domaineImage est jugé sur SON ordonnée, sauf quand la solution a été montrée (RAPPORT §53 : l'énoncé ne l'affiche plus, on le vérifie par le verdict) ──
   for (const r of REGIMES) {
     const x = await nouveau(r.feedback, r.visible);
     await x.poster("coefficients", reponseBruteCorrecteMotifDelta(x.brut, "coefficients"));
     await x.poster("allure", reponseBruteCorrecteMotifDelta(x.brut, "allure"));
     await x.poster("axeSommet", JSON.stringify({ axeTexte: "x = -3/2", xS: "-3/2", yS: "-7" })); // yS faux (vrai : −25/4)
-    const c = consigne(await x.lire(), "domaineImage");
-    if (r.reveleLaVraie) verifier(!c.includes("y_S = -7") && !c.includes("-7"), `${r.nom} / domaineImage : l'ordonnée fausse n'est pas reprise (« ${c.slice(0, 130)} »)`);
-    else verifier(c.includes("y_S = -7"), `${r.nom} / domaineImage : la cascade sur SON ordonnée est inchangée (« ${c.slice(0, 130)} »)`);
+    verifier(!consigne(await x.lire(), "domaineImage").includes("y_S"), `${r.nom} / domaineImage : l'énoncé ne rappelle jamais l'ordonnée du sommet`);
+    await x.poster("domaineImage", JSON.stringify({ crochetGauche: "[", borneGauche: "-7", crochetDroit: "[", borneDroite: "+inf" })); // juste POUR SON ordonnée (−7)
+    if (r.reveleLaVraie) verifier(x.statuts("domaineImage")[0] === "not_equivalent", `${r.nom} / domaineImage : [−7 ; +∞[ n'est plus accepté (la vraie ordonnée a été montrée)`);
+    else verifier(x.statuts("domaineImage")[0] === "correct", `${r.nom} / domaineImage : [−7 ; +∞[ est juste pour SON ordonnée (cascade inchangée)`);
   }
 
   if (echecs.length > 0) {

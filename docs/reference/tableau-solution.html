@@ -1,0 +1,62 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Référence — « Réponse attendue » : le tableau de signes rempli</title>
+<!-- RÉFÉRENCE de la SOLUTION DESSINÉE (RAPPORT §53) : demande du propriétaire (« tout le tableau de signes avec les bonnes valeurs dedans ; un tableau semblable au tableau à compléter »).
+     C'est EXACTEMENT le tableau de `tableau-signes.html` (mêmes bandes, mêmes colonnes de valeur `#F1EBFC`, mêmes filets `#E9E4F3`, mêmes hauteurs de case 48 / 56 px, flèches tracées), REMPLI et sans
+     bouton « Valider », dans un CADRE (filet 1 px, arrondi 13 px) à la place du plein-bord : il est posé dans une carte, dans le panneau gris du rappel ou dans une carte de relecture.
+     Les valeurs sont celles de x² + 3x − 4 : racines −4 et 1, sommet d'abscisse −3/2. public/moteur/ecrans/tableauSignes.js (`solution`) + public/moteur/ecrans.css la reproduisent. -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<div style="font-family:'Inter',sans-serif;color:#1C1730;max-width:390px;margin:0 auto;padding:16px;background:#FFFFFF;">
+
+<p data-ref="etiquette" style="margin:0 0 8px;padding:8px 16px;background:#F1EBFC;color:#3B1470;border-radius:13px;font-size:0.95rem;">Réponse attendue :</p>
+
+<div data-ref="cadre" style="border:1px solid #E9E4F3;border-radius:13px;overflow:hidden;background:#FFFFFF;">
+
+  <table style="border-collapse:collapse;width:100%;table-layout:fixed;background:#F6F3FB;">
+    <tr>
+      <td style="padding:6px 1px;"></td>
+      <td style="padding:6px 1px;text-align:center;font-size:0.72rem;font-weight:700;color:#6E6785;">x₁</td>
+      <td style="padding:6px 1px;"></td>
+      <td style="padding:6px 1px;text-align:center;font-size:0.72rem;font-weight:700;color:#6E6785;">x<sub>S</sub></td>
+      <td style="padding:6px 1px;"></td>
+      <td style="padding:6px 1px;text-align:center;font-size:0.72rem;font-weight:700;color:#6E6785;">x₂</td>
+      <td style="padding:6px 1px;"></td>
+    </tr>
+  </table>
+
+  <table style="border-collapse:collapse;width:100%;table-layout:fixed;">
+    <tr>
+      <td style="border-top:1px solid #E9E4F3;border-right:1px solid #E9E4F3;padding:8px 1px;"></td>
+      <td style="background:#F1EBFC;border-top:1px solid #E9E4F3;border-right:1px solid #E9E4F3;padding:8px 1px;text-align:center;font-weight:700;color:#3B1470;">−4</td>
+      <td style="border-top:1px solid #E9E4F3;border-right:1px solid #E9E4F3;padding:8px 1px;"></td>
+      <td style="background:#F1EBFC;border-top:1px solid #E9E4F3;border-right:1px solid #E9E4F3;padding:8px 1px;text-align:center;font-weight:700;color:#3B1470;">−3/2</td>
+      <td style="border-top:1px solid #E9E4F3;border-right:1px solid #E9E4F3;padding:8px 1px;"></td>
+      <td style="background:#F1EBFC;border-top:1px solid #E9E4F3;border-right:1px solid #E9E4F3;padding:8px 1px;text-align:center;font-weight:700;color:#3B1470;">1</td>
+      <td style="border-top:1px solid #E9E4F3;padding:8px 1px;"></td>
+    </tr>
+  </table>
+
+  <div style="background:#F6F3FB;padding:6px 16px;font-weight:700;font-size:0.72rem;letter-spacing:0.03em;color:#6E6785;border-top:1px solid #E9E4F3;">SIGNE DE <span style="text-transform:none;">f(x)</span></div>
+  <table style="border-collapse:collapse;width:100%;table-layout:fixed;">
+    <tr>
+      <td style="border-top:1px solid #E9E4F3;border-right:1px solid #E9E4F3;padding:2px;"><div data-ref="case" style="width:100%;min-height:48px;font-size:1.1rem;font-weight:700;color:#1C1730;display:flex;align-items:center;justify-content:center;">+</div></td>
+      <td style="background:#F1EBFC;border-top:1px solid #E9E4F3;border-right:1px solid #E9E4F3;padding:2px;"><div style="width:100%;min-height:48px;font-size:1.1rem;font-weight:700;color:#1C1730;display:flex;align-items:center;justify-content:center;">0</div></td>
+      <td style="border-top:1px solid #E9E4F3;border-right:1px solid #E9E4F3;padding:2px;"><div style="width:100%;min-height:48px;font-size:1.1rem;font-weight:700;color:#1C1730;display:flex;align-items:center;justify-content:center;">−</div></td>
+      <td style="background:#F1EBFC;border-top:1px solid #E9E4F3;border-right:1px solid #E9E4F3;padding:2px;"><div style="width:100%;min-height:48px;font-size:1.1rem;font-weight:700;color:#1C1730;display:flex;align-items:center;justify-content:center;">−</div></td>
+      <td style="border-top:1px solid #E9E4F3;border-right:1px solid #E9E4F3;padding:2px;"><div style="width:100%;min-height:48px;font-size:1.1rem;font-weight:700;color:#1C1730;display:flex;align-items:center;justify-content:center;">−</div></td>
+      <td style="background:#F1EBFC;border-top:1px solid #E9E4F3;border-right:1px solid #E9E4F3;padding:2px;"><div style="width:100%;min-height:48px;font-size:1.1rem;font-weight:700;color:#1C1730;display:flex;align-items:center;justify-content:center;">0</div></td>
+      <td style="border-top:1px solid #E9E4F3;padding:2px;"><div style="width:100%;min-height:48px;font-size:1.1rem;font-weight:700;color:#1C1730;display:flex;align-items:center;justify-content:center;">+</div></td>
+    </tr>
+  </table>
+
+  <div style="background:#F6F3FB;padding:6px 16px;font-weight:700;font-size:0.72rem;letter-spacing:0.03em;color:#6E6785;border-top:1px solid #E9E4F3;">VARIATIONS</div>
+  <table style="border-collapse:collapse;width:100%;table-layout:fixed;">
+    <tr>
+      <td colspan="3" style="border-top:1px solid #E9E4F3;border-right:1px solid #E9E4F3;padding:2px;"><div data-ref="case-variation" style="position:relative;width:100%;min-height:56px;font-size:1.3rem;font-weight:700;color:#1C1730;display:flex;align-items:center;justify-content:center;">↘</div></td>
+      <td style="background:#F1EBFC;border-top:1px solid #E9E4F3;border-right:1px solid #E9E4F3;padding:2px;"><div style="width:100%;min-height:56px;font-size:1.4rem;font-weight:700;color:#1C1730;display:flex;align-items:center;justify-content:center;">⌣</div></td>
+      <td colspan="3" style="border-top:1px solid #E9E4F3;padding:2px;"><div style="position:relative;width:100%;min-height:56px;font-size:1.3rem;font-weight:700;color:#1C1730;display:flex;align-items:center;justify-content:center;">↗</div></td>
+    </tr>
+  </table>
+
+</div>
+</div>

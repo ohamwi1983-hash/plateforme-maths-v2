@@ -3,14 +3,12 @@ import { AIDE_ALLURE, AIDE_AXE_SOMMET, aideFormuleColoreeMD } from "./aides";
 import { SOUS_CHAMPS_ALLURE_MD } from "./allure";
 import { SOUS_CHAMPS_AXE_SOMMET_MD } from "./axeSommet";
 import { SOUS_CHAMPS_COEFFICIENTS_MD } from "./coefficients";
-import { latexExact } from "./exact/nombreExact";
 import { chercherFamille } from "./familles";
 import { ecranRacinesMD } from "./racinesEcran";
 import { ecranTableauMD } from "./tableauSignes";
-import { approx } from "./exact/nombreExact";
 import { latexPolynomeMD, ordreAffichage } from "./formatage";
 import { rat, versNombreR } from "./exact/rationnel";
-import { CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE, CHAMP_RACINES, CHAMP_TABLEAU_SIGNES, coefVersExact, fonctionEffective, type ExerciceMotifDelta } from "./types";
+import { CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE, CHAMP_RACINES, CHAMP_TABLEAU_SIGNES, fonctionEffective, type ExerciceMotifDelta } from "./types";
 
 /**
  * Les écrans de gen7 « motif / delta » (RAPPORT §49), dans l'ordre, IDENTIQUES pour les dix sous-variantes :
@@ -71,8 +69,6 @@ export const DEPENDANCES_MD: Readonly<Record<string, readonly string[]>> = {
 export function ecransUnACinq(ex: ExerciceMotifDelta): EcranDeclare[] {
   const e = ex.effectif;
   const eff = enonceEffectif(ex);
-  const fe = fonctionEffective(ex);
-  const yImage = e.yImage === null ? fe.yS : coefVersExact(e.yImage);
   const cEff = versNombreR(rat(e.c.n, e.c.d));
   return [
     {
@@ -103,9 +99,8 @@ export function ecransUnACinq(ex: ExerciceMotifDelta): EcranDeclare[] {
       champ: CHAMP_DOMAINE_IMAGE,
       type: "intervalle",
       dependDe: [...(DEPENDANCES_MD[CHAMP_DOMAINE_IMAGE] as string[])],
-      consigne: `${eff} On rappelle que $\\mathrm{dom}\\,f = \\mathbb{R}$. ${
-        e.ordonneeAffichee ? `Avec $y_S = ${latexExact(yImage)}$ pour ordonnée du sommet, quel` : "Quel"
-      } est l'ensemble-image $\\mathrm{im}\\,f$ de cette fonction ?`,
+      // Aucune aide ici (RAPPORT §53) : ni bouton d'indice, ni ordonnée du sommet rappelée dans l'énoncé (elle donnerait la borne à écrire).
+      consigne: `${eff} On rappelle que $\\mathrm{dom}\\,f = \\mathbb{R}$. Quel est l'ensemble-image $\\mathrm{im}\\,f$ de cette fonction ?`,
       apercu: { libelle: "$\\mathrm{im}\\,f =$", auDessus: true },
     },
     {
@@ -116,14 +111,13 @@ export function ecransUnACinq(ex: ExerciceMotifDelta): EcranDeclare[] {
 }
 
 /**
- * Écran 6 : le tableau, jugé sur la fonction EFFECTIVE (RAPPORT §41) ; ses colonnes en dérivent. Aide `croquis_parabole` sur la parabole effective (coefficients RÉELS admis : décision Q4) ;
- * `aide_disponible` ne dépend jamais de la justesse d'une réponse. Valeurs de x vraies ou symboliques selon `affichageTableau` (règle de révélation §42).
+ * Écran 6 : le tableau, jugé sur la fonction EFFECTIVE (RAPPORT §41) ; ses colonnes en dérivent. AUCUNE aide (RAPPORT §53 : le croquis de la parabole donnait le tableau).
+ * Valeurs de x vraies ou symboliques selon `affichageTableau` (règle de révélation §42).
  */
 export function ecranSix(ex: ExerciceMotifDelta): EcranDeclare {
   const fe = fonctionEffective(ex);
   return {
     ...ecranTableauMD(fe, ex.affichageTableau, `${enonceEffectif(ex)} Complète le tableau de signe et de variation de $f$.`),
-    aide: { type: "croquis_parabole", a: versNombreR(fe.a), b: approx(fe.b), c: versNombreR(fe.c), marqueS: true, marquesOx: true },
     dependDe: [...(DEPENDANCES_MD[CHAMP_TABLEAU_SIGNES] as string[])],
   };
 }

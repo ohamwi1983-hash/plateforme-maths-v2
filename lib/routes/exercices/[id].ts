@@ -6,6 +6,7 @@ import { resoudreRangees } from "../../structureTableau";
 import { calculerEtatExercice, chargerContexteTache, chargerDonneesExercice, COLONNES_EXERCICE_ASSIGNE, projeterExercice, regenererExercice, revelationFinDeTache, tacheEstCompletePourEleve, type LigneExerciceAssigne } from "../../etatExercice";
 import { aidePresente } from "../../aideTypee";
 import { recalculerPartiesFausses } from "../../partiesFausses";
+import { solutionStructureeSiMontree } from "../../solutionStructuree";
 import { construireChampVue, REGLAGES_FORCEES_ANTERIEURES } from "../../tableauDeBord";
 import { categorieTachePourEleve } from "../../verrouillageTache";
 import { poidsDansMap, poidsDesEcrans } from "../../poidsEcran";
@@ -77,6 +78,7 @@ export const gererExercicesId = avecGestionErreurs(async function handler(req: R
       valeur_saisie: vue.valeur_saisie,
       statut: vue.statut,
       solution_attendue: vue.solution_attendue,
+      solution_structuree: solutionStructureeSiMontree(regenere.generateur, projete.exercice, c.champ, vue.solution_attendue), // RAPPORT §53 : même porte que `solution_attendue`
       // Parties à surligner en rouge dans l'écran récapitulatif (RAPPORT §52) : porte = réglage RÉEL de la tâche (correction immédiate), jamais la révélation forcée.
       parties_fausses: vue.statut === "not_equivalent" ? recalculerPartiesFausses(regenere.generateur, projete.exercice, c.champ, c.derniere, contexte.reglages.feedback_immediat) : null,
       score: vue.score, // RAPPORT §50 : null sauf si la solution est montrée (le score suit la solution)

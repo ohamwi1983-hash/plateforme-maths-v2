@@ -4,7 +4,7 @@ import { CODES_MOTIF_DELTA } from "./codes";
 import { champsMotifDelta, ecransMotifDelta } from "./ecrans";
 import { genererExerciceMD } from "./exercice";
 import { FAMILLES, type Famille } from "./familles";
-import { solutionAttendueMotifDelta } from "./solutions";
+import { solutionAttendueMotifDelta, solutionStructureeMotifDelta } from "./solutions";
 import type { ExerciceMotifDelta } from "./types";
 import { verifierMotifDelta } from "./verification";
 
@@ -31,6 +31,7 @@ function creerGenerateur(famille: Famille): Generateur<ExerciceMotifDelta> {
     verifier: verifierMotifDelta,
     projeter: (exercice: ExerciceMotifDelta, reponsesConfirmees: ReponseConfirmee[], contexte: ContexteProjection) => projeterMotifDelta(exercice, reponsesConfirmees, contexte),
     solutionAttendue: solutionAttendueMotifDelta,
+    solutionStructuree: solutionStructureeMotifDelta,
   };
 }
 

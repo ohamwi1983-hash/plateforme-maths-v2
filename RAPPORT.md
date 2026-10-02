@@ -1753,3 +1753,35 @@ Demande du propriétaire : « surligner en rouge les champs / boutons-choix qui 
 - **Relecture** : les marques apparaissent dans le rappel gris et dans l'écran récapitulatif de fin (ou la consultation d'une tâche antérieure à correction immédiate). Le tableau de bord élève et les vues professeur ne les portent pas.
 - **Chaque nouveau générateur doit désigner ses parties** pour bénéficier du surlignage fin ; sans cela, comportement d'origine (carte rouge seule) — jamais une erreur.
 - Dépend de la PR #35 (suppression des anciens `af_*`) : branche empilée sur elle.
+
+## §53 : retours du propriétaire sur gen7 — arbre prof, aide jaune, solution = tableau rempli, intervalle sur une ligne
+
+Six remarques après essai de l'aperçu de la PR #36. Livré sur une branche empilée sur #36 (elle-même sur #35).
+
+1. **Arbre prof : deux variantes, sous-variantes dedans.** Les dix entrées JSON de 4e n°7 portent `"groupe": "Sans discriminant"` (7) / `"Avec discriminant"` (3) (`public/catalogue-generateurs-complet.json`) ; `construireGroupeVariantes` (déjà écrit pour gen13) les range dans deux `<details>` ; `libelleVariante` ne préfixe plus `[axe]` quand `groupe` existe (`public/prof.html:1708`). `CORRESPONDANCE_JSON_VERS_PILOTE["4e:7"]` est inchangée (index = position). Vérifié en Chromium contre le vrai routeur : les dix champs existent, aucun `disabled`, deux groupes, aucune ligne hors groupe, aucun préfixe répété, tâche créée de bout en bout par l'interface (`scenarioGen7Prof`) ; `test-catalogue-motif-delta` pose le `groupe`.
+2. **Aide jaunâtre avec ampoule** : `creerIconeAmpoule` (`public/moteur/moteur.js:64`), `.moteur-bouton-aide` ambre (`public/moteur/ecrans.css`, fin de fichier), zone d'indice typée ambre aussi. Référence `docs/reference/bouton-aide.html`, mesurée par `chromium-design`.
+3. **« Réponse attendue » = le tableau rempli**, sous « Valider » ET dans l'écran récapitulatif (et dans le rappel gris pour un écran non réussi). Contrat `solutionStructuree?` (`lib/contratGenerateur.ts:358`), porte unique `lib/solutionStructuree.ts:9` branchée dans `lib/routes/reponses.ts:179` et `lib/routes/exercices/[id].ts:81` ; implémentation gen7 `solutions.ts:61`, témoin (deux tableaux structurés). Client : `tableauSignes.js:331` (`solution`), `moteur.js:337` (`creerSolution`). Référence `docs/reference/tableau-solution.html`. Mêmes rangées et mêmes hauteurs que le tableau à compléter (mesuré à 390 et 1280 px), 7 colonnes, flèches TRACÉES, texte neutre.
+4. **Aide du tableau retirée** (`ecranSix` sans `aide`). 5. **Aide de l'écran « im f » retirée** — voir l'écart ci-dessous. 6. **Intervalle sur une ligne** (`ecrans.css` : `flex-wrap: nowrap`, bornes `flex: 0 1 auto`, plancher 40 px), mesuré à 390, 360 et **320 px**.
+
+**Vérifications.** `test-solution-structuree` (98) : porte unique, trois régimes, POST et GET, tableau servi rejouable comme réponse juste. Mutation : retirer le `null` de la porte → 4 échecs (la forme structurée fuyait sous « case décochée » et sous correction coupée). Mutation intervalle : rétablir `wrap` → échec à 320 px. `chromium-design` : 1177 ; `chromium-temoin` : 3083 (nouveau `scenarioSolutionTableauTemoin` : tableau sous « Valider », rappel gris, case décochée = rien).
+
+**Écarts et risques assumés (à lire).**
+- **HYPOTHÈSE — remarque 5.** L'écran « im f » n'avait AUCUN bouton d'aide (`aide_disponible` est faux sur `domaineImage`) : j'ai compris « le coup de pouce » comme la phrase « le sommet est (x_S ; y_S = …) » de la consigne, qui donnait la borne. Elle est retirée. Si l'intention était autre, le revert est une ligne (`ecrans.ts:102`).
+- **Libellés** : « avec delta / sans delta » est affiché « Avec / Sans discriminant » (libellés déjà dans le JSON et les tests).
+- **Écart antérieur révélé par la mesure** : la case du tableau À COMPLÉTER s'écrit `1.15em` (18,4 px) là où `tableau-signes.html` dit 1,1 rem (17,6 px) ; jamais mesuré avant. Je n'y ai pas touché (la solution est comparée à ce tableau-là, comme demandé) ; à trancher.
+- **« Ta réponse » reste textuelle** dans le récapitulatif (seule la réponse ATTENDUE est un tableau) ; la dessiner aussi, avec les cases fausses en rouge, est faisable avec le même constructeur.
+- **Correction d'un test fragile** : `scenarioEtendu` attendait « un tableau à 7 colonnes » ; la solution dessinée du quotient de l'exercice 1 en est un, d'où une attente maintenant liée à « EXERCICE 2 SUR ».
+- **Portée de la solution dessinée** : tableau de signes seulement ; les autres écrans gardent leur phrase.
+
+## §54 : « Ta réponse » dessinée en tableau dans l'écran récapitulatif
+
+Demande : « Dessine aussi “Ta réponse” en tableau dans le récapitulatif » (suite de §53).
+
+**Livré.** `tableauSignes.js` : `construireLecture` (partagé avec la solution) et `reponse(ecran, valeurSaisie, partiesFausses)` ; `moteur.js` : `resumeTermine` utilise `composant.reponse` quand il existe (étiquette « Ta réponse : » puis le tableau, crayon « Modifier ma réponse » inchangé à droite de l'étiquette), sinon le résumé textuel d'avant. CSS : la couleur neutre des cases en lecture seule ne s'applique pas aux cases marquées (`:not(.moteur-partie-fausse)`, `ecrans.css`), sinon elle masquait le rouge.
+
+**Vérifications** (`chromium-design`, 1203, à 390 et 1280 px) : même cadre, mêmes rangées et mêmes hauteurs que le tableau à compléter ; les cases rendent EXACTEMENT ce que l'élève avait saisi (comparées aux libellés accessibles de l'écran courant avant « Valider ») ; lecture seule, aucune case vide, flèches tracées ; les MÊMES cases fausses qu'après « Valider », avec la même couleur, bordure et fond (mesurés), `aria-description` posé ; cases justes en texte neutre ; pas de résumé en texte en double. Mutation : désactiver l'appel à `composant.reponse` → échec. `chromium-temoin` 3083 et les 46 suites inchangés.
+
+**Écarts et risques.**
+- **Porte inchangée** : les cases rouges viennent de `parties_fausses` (§52) : sous correction coupée, ou pour une tâche antérieure sous correction forcée, la réponse est dessinée SANS cases rouges (le tableau rempli de la réponse de l'élève n'est pas une information nouvelle pour lui, comme `valeur_saisie`).
+- **Rappel gris non modifié** : « Ta réponse » y reste en texte compact ; seule la relecture (écran récapitulatif) est dessinée, comme demandé.
+- **Seul le tableau de signes** a une version dessinée de la réponse ; les autres écrans gardent leur résumé textuel.
