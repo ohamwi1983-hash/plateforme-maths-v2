@@ -100,7 +100,8 @@ async function main(): Promise<void> {
   verifier(m.ex.profil === "graphe" && m.ex.graphe !== undefined, "(sanité) exercice du témoin en profil graphe");
   const vue = await m.lire();
   const ecran = vue.ecrans[0];
-  verifier(vue.ecrans.length === 1 && ecran.champ === CHAMP_COURBE && ecran.type === "champ_expression", "un écran champ_expression");
+  verifier(vue.ecrans.length === 2 && ecran.champ === CHAMP_COURBE && ecran.type === "champ_expression" && vue.ecrans[1].champ === "chaine", "deux écrans : champ_expression (courbe) puis chaîne");
+  verifier(JSON.stringify(vue.ecrans[0].figure) === JSON.stringify(vue.ecrans[1].figure), "la MÊME figure sur les deux écrans");
   verifier(ecran.figure?.type === "graphe_parabole" && validerFigure(ecran.figure).length === 0, "la figure est servie avec l'écran, valide");
   const texteVue = JSON.stringify(vue);
   verifier(ecran.aide === undefined && !texteVue.includes("annotations") && !texteVue.replace(/aide_paliers/g, "").includes("paliers") && !texteVue.includes("etiquette") && !texteVue.includes("legende"), "l'aide n'est JAMAIS envoyée avec l'écran (ni annotations, ni paliers, ni étiquettes)");
