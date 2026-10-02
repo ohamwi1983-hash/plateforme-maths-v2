@@ -61,6 +61,7 @@ export const CATEGORIES_COMPETENCES: Record<string, CategorieCompetence> = {
   RELATION_VECTORIELLE_SIGNE: { categorie: "Confusion de signe/sens" },
   REDUCTION_SENS_INVERSE: { categorie: "Confusion de signe/sens" },
   FC_RACINE_OPPOSEE_OUBLIEE: { categorie: "Confusion de signe/sens" },
+  SIGNE_P_INVERSE: { categorie: "Confusion de signe/sens" },
   TABLEAU_SIGNE_INVERSE: { categorie: "Confusion de signe/sens" },
   TABLEAU_CONCAVITE_INCORRECTE: { categorie: "Confusion de signe/sens" },
 
@@ -120,6 +121,9 @@ export const CATEGORIES_COMPETENCES: Record<string, CategorieCompetence> = {
   TRANSFORMATION_ECHELLE_VERTICALE: { categorie: "Lecture graphique/visuelle" },
   TRANSFORMATION_ECHELLE_HORIZONTALE: { categorie: "Lecture graphique/visuelle" },
   TRANSFORMATION_ORIENTATION: { categorie: "Lecture graphique/visuelle" },
+  Q_INCORRECT: { categorie: "Lecture graphique/visuelle" },
+  A_INCORRECT: { categorie: "Lecture graphique/visuelle" },
+  P_MAGNITUDE_INCORRECTE: { categorie: "Lecture graphique/visuelle" },
   FONCTION_REFERENCE_SYMETRIE_INTERNE: { categorie: "Lecture graphique/visuelle" },
   FONCTION_REFERENCE_DIRECTION_DOMAINE: { categorie: "Lecture graphique/visuelle" },
   SIGNE_SIN_QUADRANT: { categorie: "Lecture graphique/visuelle" },

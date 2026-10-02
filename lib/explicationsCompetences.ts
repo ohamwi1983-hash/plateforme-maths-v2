@@ -245,4 +245,23 @@ export const EXPLICATIONS_COMPETENCES: Record<string, ExplicationCompetence> = {
     explication: "Erreur sur le signe de la tangente dans un quadrant donné du cercle trigonométrique.",
     exemple: "Dans le 4e quadrant, sinus négatif et cosinus positif donnent une tangente négative. Une erreur typique la donne positive.",
   },
+  // gen8 « f(x) à partir du graphe » (RAPPORT §56) : détecteurs de l'écran « expression canonique », définis dans src/generateurs/fxDepuisGraphe/codes.ts.
+  SIGNE_P_INVERSE: {
+    explication:
+      "Dans a(x − p)² + q, a et q sont justes mais le décalage horizontal est écrit avec le signe contraire : l'élève place le sommet de l'autre côté de l'axe Oy. Confusion classique entre « x − p » et la position réelle du sommet (si p = 3 on écrit (x − 3), pas (x + 3)).",
+    exemple: "Sommet en (3 ; 1), a = 2 : attendu 2(x − 3)² + 1. L'élève écrit 2(x + 3)² + 1.",
+  },
+  Q_INCORRECT: {
+    explication: "a et p sont justes (la forme et l'abscisse du sommet sont bien lues), mais la constante q — l'ordonnée du sommet — est fausse.",
+    exemple: "Sommet en (3 ; 1), a = 2 : attendu 2(x − 3)² + 1. L'élève écrit 2(x − 3)² + 4.",
+  },
+  A_INCORRECT: {
+    explication:
+      "Le sommet (p ; q) est bien lu, mais le coefficient a est faux : étirement ou compression mal évalué, ou sens d'ouverture inversé. Le second point du graphique (écart horizontal, écart vertical) permet de le retrouver.",
+    exemple: "Sommet en (3 ; 1), le point (5 ; 9) est sur la courbe : a = 2. L'élève écrit −2(x − 3)² + 1, ou (x − 3)² + 1.",
+  },
+  P_MAGNITUDE_INCORRECTE: {
+    explication: "a et q sont justes mais l'abscisse du sommet est fausse sans être l'opposée de la vraie : lecture erronée de la valeur de p sur l'axe des abscisses.",
+    exemple: "Sommet en (3 ; 1), a = 2 : attendu 2(x − 3)² + 1. L'élève écrit 2(x − 4)² + 1.",
+  },
 };
