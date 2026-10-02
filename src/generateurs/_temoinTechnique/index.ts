@@ -1,5 +1,5 @@
 import { creerPrng, type Prng } from "../../../lib/prng";
-import { decoderChampsMultiples, decoderIntervalle, decoderListeValeurs, decoderListeValeursOuAucune, decoderTableauSignes, lireNombreOuFraction } from "../../../lib/reponsesEcran";
+import { decoderChaineTransformations, decoderChampsMultiples, decoderIntervalle, decoderListeValeurs, decoderListeValeursOuAucune, decoderTableauSignes, lireNombreOuFraction } from "../../../lib/reponsesEcran";
 import { etatActuelSequentiel, type ColonneTableauSignes, type EcranDeclare, type EcranTableauSignes, type Generateur, type ReponseConfirmee, type ResultatVerification, type SousChamp } from "../../../lib/contratGenerateur";
 import { comparerCasesTableau, resoudreRangees } from "../../../lib/structureTableau";
 import type { AideTypee } from "../../../lib/aideTypee";
@@ -56,6 +56,7 @@ export const CHAMPS_ETENDUS = [CHAMP_COEFFICIENTS, CHAMP_ALLURE, CHAMP_EXTREMUM,
 
 // ── Champ du profil `graphe` (RAPPORT §56) : une FIGURE d'écran + l'aide par paliers `annotations_figure` (et, avec C4, la chaîne d'étapes) ──
 export const CHAMP_COURBE = "courbe";
+export const CHAMP_CHAINE = "chaine";
 
 /**
  * Le profil `graphe` couvre la figure d'écran et l'aide par paliers. Il n'est tiré que pour les graines >= `GRAINE_PROFIL_GRAPHE` (jamais en pratique : une graine aléatoire y tombe avec
@@ -622,6 +623,7 @@ function reponseBruteCorrecteEtendue(ex: ExerciceEtendu, champ: string): string 
 const NOMS_ECRANS: Readonly<Record<string, string>> = {
   [CHAMP_SOMME]: "Somme",
   [CHAMP_COURBE]: "Courbe",
+  [CHAMP_CHAINE]: "Chaîne",
   [CHAMP_PARITE]: "Parité",
   [CHAMP_DIVISEURS]: "Diviseurs",
   [CHAMP_SIGNES]: "Signes",
@@ -634,6 +636,17 @@ const NOMS_ECRANS: Readonly<Record<string, string>> = {
   [CHAMP_SIGNES_VARIATION]: "Signes et variation",
   [CHAMP_QUOTIENT]: "Quotient",
 };
+
+/** Les cinq transformations de la chaîne (toujours les cinq : le menu ne trahit rien). Le témoin ne juge que la STRUCTURE de la chaîne attendue, jamais ses expressions. */
+const CHOIX_CHAINE = [
+  { id: "TH", libelle: "TH" },
+  { id: "TV", libelle: "TV" },
+  { id: "EV", libelle: "EV" },
+  { id: "CV", libelle: "CV" },
+  { id: "SOX", libelle: "SOX" },
+];
+const CHAINE_ATTENDUE = ["TH", "TV"];
+const ECRAN_CHAINE_BORNES = { etapesMin: 1, etapesMax: 5 };
 
 /** Profil `graphe` : un écran `champ_expression` portant une FIGURE et une aide à DEUX paliers d'annotations (palier 1 : le sommet S ; palier 2 : le point A et les deux écarts). */
 function ecransGraphe(g: ExerciceGraphe): EcranDeclare[] {
@@ -659,6 +672,17 @@ function ecransGraphe(g: ExerciceGraphe): EcranDeclare[] {
         ],
       },
       poids: 2,
+    },
+    {
+      type: "chaine_transformations",
+      champ: CHAMP_CHAINE,
+      consigne: "Écris une chaîne de deux étapes : une translation horizontale (TH), puis une translation verticale (TV). Le témoin ne vérifie que l'ordre des transformations.",
+      depart: "$f_0(x) = x^2$",
+      choix: CHOIX_CHAINE,
+      ...ECRAN_CHAINE_BORNES,
+      placeholder: "ex. (x-2)^2",
+      figure, // la MÊME figure sur les deux écrans
+      poids: 3,
     },
   ];
 }
@@ -717,6 +741,12 @@ export const generateurTemoinTechnique: Generateur<ExerciceTemoin> = {
 
   verifier(ex: ExerciceTemoin, champ: string, reponseBrute: string): ResultatVerification {
     if (CHAMPS_ETENDUS.includes(champ)) return verifierEtendu(etenduDe(ex, champ), champ, reponseBrute);
+    if (champ === CHAMP_CHAINE) {
+      const chaine = decoderChaineTransformations(reponseBrute, { choix: CHOIX_CHAINE, ...ECRAN_CHAINE_BORNES });
+      if (!chaine.ok) return { statut: "parse_error", codesCompetence: [], messageErreur: chaine.message };
+      const fausses = chaine.valeur.flatMap((e, i) => (e.transformation === CHAINE_ATTENDUE[i] ? [] : [`etape:${i}`]));
+      return fausses.length === 0 && chaine.valeur.length === CHAINE_ATTENDUE.length ? resultat("correct") : { statut: "not_equivalent", codesCompetence: [], partiesFausses: fausses };
+    }
     if (champ === CHAMP_COURBE) {
       const lu = evaluerExpression(reponseBrute);
       if (!lu.ok) return { statut: "parse_error", codesCompetence: [], messageErreur: lu.message };
@@ -764,6 +794,7 @@ export const generateurTemoinTechnique: Generateur<ExerciceTemoin> = {
   solutionAttendue(ex: ExerciceTemoin, champ: string): string {
     if (CHAMPS_ETENDUS.includes(champ)) return solutionAttendueEtendue(etenduDe(ex, champ), champ);
     if (champ === CHAMP_COURBE) return `$a = ${grapheDe(ex).a}$`;
+    if (champ === CHAMP_CHAINE) return CHAINE_ATTENDUE.join(", puis ");
     if (champ === CHAMP_SOMME) return String(ex.a + ex.b);
     if (champ === CHAMP_PARITE) return (ex.a + ex.b) % 2 === 0 ? "Pair" : "Impair";
     if (champ === CHAMP_DIVISEURS) return diviseursPositifs(ex.n).join(", ");
@@ -790,6 +821,7 @@ export const generateurTemoinTechnique: Generateur<ExerciceTemoin> = {
 export function reponseBruteCorrecte(ex: ExerciceTemoin, champ: string): string {
   if (CHAMPS_ETENDUS.includes(champ)) return reponseBruteCorrecteEtendue(etenduDe(ex, champ), champ);
   if (champ === CHAMP_COURBE) return String(grapheDe(ex).a);
+  if (champ === CHAMP_CHAINE) return JSON.stringify({ etapes: CHAINE_ATTENDUE.map((transformation, i) => ({ expression: i === 0 ? "(x-1)^2" : "(x-1)^2+1", transformation })) });
   if (champ === CHAMP_SOMME) return String(ex.a + ex.b);
   if (champ === CHAMP_PARITE) return (ex.a + ex.b) % 2 === 0 ? "pair" : "impair";
   if (champ === CHAMP_DIVISEURS) return JSON.stringify(diviseursPositifs(ex.n).map(String));

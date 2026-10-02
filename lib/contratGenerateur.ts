@@ -68,7 +68,7 @@ import type { AideTypee } from "./aideTypee";
  * serveur ne changent.
  */
 
-export type TypeEcran = "champ_expression" | "qcm" | "liste_valeurs" | "tableau_signes" | "champs_multiples" | "intervalle";
+export type TypeEcran = "champ_expression" | "qcm" | "liste_valeurs" | "tableau_signes" | "champs_multiples" | "intervalle" | "chaine_transformations";
 
 /**
  * FIGURE d'un écran (RAPPORT §56) : un graphique STATIQUE, calculé par le générateur à partir de l'exercice BRUT (jamais d'une réponse de l'élève : il est identique sur tous les écrans de
@@ -260,8 +260,25 @@ export interface EcranIntervalle extends EcranCommun {
   apercu?: { libelle: string; auDessus?: boolean };
 }
 
+/**
+ * `chaine_transformations` (RAPPORT §56) : une CHAÎNE d'étapes, de `etapesMin` à `etapesMax`, chacune une paire (expression libre, transformation choisie parmi `choix`). L'élève part de
+ * `depart` et écrit, à chaque étape, l'expression obtenue et le nom de la transformation appliquée. `choix` est TOUJOURS la même liste, quelle que soit la configuration de la ligne de
+ * composition (le menu ne trahit pas les transformations actives). Réponse envoyée : UNE chaîne JSON `{"etapes":[{"expression":"…","transformation":"<id>"}, …]}` (décodeur
+ * `decoderChaineTransformations`) ; étapes ajoutées, texte tapé et choix non confirmés restent dans le composant. Parties fausses : `etape:<i>` (0-indexé) désigne une étape entière.
+ */
+export interface EcranChaineTransformations extends EcranCommun {
+  type: "chaine_transformations";
+  /** Expression de départ (texte d'auteur, balisage `$…$` admis) : « $f_0(x) = x^2$ ». */
+  depart: string;
+  choix: { id: string; libelle: string }[];
+  etapesMin: number;
+  etapesMax: number;
+  placeholder?: string;
+}
+
 export type EcranDeclare =
   | EcranChampExpression
+  | EcranChaineTransformations
   | EcranQcm
   | EcranListeValeurs
   | EcranTableauSignes

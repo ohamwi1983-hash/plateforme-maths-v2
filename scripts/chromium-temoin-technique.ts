@@ -2150,6 +2150,79 @@ async function scenarioApercuRetour(navigateur: any, base: string, largeur: numb
 }
 
 /**
+ * Écran « chaîne de transformations » (RAPPORT §56) sur le TÉMOIN (profil `graphe`) : étapes ajoutées / retirées dans les bornes, « Valider » inactif tant qu'une étape est incomplète,
+ * réponse envoyée = UNE chaîne JSON exacte, parties fausses par étape (retirées dès qu'on modifie l'étape), restauration sans altération (retour en arrière), relecture.
+ */
+async function scenarioChaineTransformations(navigateur: any, base: string, largeur: number) {
+  for (const tentatives of [2, 0]) {
+    const l = `${largeur} chaîne (${tentatives} essai${tentatives > 1 ? "s" : ""} en plus)`;
+    imposerProfilAssignation("graphe");
+    const s: Scenario = creerScenario();
+    installerBase(s.base);
+    const tacheId = creerTache(s, { nom: "Chaîne", feedback_immediat: true, tentatives_supplementaires: tentatives, variantes: [{ variante_id: VARIANTE_TEMOIN, nombre_exercices: 1 }] });
+    const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tacheId, eleve_ids: ["eleve-1"] } });
+    verifier(a.statut === 201, `${l} : assignation ${a.statut}`);
+    const ex = temoin.generer(Number(s.base.table("exercices_assignes")[0]!.graine));
+    const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+    const courant = page.locator(".moteur-ecran-courant");
+    const valider = courant.getByRole("button", { name: "Valider", exact: true });
+    // Écran 1 (courbe) : réponse juste, puis écran suivant.
+    await courant.locator(".moteur-champ").fill(reponseBruteCorrecte(ex, CHAMP_COURBE));
+    await valider.click();
+    await page.waitForSelector(".moteur-statut-correct");
+    await page.getByRole("button", { name: /Question suivante/ }).click();
+    await page.waitForSelector(".moteur-chaine");
+    const etapes = courant.locator(".moteur-chaine-etape");
+    const ajouter = courant.getByRole("button", { name: "Ajouter une étape" });
+    const retirer = courant.getByRole("button", { name: "Retirer la dernière étape" });
+    verifier((await etapes.count()) === 1 && (await retirer.isDisabled()) && (await valider.isDisabled()), `${l} : une étape au départ ; ni retrait ni validation possibles`);
+    verifier((await courant.locator(".moteur-chaine-choix").first().locator(".moteur-choix").count()) === 5, `${l} : le menu a toujours cinq transformations`);
+    for (let k = 0; k < 4; k++) await ajouter.click();
+    verifier((await etapes.count()) === 5 && (await ajouter.isDisabled()), `${l} : cinq étapes au plus (« Ajouter » désactivé)`);
+    for (let k = 0; k < 3; k++) await retirer.click();
+    verifier((await etapes.count()) === 2 && (await ajouter.isEnabled()), `${l} : retrait de la dernière étape`);
+    // Étape incomplète : pas de validation.
+    await etapes.nth(0).locator(".moteur-champ").fill("(x-1)^2");
+    await etapes.nth(0).locator('.moteur-choix:has(input[value="TH"])').click();
+    await etapes.nth(1).locator(".moteur-champ").fill("(x-1)^2+1");
+    verifier(await valider.isDisabled(), `${l} : une étape sans transformation : « Valider » reste inactif`);
+    await etapes.nth(1).locator('.moteur-choix:has(input[value="EV"])').click(); // fausse : TV attendue
+    verifier(await valider.isEnabled(), `${l} : toutes les étapes complètes : « Valider » actif`);
+    const avantEnvoi = reponsesEnvoyees(journal);
+    await valider.click();
+    await page.waitForSelector(".moteur-retour .moteur-statut");
+    verifier(reponsesEnvoyees(journal) === avantEnvoi + 1, `${l} : une seule requête pour la validation (étapes et frappes restent locales)`);
+    const envoye = JSON.parse(journal.requetes.filter((r: any) => r.methode === "POST" && r.url.endsWith("/api/reponses")).slice(-1)[0].corps ?? "{}");
+    verifier(Object.keys(envoye).sort().join() === "champ,exercice_assigne_id,reponse_brute" && envoye.reponse_brute === '{"etapes":[{"expression":"(x-1)^2","transformation":"TH"},{"expression":"(x-1)^2+1","transformation":"EV"}]}', `${l} : réponse envoyée = UNE chaîne JSON exacte (${envoye.reponse_brute})`);
+    verifier((await courant.locator(".moteur-statut-not_equivalent").count()) === 1, `${l} : verdict négatif`);
+    // Restauration sans altération (retour en arrière) : le composant relit sa propre réponse et la reproduit à l'identique.
+    const restaure = await page.evaluate(`(async () => { const { COMPOSANTS_ECRAN } = await import("/moteur/ecrans/index.js"); const ecran = { champ: "chaine", type: "chaine_transformations", choix: ${JSON.stringify(["TH", "TV", "EV", "CV", "SOX"].map((id) => ({ id, libelle: id })))}, etapesMin: 1, etapesMax: 5, depart: "x", consigne: "c" }; const brute = ${JSON.stringify(envoye.reponse_brute)}; const v = COMPOSANTS_ECRAN.chaine_transformations.creer(ecran, { surSoumission() {}, surChangement() {}, valeurInitiale: brute }); return v.lireReponse() === brute; })()`);
+    verifier(restaure === true, `${l} : valeurInitiale restaurée SANS altération`);
+    if (tentatives > 0) {
+      verifier((await courant.locator(".moteur-chaine-etape input.moteur-partie-fausse").count()) === 1 && (await etapes.nth(1).locator("input.moteur-champ").getAttribute("aria-invalid")) === "true" && (await etapes.nth(0).locator("input.moteur-champ").getAttribute("aria-invalid")) === null, `${l} : seule l'étape 2 est marquée fausse (aria-invalid)`);
+      verifier((await etapes.nth(1).locator(".moteur-choix.moteur-partie-fausse").count()) === 1 && (await etapes.nth(0).locator(".moteur-choix.moteur-partie-fausse").count()) === 0, `${l} : la transformation choisie à l'étape 2 est marquée`);
+      await etapes.nth(1).locator('.moteur-choix:has(input[value="TV"])').click();
+      verifier((await courant.locator(".moteur-partie-fausse").count()) === 0, `${l} : modifier l'étape retire sa marque`);
+      await valider.click();
+      await page.waitForSelector(".moteur-statut-correct");
+      verifier((await courant.locator(".moteur-chaine-etape input").first().isDisabled()) && (await ajouter.isDisabled()) && (await retirer.isDisabled()), `${l} : après la réussite, tout est verrouillé`);
+    } else {
+      // Plus d'essai : verrouillé, relecture avec l'étape fausse surlignée.
+      await page.getByRole("button", { name: /Voir la fin/ }).click();
+      await page.waitForSelector(".moteur-ecran-termine");
+      const pieces: string[] = await page.locator(".moteur-ecran-termine .moteur-piece-fausse").allInnerTexts();
+      verifier(pieces.length === 1 && pieces[0] === "(x-1)^2+1 (EV)", `${l} : relecture : l'étape 2 est surlignée (${JSON.stringify(pieces)})`);
+      verifier((await page.locator(".moteur-ecran-termine .moteur-reponse-eleve").last().innerText()).includes("(x-1)^2 (TH) ; (x-1)^2+1 (EV)"), `${l} : relecture : « Ta réponse » en texte d'élève`);
+    }
+    await page.screenshot({ path: join(CAPTURES, `${l.replace(/[ ()]/g, "-")}.png`), fullPage: true });
+    verifier(!(await page.evaluate("document.documentElement.scrollWidth > window.innerWidth")), `${l} : pas de défilement horizontal`);
+    verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+    await contexte.close();
+  }
+  imposerProfilAssignation("aleatoire");
+}
+
+/**
  * Graphique d'écran et aide PAR PALIERS (RAPPORT §56) sur le TÉMOIN (profil `graphe`) : le graphique est servi sans annotation ; l'aide à deux paliers pose S puis A et les vecteurs SUR ce
  * graphique ; recharger la page efface les annotations (état local) et « Revoir l'indice » rejoue le palier ATTEINT sans nouvelle pénalité ; en relecture le graphique reste, sans annotation.
  */
@@ -2196,9 +2269,21 @@ async function scenarioFigureAidePaliers(navigateur: any, base: string, largeur:
   await courant.getByRole("button", { name: "Valider", exact: true }).click();
   await page.waitForSelector(".moteur-statut-correct");
   await page.screenshot({ path: join(CAPTURES, `${l}-reponse.png`), fullPage: true });
+  // Écran suivant (la chaîne) : la MÊME figure, SANS les annotations de l'écran 1 (l'aide est par écran) ; puis fin de l'exercice.
+  await page.getByRole("button", { name: /Question suivante/ }).click();
+  await page.waitForSelector(".moteur-chaine");
+  verifier((await page.locator(`${SVG}`).count()) === 1 && (await page.locator(`${SVG} .figure-annotations > *`).count()) === 0, `${l} : écran suivant : même graphique, sans annotation`);
+  const etapes = courant.locator(".moteur-chaine-etape");
+  await courant.getByRole("button", { name: "Ajouter une étape" }).click();
+  await etapes.nth(0).locator(".moteur-champ").fill("(x-1)^2");
+  await etapes.nth(0).locator('.moteur-choix:has(input[value="TH"])').click();
+  await etapes.nth(1).locator(".moteur-champ").fill("(x-1)^2+1");
+  await etapes.nth(1).locator('.moteur-choix:has(input[value="TV"])').click();
+  await courant.getByRole("button", { name: "Valider", exact: true }).click();
+  await page.waitForSelector(".moteur-statut-correct");
   await page.getByRole("button", { name: /Voir la fin/ }).click();
   await page.waitForSelector(".moteur-ecran-termine");
-  verifier((await page.locator(".moteur-ecran-termine .figure-svg").count()) === 1 && (await page.locator(".moteur-ecran-termine .figure-annotations > *").count()) === 0, `${l} : relecture : le graphique reste sous l'énoncé, sans annotation`);
+  verifier((await page.locator(".moteur-ecran-termine .figure-svg").count()) === 2 && (await page.locator(".moteur-ecran-termine .figure-annotations > *").count()) === 0, `${l} : relecture : le graphique reste sous chaque énoncé, sans annotation`);
   verifier(!(await page.evaluate("document.documentElement.scrollWidth > window.innerWidth")), `${l} : pas de défilement horizontal`);
   verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
   await contexte.close();
@@ -2682,6 +2767,8 @@ async function main() {
       controlerReponsesHttp(`${largeur} config ligne`);
       await scenarioFigureAidePaliers(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} figure aide paliers`);
+      await scenarioChaineTransformations(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} chaîne`);
       await scenarioPartiesFausses(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} parties fausses`);
       await scenarioPartiesFaussesTemoin(navigateur, url, largeur);

@@ -1,4 +1,4 @@
-import type { EcranChampsMultiples } from "./contratGenerateur";
+import type { EcranChaineTransformations, EcranChampsMultiples } from "./contratGenerateur";
 
 /**
  * Décodeurs de `reponseBrute` partagés par les générateurs (format par type d'écran documenté dans
@@ -160,4 +160,49 @@ export function lireNombreOuFraction(texte: string): number | null {
   const denominateur = Number(fraction[2]);
   if (!Number.isFinite(numerateur) || !Number.isFinite(denominateur) || denominateur === 0) return null;
   return numerateur / denominateur;
+}
+
+export interface EtapeChaine {
+  expression: string;
+  transformation: string;
+}
+
+export const EXPRESSION_ETAPE_LONGUEUR_MAX = 120;
+
+/**
+ * `chaine_transformations` : structure SEULEMENT (RAPPORT §56). `{"etapes":[{"expression","transformation"}…]}` : de `etapesMin` à `etapesMax` étapes, clés exactes, `transformation` ∈ ids de
+ * `choix`, `expression` non vide (après `trim`) et d'au plus 120 caractères. Ne juge JAMAIS la justesse, ne lit PAS l'expression (c'est le générateur qui l'interprète). Tableaux et
+ * clés fixes uniquement : aucune clé venue de l'élève n'indexe un objet.
+ */
+export function decoderChaineTransformations(reponseBrute: string, ecran: Pick<EcranChaineTransformations, "choix" | "etapesMin" | "etapesMax">): Decodage<EtapeChaine[]> {
+  const illisible = { ok: false as const, message: "La chaîne d'étapes n'a pas pu être lue." };
+  let brut: unknown;
+  try {
+    brut = JSON.parse(reponseBrute);
+  } catch {
+    return illisible;
+  }
+  if (typeof brut !== "object" || brut === null || Array.isArray(brut)) return illisible;
+  const cles = Object.keys(brut);
+  if (cles.length !== 1 || cles[0] !== "etapes") return illisible;
+  const etapes = (brut as { etapes: unknown }).etapes;
+  if (!Array.isArray(etapes)) return illisible;
+  if (etapes.length < ecran.etapesMin || etapes.length > ecran.etapesMax) {
+    return { ok: false, message: ecran.etapesMin === ecran.etapesMax ? `La chaîne doit comporter ${ecran.etapesMin} étape${ecran.etapesMin > 1 ? "s" : ""}.` : `La chaîne doit comporter de ${ecran.etapesMin} à ${ecran.etapesMax} étapes.` };
+  }
+  const sortie: EtapeChaine[] = [];
+  for (let i = 0; i < etapes.length; i++) {
+    const e: unknown = etapes[i];
+    if (typeof e !== "object" || e === null || Array.isArray(e)) return illisible;
+    const k = Object.keys(e);
+    if (k.length !== 2 || !k.includes("expression") || !k.includes("transformation")) return illisible;
+    const { expression, transformation } = e as { expression: unknown; transformation: unknown };
+    if (typeof expression !== "string" || typeof transformation !== "string") return illisible;
+    const nettoyee = expression.trim();
+    if (nettoyee === "") return { ok: false, message: `L'étape ${i + 1} n'a pas d'expression : écris-la avant de valider.` };
+    if (nettoyee.length > EXPRESSION_ETAPE_LONGUEUR_MAX) return { ok: false, message: `L'expression de l'étape ${i + 1} est trop longue.` };
+    if (!ecran.choix.some((c) => c.id === transformation)) return { ok: false, message: `La transformation de l'étape ${i + 1} n'existe pas.` };
+    sortie.push({ expression: nettoyee, transformation });
+  }
+  return { ok: true, valeur: sortie };
 }

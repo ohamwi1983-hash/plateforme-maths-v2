@@ -1572,3 +1572,65 @@
 .moteur-aide-legende {
   margin: 0;
 }
+
+/* ── Chaîne de transformations (RAPPORT §56) : docs/reference/chaine-transformations.html. Une étape = un bloc (numéro, expression, choix de la transformation). Le champ et les
+   choix réutilisent `.moteur-champ` et `.moteur-choix` (références des composants) : seuls l'enveloppe de l'étape et le numéro sont nouveaux. ── */
+.moteur-chaine {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+}
+
+.moteur-chaine-depart {
+  margin: 0;
+  padding: var(--espace-2) var(--espace-3);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+}
+
+.moteur-chaine-etapes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.moteur-chaine-etape {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+  margin: 0;
+  padding: var(--espace-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.moteur-chaine-numero {
+  color: var(--violet);
+  font-size: 0.8em;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.moteur-chaine-choix {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-2);
+}
+
+.moteur-chaine-choix .moteur-choix {
+  flex: 0 1 auto;
+  gap: var(--espace-2);
+}
+
+.moteur-chaine-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-2);
+}

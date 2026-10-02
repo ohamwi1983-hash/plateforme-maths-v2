@@ -18,7 +18,7 @@ import { demarrerServeur, stubSupabase } from "./support/serveurChromium";
 import { appeler, creerScenario, creerTache, imposerProfilAssignation, installerBase } from "./support/harnaisRouteur";
 import { genererExerciceMD } from "../src/generateurs/analyseFonctionMotifDelta/exercice";
 import { reponseBruteCorrecteMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/solutions";
-import { CHAMP_SOMME, CHAMP_PARITE, CHAMP_DIVISEURS, CHAMP_SIGNES, generateurTemoinTechnique as temoin, reponseBruteCorrecte, VARIANTE_TEMOIN } from "../src/generateurs/_temoinTechnique";
+import { CHAMP_COURBE, CHAMP_SOMME, CHAMP_PARITE, CHAMP_DIVISEURS, CHAMP_SIGNES, generateurTemoinTechnique as temoin, reponseBruteCorrecte, VARIANTE_TEMOIN } from "../src/generateurs/_temoinTechnique";
 
 const RACINE = join(__dirname, "..");
 const CAPTURES = process.env.CAPTURES_DIR ?? join(RACINE, "captures-chromium");
@@ -888,6 +888,40 @@ async function main(): Promise<void> {
       // Réponse juste -> relecture : le graphique reste sous l'énoncé, SANS annotations.
       const ligne = (await page.evaluate(`1`)) as number;
       void ligne;
+      await ctx.close();
+    }
+  }
+
+  // ── Chaîne de transformations (RAPPORT §56) : docs/reference/chaine-transformations.html, à 390 ET 1280 px ──
+  {
+    const refCh = readFileSync(join(RACINE, "docs/reference/chaine-transformations.html"), "utf8");
+    for (const largeur of [390, 1280]) {
+      const e = `chaîne ${largeur} px`;
+      const ctxR = await navigateur.newContext({ viewport: { width: largeur, height: 1000 } });
+      const pR = await ctxR.newPage();
+      await pR.route("**/fonts.googleapis.com/**", (r: any) => r.fulfill({ contentType: "text/css", body: "" }));
+      await pR.setContent(refCh);
+      const REF: Record<string, Element | null> = {};
+      for (const ref of ["depart", "etape", "numero", "champ", "option", "option-retenue", "secondaire"]) REF[ref] = await mesurer(pR, `[data-ref="${ref}"]`);
+      await pR.screenshot({ path: join(CAPTURES, `fidelite-ref-chaine-${largeur}.png`), fullPage: true });
+      await ctxR.close();
+
+      const { page, ctx } = await ouvrir("graphe", [CHAMP_COURBE], ".moteur-chaine", largeur);
+      await page.locator(`${C} .moteur-chaine-etape .moteur-champ`).first().fill("(x-1)^2");
+      await page.locator(`${C} .moteur-chaine-etape`).first().locator('.moteur-choix:has(input[value="TH"])').click();
+      await flou(page);
+      await page.screenshot({ path: join(CAPTURES, `fidelite-app-chaine-${largeur}.png`), fullPage: true });
+      const BORD = ["backgroundColor", "borderTopColor", "borderTopWidth", "borderTopStyle", "borderTopLeftRadius", ...PADDING];
+      comparer(e, "expression de départ", REF["depart"]!, await app(page, ".moteur-chaine-depart"), [...BORD, "color"]);
+      comparer(e, "étape", REF["etape"]!, await app(page, ".moteur-chaine-etape"), [...BORD, "display", "flexDirection", "gap"]);
+      comparer(e, "numéro d'étape", REF["numero"]!, await app(page, ".moteur-chaine-numero"), ["color", "fontSize", "fontWeight", "letterSpacing", "textTransform"]);
+      comparer(e, "champ d'expression", REF["champ"]!, await app(page, ".moteur-chaine-etape .moteur-champ"), P_CHAMP);
+      comparer(e, "transformation non retenue", REF["option"]!, await app(page, ".moteur-chaine-choix .moteur-choix:not(:has(input:checked))"), P_OPTION);
+      comparer(e, "transformation retenue", REF["option-retenue"]!, await app(page, ".moteur-chaine-choix .moteur-choix:has(input:checked)"), P_OPTION);
+      comparer(e, "bouton secondaire", REF["secondaire"]!, await app(page, ".moteur-chaine-actions .moteur-bouton-secondaire"), P_SECONDAIRE);
+      const geo = (await page.evaluate(`(() => { const c = document.querySelector("${C} .moteur-chaine"); const r = c.getBoundingClientRect(); const carte = c.closest(".moteur-ecran-courant").getBoundingClientRect(); const chips = [...c.querySelectorAll(".moteur-chaine-choix .moteur-choix")].map((x) => x.getBoundingClientRect()); return { dedans: r.left >= carte.left - 0.5 && r.right <= carte.right + 0.5, debord: document.documentElement.scrollWidth > window.innerWidth, tactile: Math.min(...chips.map((k) => k.height)) }; })()`)) as { dedans: boolean; debord: boolean; tactile: number };
+      verifier(geo.dedans && !geo.debord, `${e} : la chaîne tient dans la carte, sans défilement horizontal`);
+      verifier(geo.tactile >= 44, `${e} : cibles tactiles >= 44 px (${geo.tactile})`);
       await ctx.close();
     }
   }
