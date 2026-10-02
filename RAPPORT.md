@@ -1864,3 +1864,42 @@ Décisions du propriétaire appliquées ici : **option 4** pour l'écran 2 (jama
 - **Vues professeur agrégées par `variante_id`** (rappel §55) : deux lignes gen8 de configurations différentes y sont fusionnées.
 - **Chapitre et numéro** : gen8 est le n° 67 du JSON, rangé chapitre 1 ; c'est un choix de placement (le prompt n'en dit rien), facile à déplacer (`prof.html:1985`).
 - **Migration** : celles de §55 / §56 (`composition_id`, `configuration`, `aides_utilisees.palier`) sont requises AVANT le déploiement ; aucune nouvelle ici.
+
+## §58 : retours du propriétaire sur gen8 — question sous le graphique, aperçu LaTeX de la saisie, étape de chaîne refaite (menu, valeur, « ? »)
+
+Demande du propriétaire (quatre points) : (1) la question spécifique de l'écran 1 sous le graphique ; (2) au-dessus du champ libre, un aperçu LaTeX dynamique « f(x) = » suivi de ce que l'élève tape ; (3) la question de l'écran 2 sous le graphique, et la légende des abréviations seulement derrière un « ? » ; (4) dans chaque étape, « ? » à droite de « Étape k », puis « f_k(x) » + liste déroulante des cinq transformations + « : » + champ libre pour la VALEUR de TH / TV / EV / CV (rien après SOX), puis « f_k(x) = » + champ libre. Le propriétaire avait remarqué que l'élève ne pouvait pas déclarer la valeur d'une translation ou d'un facteur : c'est le trou comblé par le point 4. **Aucune migration** (ni `schema.sql`, ni `cumulatif.sql` : rien en base ne change).
+
+### A. Contrat (`lib/contratGenerateur.ts`)
+- `EcranCommun.question?` (:99) — texte d'auteur, **sous la figure** ; la consigne reste au-dessus. Absente : comportement inchangé.
+- `EcranChampExpression.apercu?: { libelle }` (:138) — aperçu LaTeX dynamique au-dessus du champ.
+- `EcranChaineTransformations.choix[].valeur?: { placeholder }` (:287) — la transformation prend une valeur ; `legende?` (:289) — dévoilée par le « ? » de chaque étape, jamais affichée d'office.
+- **Format de réponse de la chaîne** (`lib/reponsesEcran.ts:201`) : `{"etapes":[{"expression","transformation","valeur"}…]}` — TROIS clés exactes. `valeur` (≤ 40 caractères, `VALEUR_ETAPE_LONGUEUR_MAX`, :173) est exigée non vide pour une transformation à valeur et **doit être `""`** pour SOX (sinon illisible) : la réponse reste canonique, donc re-validable sans changement (retour en arrière).
+
+### B. Vérification de la valeur déclarée (`src/generateurs/fxDepuisGraphe/`)
+- `parametreEtape` (`chaine.ts:95`) : la règle locale d'une étape renvoie aussi son **paramètre** — TH `h` de `E_i(x) = E_{i-1}(x − h)` (positif = vers la droite), TV la constante ajoutée (positive = vers le haut), EV | CV le facteur `m` (jamais `1/m`), SOX `−1` (jamais déclaré). `etapeLocalementValide` n'est plus que `parametreEtape(…) !== null`.
+- `verifierChaine` (`verification.ts`) : la valeur est lue par `lirePolynome` (`lireValeurDeclaree`, :15 — un NOMBRE rationnel : `3`, `-2`, `1/2`, `0,5`) ; illisible ou non constante → `parse_error` « Étape i : la valeur doit être un nombre… » (aucune tentative consommée, message identique pour tous les exercices : aucune valeur attendue n'y figure). Étape **valide** = règle vraie ET valeur exacte (`valeurJuste`, :84-85) ET transformation admise.
+- **Bug trouvé par le test et corrigé avant livraison** : une valeur fausse sur une transformation admise déclenchait `TRANSFORMATION_HORS_SUJET`. Le code ne vient plus que de « règle vraie mais transformation NON admise » (`verification.ts:88`) ; une valeur fausse est une étape fausse sans code.
+- Solution écrite (`solutions.ts`) : cite la valeur de chaque étape sauf SOX.
+- `ecrans.ts` : `question` écran 1 (:81) et écran 2 (:103) séparées de la consigne globale ; `apercu: { libelle: "f(x) =" }` (:82) ; `legende` (:104) déplacée hors de la consigne ; `CHOIX_CHAINE` (:33) avec le placeholder de convention de signe pour TH / TV / EV / CV.
+
+### C. Client
+- **`public/moteur/apercuLatex.js`** (nouveau, `versLatexApercu` :91) : convertit la saisie en LaTeX **construit** depuis un jeu fermé de jetons (nombres, lettres, `+ - * / ^ = ( )`, `² ³ ⁴`). Tolérant (on tape caractère par caractère : parenthèse non fermée → `\right.`, exposant manquant → groupe vide), **jamais d'exception**, jamais une commande (`$ \ { } % # & _ ~ ' " @` échappés). Deux défauts trouvés par le test avant livraison : deux nombres séparés par une espace étaient fusionnés (`2 3` → `23`), et un exposant empilé ou l'apostrophe (« prime » de KaTeX) produisait un double exposant que KaTeX refuse (`avecExposant`, :135).
+- `moteur.js:196,209` : la question est rendue après la figure (écran courant ET relecture) ; `champExpression.js:36,43` : l'aperçu (`rendreMath`, `aria-hidden`) est recalculé à chaque frappe, jamais un verdict.
+- `chaineTransformations.js` (réécrit) : en-tête « Étape k » + pastille « ? » (:105, `aria-expanded`/`aria-controls`) ; `<select>` natif avec invite « Choisir… » désactivée ; champ de valeur masqué avec son « : » quand la transformation n'en prend pas (`prendUneValeur`, :160) ; `lireReponse` (:234) renvoie `null` tant qu'une étape est incomplète. Parties fausses `etape:<i>` : la fonction obtenue, la transformation et la valeur.
+- CSS (`ecrans.css`, **tokens seuls**, vérifié par `test-design-system`) : `.moteur-question` (:413, même règle que la consigne), `.moteur-apercu-expression` (:431), `.moteur-chaine-aide` (:1658), `.moteur-select` (:1722).
+
+### D. Références de design (écrites AVANT le code, comparées au style CALCULÉ)
+`docs/reference/ecran-expression-graphe.html` (nouveau) et `docs/reference/chaine-transformations.html` (refait). `scripts/chromium-fidelite-design.ts:895` (écran d'expression) et `:927` (chaîne, y compris SOX et la légende ouverte), à 390 et 1280 px.
+
+### E. Témoin technique
+L'écran `courbe` du profil `graphe` porte une `question` et un `apercu` (`_temoinTechnique/index.ts:662`), la chaîne sa `legende` et les valeurs : la Section A (137 assertions) et le profil `etendu` ne bougent pas.
+
+### F. Vérifications
+`scripts/test-apercu-latex.ts` (31 445 vérifications : chaque PRÉFIXE de 21 saisies modèles compile sous KaTeX `strict`, 6 000 chaînes hostiles, commandes en liste fermée) ; `test-fx-ecran2.ts` §5b (`:288`, valeur : signe, facteur inversé, écritures équivalentes, illisible, SOX avec valeur, hors sujet + valeur fausse) ; `test-chaine-transformations.ts` (décodeur à trois clés) ; `test-route-fx.ts` ; Chromium (`scenarioGen8Eleve` : ordre consigne / graphique / question / aperçu / champ, aperçu suivant la frappe, `$` et commande LaTeX tapés restent inertes ; `scenarioChaineTransformations` : « ? » à droite du numéro, légende cachée puis dévoilée sous l'en-tête, SOX sans champ, valeur après le menu).
+
+### G. Décisions par défaut à confirmer (le prompt ne les tranche pas)
+1. **Convention de la valeur** : TH `h` avec `f(x − h)` (positif = droite), TV signée (positif = haut), EV | CV = le facteur. Un élève qui écrit « 3 vers la gauche » ou `-3` pour `(x−3)²` a une étape fausse. Elle est rappelée par le placeholder, pas par la légende (dont le texte est celui du propriétaire, inchangé).
+2. **Ligne 1** lue comme `f_k(x) [menu] : [valeur]`.
+3. **« ? » par étape = LE « ? »** demandé ; le « ? » global de l'écran (point 3 du message) **n'est pas construit** : l'emplacement n'est pas encore précisé.
+4. Pas d'aperçu LaTeX sur les champs `f_k(x) =` de la chaîne (non demandé). Parties fausses : toujours l'étape entière.
+5. `<select>` natif (le menu s'ouvre avec le sélecteur du système, accessible au clavier) plutôt qu'un menu dessiné.
