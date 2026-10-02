@@ -2387,6 +2387,63 @@ async function scenarioConfigurationLigne(navigateur: any, base: string, largeur
   await contexte.close();
 }
 
+// ══ gen8 « f(x) à partir du graphe » (RAPPORT §57) : câblage prof.html (CLAUDE.md « discipline de câblage »), puis parcours élève ══
+
+/**
+ * Câblage RÉEL de gen8 dans `prof.html` (aucune interception : vrai JSON, vraie table `CORRESPONDANCE_JSON_VERS_PILOTE`, vrai `GET /api/catalogue-generateurs`) : l'entrée « 67. f(x) à partir du
+ * graphe » est dans « La fonction du second degré », sa variante est un BLOC de lignes configurables (descripteur servi par le registre) dont le champ « nombre d'exercices » n'est PAS
+ * `disabled`, une tâche à DEUX lignes de configurations différentes est créée par l'interface, puis assignée par la route réelle.
+ */
+async function scenarioGen8Prof(navigateur: any, base: string, largeur: number) {
+  const l = `${largeur} gen8 prof`;
+  const s: Scenario = creerScenario();
+  installerBase(s.base);
+  const { page, contexte, journal } = await preparerPage(navigateur, base, largeur, largeur < 600 ? 800 : 900, `prof:${s.profId}`, "p@x");
+  await page.goto(base + "/prof.html");
+  await page.waitForSelector('button[data-onglet="taches"]:visible');
+  await page.locator('button[data-onglet="taches"]').click();
+  await page.locator("#bouton-accordeon-creer").click();
+  await page.waitForSelector("#composition-dynamique input.stepper-valeur", { state: "attached" });
+  await page.evaluate("document.querySelectorAll('#composition-dynamique details').forEach((d) => { d.open = true; })");
+  const bloc = '#composition-dynamique [data-config-variante-id="fx_depuis_graphe"]';
+  verifier((await page.locator(bloc).count()) === 1, `${l} : la variante fx_depuis_graphe est un bloc de lignes configurables (entrée JSON + correspondance + descripteur serveur)`);
+  const arbre = (await page.evaluate(`(() => { const d = document.querySelector('${bloc}').closest("details.arbre-generateur"); const chapitre = d.parentElement.closest("details"); return { generateur: d.querySelector("summary").textContent.trim(), chapitre: chapitre ? chapitre.querySelector("summary").textContent.trim() : null }; })()`)) as { generateur: string; chapitre: string | null };
+  verifier(arbre.generateur === "67. f(x) à partir du graphe" && /second degré/.test(arbre.chapitre ?? ""), `${l} : rangé sous « La fonction du second degré » (${JSON.stringify(arbre)})`);
+  verifier((await page.locator(`${bloc} .ligne-config`).count()) === 0 && (await page.locator(`${bloc} .ajouter-ligne-config`).isEnabled()), `${l} : aucune ligne au départ ; « Ajouter une ligne » actif (équivalent du champ non disabled)`);
+  await page.locator("#nom-tache").fill("f(x) depuis le graphe");
+  await page.locator(`${bloc} .ajouter-ligne-config`).click();
+  await page.locator(`${bloc} .ajouter-ligne-config`).click();
+  const lignes = page.locator(`${bloc} .ligne-config`);
+  const libellesCases: string[] = await lignes.nth(0).locator(".case-config").allInnerTexts();
+  verifier(libellesCases.map((t) => t.trim()).join("|") === "Translation horizontale (TH)|Translation verticale (TV)|Étirement vertical (EV)|Compression verticale (CV)|Symétrie d'axe Ox (SOX)", `${l} : les cinq cases, dans l'ordre du descripteur (${JSON.stringify(libellesCases)})`);
+  verifier((await page.locator(`${bloc} input[data-case-id]:checked`).count()) === 0 && (await page.locator(`${bloc} input[data-variante-id="fx_depuis_graphe"]:disabled`).count()) === 0 && (await lignes.nth(0).locator("input[data-variante-id]").isEnabled()), `${l} : cases vides, champs « nombre d'exercices » NON désactivés`);
+  verifier(await page.locator("#btn-creer-tache").isDisabled(), `${l} : « Créer » désactivé tant que les lignes n'ont aucune case`);
+  const cocher = async (ligne: number, id: string) => lignes.nth(ligne).locator(`.case-config:has(input[data-case-id="${id}"])`).click();
+  await cocher(0, "TH");
+  await cocher(0, "EV");
+  await cocher(0, "CV"); // exclusif avec EV : décoche EV
+  verifier(!(await lignes.nth(0).locator('input[data-case-id="EV"]').isChecked()) && (await lignes.nth(0).locator('input[data-case-id="CV"]').isChecked()), `${l} : EV et CV s'excluent (cocher CV décoche EV)`);
+  await cocher(0, "EV");
+  await cocher(1, "TV");
+  await cocher(1, "SOX");
+  await lignes.nth(1).locator("input[data-variante-id]").fill("2");
+  await page.screenshot({ path: join(CAPTURES, `${largeur}-gen8-prof-formulaire.png`), fullPage: false });
+  verifier(!(await page.evaluate("document.documentElement.scrollWidth > window.innerWidth")), `${l} : pas de défilement horizontal`);
+  verifier(await page.locator("#btn-creer-tache").isEnabled(), `${l} : « Créer » actif`);
+  await page.locator("#btn-creer-tache").click();
+  await page.waitForFunction(`document.getElementById("nom-tache").value === ""`);
+  const composition = s.base.table("taches_composition");
+  verifier(composition.length === 2 && composition.every((c) => c.variante_id === "fx_depuis_graphe" && c.generateur_id === "gen8"), `${l} : deux lignes de composition gen8 créées par l'interface`);
+  verifier(JSON.stringify(composition.map((c) => c.configuration)) === '[{"actives":["TH","EV"]},{"actives":["TV","SOX"]}]' && JSON.stringify(composition.map((c) => c.nombre_exercices)) === "[1,2]", `${l} : configurations canoniques et nombres stockés (${JSON.stringify(composition.map((c) => [c.configuration, c.nombre_exercices]))})`);
+  const tacheId = s.base.table("taches").find((t) => t.nom === "f(x) depuis le graphe")!.id as string;
+  const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tacheId, eleve_ids: ["eleve-1"] } });
+  verifier(a.statut === 201 && a.corps.nombre_exercices_generes === 3, `${l} : assignation de la tâche créée (${a.statut} ${JSON.stringify(a.corps)})`);
+  const exercices = s.base.table("exercices_assignes").filter((x) => x.tache_id === tacheId);
+  verifier(exercices.length === 3 && exercices.filter((x) => JSON.stringify(x.configuration) === '{"actives":["TH","EV"]}').length === 1 && exercices.filter((x) => JSON.stringify(x.configuration) === '{"actives":["TV","SOX"]}').length === 2 && exercices.every((x) => typeof x.composition_id === "string"), `${l} : exercices assignés : configuration figée et ligne d'origine`);
+  verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+  await contexte.close();
+}
+
 /** Le professeur COMPOSE une tâche gen7 dans prof.html (champs actifs, création réelle), puis l'assigne ; l'élève la reçoit. */
 async function scenarioGen7Prof(navigateur: any, base: string, largeur: number) {
   const l = `${largeur}`;
@@ -2765,6 +2822,8 @@ async function main() {
       controlerReponsesHttp(`${largeur} gen7 prof`);
       await scenarioConfigurationLigne(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} config ligne`);
+      await scenarioGen8Prof(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} gen8 prof`);
       await scenarioFigureAidePaliers(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} figure aide paliers`);
       await scenarioChaineTransformations(navigateur, url, largeur);

@@ -1497,6 +1497,12 @@
         { index: 8, variante_id: "af_delta_racines_rationnelles" },
         { index: 9, variante_id: "af_delta_racines_irrationnelles" },
       ],
+      /**
+       * gen8 « f(x) à partir du graphe » (RAPPORT §57) — 4e/numero 67 : UNE variante (`fx_depuis_graphe`), dont les transformations actives (TH, TV, EV | CV, SOX) se cochent PAR LIGNE de
+       * composition (descripteur `configuration` servi par `GET /api/catalogue-generateurs` → `construireBlocConfigurable`). `variantes` est un tableau d'un élément, jamais "aucune" : une entrée
+       * « aucune » ne passe pas par `construireLigneVariante`, donc n'aurait pas de bloc de cases.
+       */
+      "4e:67": [{ index: 0, variante_id: "fx_depuis_graphe" }],
     };
 
     /** Étape 1.1 : `variantes` peut être la chaîne littérale "aucune" — jamais itérée comme un tableau. */
@@ -1976,7 +1982,7 @@
       8: "Géométrie dans l'espace",
     };
     const NUMEROS_PAR_CHAPITRE_4E = {
-      1: [7, 8, 9, 55, 57, 60],
+      1: [7, 8, 9, 67, 55, 57, 60],
       2: [1, 2, 3, 4, 5, 6, 61],
       3: [10, 11, 12, 13, 56, 62],
       4: [30, 31, 32, 33, 34, 35, 36, 37, 38, 59],

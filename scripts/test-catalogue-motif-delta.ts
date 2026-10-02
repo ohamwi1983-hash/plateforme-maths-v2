@@ -29,7 +29,7 @@ const IDS_ANCIENS = ["af_mise_en_evidence", "af_binome_conjugue", "af_produit_re
 // ── 1. Catalogue ↔ familles ↔ JSON ──
 const gen7 = CATALOGUE_GENERATEURS.filter((e) => e.generateur_id === "gen7");
 verifier(gen7.length === 10 && gen7.map((e) => e.variante_id).join() === FAMILLES.map((f) => f.id).join(), "catalogue : dix entrées gen7, mêmes identifiants et même ordre que les familles");
-verifier(CATALOGUE_GENERATEURS.length === 10, `catalogue : ${CATALOGUE_GENERATEURS.length} entrées au total (seul gen7 y figure)`);
+verifier(CATALOGUE_GENERATEURS.length === 11 && CATALOGUE_GENERATEURS.filter((e) => e.generateur_id !== "gen7").map((e) => e.variante_id).join() === "fx_depuis_graphe", `catalogue : ${CATALOGUE_GENERATEURS.length} entrées au total (gen7 ×10 et gen8 « fx_depuis_graphe »)`);
 verifier(new Set(gen7.map((e) => e.label)).size === 10, "catalogue : dix libellés distincts");
 const json = JSON.parse(fs.readFileSync(path.join(RACINE, "public/catalogue-generateurs-complet.json"), "utf8")) as { "4e": { numero: number; chapitre: number; libelle: string; variantes: { axe: string; label: string; exemple: string }[] }[] };
 const entree7 = json["4e"].find((g) => g.numero === 7 && g.chapitre === 1);
