@@ -265,3 +265,12 @@ Branche `gen8-fx-depuis-graphe`, empilée sur #37 (qui contient les contrats `so
 - La borne « valeur ≤ 5 » de l'EV fractionnaire est **mon hypothèse** (le prompt ne borne pas le numérateur) : elle ne sert qu'à chiffrer l'ordre de grandeur.
 - Le modèle de menace de la figure est pédagogique ; aucune garantie anti-triche n'est apportée ni visée.
 - Les écrans de gen8 au-delà de ce qui est décrit dans le prompt ne sont pas anticipés.
+
+---
+
+## Mise à jour après le « Go » (RAPPORT §57) : ce qui a remplacé les recommandations ci-dessus
+
+- **Section 5 et décisions D6 / D9 (cascade, repli)** : remplacées par l'**option 4** du propriétaire. L'écran 2 montre TOUJOURS la fonction confirmée par l'élève (jamais de substitution) ; le jugement admet les transformations de la ligne ∪ celles que cette fonction exige (`transformationsAdmises`), avec la clause `x²` ; le repli (second tirage ≠ vraie fonction) ne sert que sans réponse. La proposition « atteignabilité + substitut par régime » (section 6, point 2) n'a PAS été retenue.
+- **Section 6, point 1 (`fractionCorrecte`)** : `(valides + arrivée) / (soumises + 1)` est devenu `(min(valides, k*) + arrivée) / (soumises + 1)`, `k*` = longueur de la plus courte chaîne vers la fonction visée : le remplissage d'étapes valides ne rapporte plus.
+- **Poids** : INVERSÉS (3 pour l'écran 1, 2 pour l'écran 2), contrairement au prompt (2 / 3), pour supprimer tout intérêt à se tromper exprès à l'écran 1.
+- **Section 7** : le découpage réel est C1 (configuration par ligne), C2 (lecteur), C3 (figure et paliers), C4 (chaîne), C5 (écran 1), C6a (écran 2, non enregistré), C6b (câblage), C7 (parcours Chromium, documentation).

@@ -33,6 +33,12 @@ import { rangeesTableauMD } from "../src/generateurs/analyseFonctionMotifDelta/t
 import { projeterMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/cascade";
 import { champsMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/ecrans";
 import { fonctionEffective, fonctionVraie, type ExerciceMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/types";
+import { genererExerciceFx } from "../src/generateurs/fxDepuisGraphe/generation";
+import { chaineCanonique, transformationsAdmises, POLYNOME_DEPART } from "../src/generateurs/fxDepuisGraphe/chaine";
+import { latexFonction } from "../src/generateurs/fxDepuisGraphe/formatage";
+import { parametres as parametresFx, polynomeDe as polynomeDeFx, type Parametres as ParametresFx, type Transformation as TransformationFx } from "../src/generateurs/fxDepuisGraphe/types";
+import { constante as constanteFx, plusP as plusPFx } from "../src/generateurs/fxDepuisGraphe/polynome";
+import { rat as ratFx, signeR as signeRFx, type Rat as RatFx } from "../src/generateurs/analyseFonctionMotifDelta/exact/rationnel";
 
 const RACINE = join(__dirname, "..");
 const CAPTURES = process.env.CAPTURES_DIR ?? join(RACINE, "captures-chromium");
@@ -2444,6 +2450,225 @@ async function scenarioGen8Prof(navigateur: any, base: string, largeur: number) 
   await contexte.close();
 }
 
+// ── gen8 : parcours ÉLÈVE dans le navigateur (vrai routeur, vrai registre) ──
+
+/** Écriture qu'un élève taperait pour `a(x − p)² + q` (relisible par `lirePolynome`) : `2(x-3)^2+1`, `(3/2)x^2-4`, `-(x+1)^2`. */
+function ecritureFx(g: ParametresFx): string {
+  const fraction = (r: RatFx): string => (r.d === 1 ? `${Math.abs(r.n)}` : `${Math.abs(r.n)}/${r.d}`);
+  const carre = signeRFx(g.p) === 0 ? "x^2" : `(x${signeRFx(g.p) > 0 ? "-" : "+"}${fraction(g.p)})^2`;
+  const unite = Math.abs(g.a.n) === 1 && g.a.d === 1;
+  const coef = unite ? "" : g.a.d === 1 ? `${Math.abs(g.a.n)}` : `(${fraction(g.a)})*`;
+  const corps = `${signeRFx(g.a) < 0 ? "-" : ""}${coef}${coef !== "" && g.a.d === 1 ? "*" : ""}${carre}`;
+  return signeRFx(g.q) === 0 ? corps : `${corps}${signeRFx(g.q) > 0 ? "+" : "-"}${fraction(g.q)}`;
+}
+
+/** Tâche gen8 d'UNE ligne (configuration donnée), assignée à l'élève avec la graine voulue ; renvoie l'exercice brut. */
+async function assignerFx(s: Scenario, actives: TransformationFx[], graine: number, options: { feedback?: boolean; visible?: boolean; aide?: boolean; tentatives?: number; nombre?: number } = {}) {
+  imposerProfilAssignation("aleatoire");
+  const cree = await appeler("taches", "POST", {
+    jeton: `prof:${s.profId}`,
+    corps: { nom: `gen8 ${actives.join("+")}`, feedback_immediat: options.feedback ?? true, reponse_visible: options.visible ?? true, tentatives_supplementaires: options.tentatives ?? 0, aide_activee: options.aide ?? false, composition: [{ variante_id: "fx_depuis_graphe", nombre_exercices: options.nombre ?? 1, configuration: { actives } }] },
+  });
+  verifier(cree.statut === 201, `gen8 ${actives.join("+")} : création de la tâche ${cree.statut} ${JSON.stringify(cree.corps)}`);
+  const origine = Math.random;
+  Math.random = () => graine / 2 ** 32;
+  try {
+    const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: cree.corps.id, eleve_ids: ["eleve-1"] } });
+    verifier(a.statut === 201, `gen8 ${actives.join("+")} : assignation ${a.statut} ${JSON.stringify(a.corps)}`);
+  } finally {
+    Math.random = origine;
+  }
+  const ligne = s.base.table("exercices_assignes").find((x) => x.tache_id === cree.corps.id)!;
+  const brut = genererExerciceFx(Number(ligne.graine), { actives });
+  return { brut, f: parametresFx(brut), tacheId: cree.corps.id as string, ligne };
+}
+
+/** Écran 1 : tape l'expression et valide (sans passer à la suite). */
+async function ecrireExpressionFx(page: any, texte: string): Promise<void> {
+  const courant = page.locator(".moteur-ecran-courant");
+  await courant.locator(".moteur-champ").fill(texte);
+  await courant.getByRole("button", { name: "Valider", exact: true }).click();
+}
+
+/** Écran 2 : compose la chaîne (étapes `[expression, transformation]`) et valide. */
+async function composerChaineFx(page: any, etapes: { expression: string; t: string }[]): Promise<void> {
+  const courant = page.locator(".moteur-ecran-courant");
+  await page.waitForSelector(".moteur-chaine");
+  for (let k = 1; k < etapes.length; k++) await courant.getByRole("button", { name: "Ajouter une étape" }).click();
+  const lignes = courant.locator(".moteur-chaine-etape");
+  for (let k = 0; k < etapes.length; k++) {
+    await lignes.nth(k).locator(".moteur-champ").fill(etapes[k]!.expression);
+    await lignes.nth(k).locator(`.moteur-choix:has(input[value="${etapes[k]!.t}"])`).click();
+  }
+  await courant.getByRole("button", { name: "Valider", exact: true }).click();
+}
+
+/** La chaîne canonique (étapes écrites comme un élève) qui atteint `g` avec les transformations ADMISES de `actives` pour cet élève. */
+const chaineEleveFx = (g: ParametresFx, actives: TransformationFx[]): { expression: string; t: string }[] =>
+  (chaineCanonique(g, transformationsAdmises(actives, g)) ?? []).map((e) => ({ expression: ecritureFx(e.apres), t: e.transformation }));
+
+/**
+ * Parcours gen8 complet dans le navigateur : (1) CHAQUE transformation seule puis plusieurs combinées, de la figure à la relecture, avec le score aux DEUX écrans (3 + 2 points) ;
+ * (2) une étape HORS SUJET, y compris deux étapes qui s'annulent numériquement ; (3) les DEUX paliers d'aide sur le graphique ; (4) l'option 4 : une réponse fausse à l'écran 1 donne un
+ * écran 2 sur SA fonction (sous correction coupée, rien n'est révélé avant la fin ; solution montrée : la vraie fonction).
+ */
+async function scenarioGen8Eleve(navigateur: any, base: string, largeur: number) {
+  const CONFIGS: { actives: TransformationFx[]; nom: string }[] = [
+    { actives: ["TH"], nom: "TH seule" },
+    { actives: ["TV"], nom: "TV seule" },
+    { actives: ["EV"], nom: "EV seule" },
+    { actives: ["CV"], nom: "CV seule" },
+    { actives: ["SOX"], nom: "SOX seule" },
+    { actives: ["TH", "TV", "EV", "SOX"], nom: "TH+TV+EV+SOX" },
+    { actives: ["TV", "CV", "SOX"], nom: "TV+CV+SOX" },
+  ];
+  // ── 1. Chaque transformation seule, puis combinées : parcours juste, score aux deux écrans ──
+  for (const cas of CONFIGS) {
+    const l = `${largeur} gen8 ${cas.nom}`;
+    const s: Scenario = creerScenario();
+    installerBase(s.base);
+    const { brut, f } = await assignerFx(s, cas.actives, 31337, { visible: true });
+    const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+    const courant = page.locator(".moteur-ecran-courant");
+    await page.waitForSelector(".moteur-ecran-courant .figure-svg");
+    verifier((await page.locator(".moteur-ecran-courant .figure-annotations > *").count()) === 0, `${l} : le graphique est servi SANS annotation`);
+    const consigne1 = await lireConsigneGen7(page);
+    verifier(consigne1.startsWith("Détermine l'expression analytique de la parabole ci-dessous.") && /forme canonique/.test(consigne1), `${l} : consigne de l'écran 1`);
+    await ecrireExpressionFx(page, ecritureFx(f));
+    await page.waitForSelector(".moteur-statut-correct");
+    await page.getByRole("button", { name: /Question suivante/ }).click();
+    await page.waitForSelector(".moteur-chaine");
+    const consigne2 = await lireConsigneGen7(page);
+    verifier(consigne2.includes(`$f(x) = ${latexFonction(f)}$`) && consigne2.startsWith("Détermine l'expression analytique de la parabole ci-dessous."), `${l} : l'écran 2 rappelle la consigne globale et reprend la fonction (« ${consigne2.slice(0, 120)} »)`);
+    verifier((await courant.locator(".moteur-chaine-choix").first().locator(".moteur-choix").count()) === 5 && (await courant.locator(".moteur-aide button").count()) === 0, `${l} : cinq transformations au menu quelle que soit la ligne ; aucun bouton d'aide`);
+    await composerChaineFx(page, chaineEleveFx(f, cas.actives));
+    await page.waitForSelector(".moteur-statut-correct");
+    verifier((await page.locator(".moteur-rappel-score").allInnerTexts()).join("|") === "3 / 3 pts", `${l} : score de l'écran 1 dans le rappel (${JSON.stringify(await page.locator(".moteur-rappel-score").allInnerTexts())})`);
+    await page.getByRole("button", { name: /Voir la fin/ }).click();
+    await page.waitForSelector(".moteur-fin");
+    const rangees: string[] = await page.locator(".moteur-fin .moteur-recap-table tbody tr").allInnerTexts();
+    verifier(rangees.length === 3 && /^Expression canonique\s+3 \/ 3 pts$/.test(rangees[0]!) && /^Chaîne de transformations\s+2 \/ 2 pts$/.test(rangees[1]!) && /^Total\s+5 \/ 5 pts$/.test(rangees[2]!), `${l} : score aux DEUX écrans et total 5 / 5 (${JSON.stringify(rangees)})`);
+    verifier(s.base.table("reponses").every((r) => r.statut === "correct") && s.base.table("reponses").length === 2, `${l} : deux réponses justes en base`);
+    await page.screenshot({ path: join(CAPTURES, `${largeur}-gen8-${cas.nom.replace(/[^A-Za-z0-9]+/g, "-")}.png`), fullPage: true });
+    verifier(!(await page.evaluate("document.documentElement.scrollWidth > window.innerWidth")), `${l} : pas de défilement horizontal`);
+    verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+    void brut;
+    await contexte.close();
+  }
+
+  // ── 2. Étape HORS SUJET (TH seule ; TV inactive) : +3 puis −3 qui s'annulent, la chaîne arrive pourtant à f ──
+  {
+    const l = `${largeur} gen8 hors sujet`;
+    const s: Scenario = creerScenario();
+    installerBase(s.base);
+    const { f } = await assignerFx(s, ["TH"], 4242, { visible: true });
+    const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+    await ecrireExpressionFx(page, ecritureFx(f));
+    await page.waitForSelector(".moteur-statut-correct");
+    await page.getByRole("button", { name: /Question suivante/ }).click();
+    const canonique = chaineEleveFx(f, ["TH"]);
+    const paire = [{ expression: "x^2+3", t: "TV" }, { expression: "x^2", t: "TV" }];
+    await composerChaineFx(page, [...paire, ...canonique]);
+    await page.waitForSelector(".moteur-statut-not_equivalent");
+    verifier((await page.locator(".moteur-ecran-courant .moteur-piece-fausse, .moteur-ecran-courant input.moteur-partie-fausse").count()) >= 2, `${l} : les deux étapes hors sujet sont surlignées alors que la chaîne arrive à f`);
+    const fausses = await page.evaluate(`[...document.querySelectorAll(".moteur-ecran-courant .moteur-chaine-etape")].map((e) => !!e.querySelector(".moteur-partie-fausse"))`);
+    verifier(JSON.stringify(fausses) === JSON.stringify([true, true, false]), `${l} : étapes 1 et 2 fausses, l'étape 3 (TH, active) n'est pas marquée (${JSON.stringify(fausses)})`);
+    await page.screenshot({ path: join(CAPTURES, `${largeur}-gen8-hors-sujet.png`), fullPage: true });
+    const rep = s.base.table("reponses").find((r) => r.champ === "chaine")!;
+    verifier(rep.statut === "not_equivalent" && String(rep.bug_detecte ?? "").includes("TRANSFORMATION_HORS_SUJET"), `${l} : faux en base, avec le code TRANSFORMATION_HORS_SUJET`);
+    verifier(!(await page.locator("body").innerText()).includes("HORS_SUJET"), `${l} : le code n'est jamais affiché à l'élève`);
+    await page.getByRole("button", { name: /Voir la fin/ }).click();
+    await page.waitForSelector(".moteur-fin");
+    const rangees: string[] = await page.locator(".moteur-fin .moteur-recap-table tbody tr").allInnerTexts();
+    const m = /^Chaîne de transformations\s+([0-9,]+) \/ 2 pts$/.exec(rangees[1] ?? "");
+    verifier(m !== null && Number(m[1]!.replace(",", ".")) > 0 && Number(m[1]!.replace(",", ".")) < 2, `${l} : score partiel de l'écran 2, entre 0 et 2 (${JSON.stringify(rangees)})`);
+    verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+    await contexte.close();
+  }
+
+  // ── 3. Les DEUX paliers d'aide sur le graphique de gen8 ──
+  {
+    const l = `${largeur} gen8 aide`;
+    const s: Scenario = creerScenario();
+    installerBase(s.base);
+    const { brut, f } = await assignerFx(s, ["TH", "TV", "EV"], 2718, { visible: true, aide: true });
+    const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+    const courant = page.locator(".moteur-ecran-courant");
+    const SVG = ".moteur-ecran-courant .figure-svg";
+    await page.waitForSelector(SVG);
+    const demander = async () => {
+      const bouton = courant.locator(".moteur-aide button");
+      await bouton.click();
+      if ((await bouton.innerText()).startsWith("Confirmer")) await bouton.click();
+    };
+    await demander();
+    await page.waitForSelector(`${SVG} .figure-point-annote`, { state: "attached" });
+    const etiquettes1: string[] = await page.locator(`${SVG} .figure-annotations text`).allTextContents();
+    verifier((await page.locator(`${SVG} .figure-point-annote`).count()) === 1 && etiquettes1.some((t) => t.includes(`S(${f.p.n} ; ${f.q.n})`)), `${l} : palier 1 : le sommet S(${f.p.n} ; ${f.q.n}) est marqué sur le graphique (${JSON.stringify(etiquettes1)})`);
+    await courant.locator(".moteur-aide button").click();
+    await page.waitForSelector(`${SVG} .figure-vecteur`, { state: "attached" });
+    const etiquettes2: string[] = await page.locator(`${SVG} .figure-annotations text`).allTextContents();
+    verifier((await page.locator(`${SVG} .figure-point-annote`).count()) === 2 && (await page.locator(`${SVG} .figure-vecteur`).count()) === 2 && etiquettes2.some((t) => t.startsWith("A(")), `${l} : palier 2 : A et les deux vecteurs s'ajoutent à S (${JSON.stringify(etiquettes2)})`);
+    verifier(etiquettes2.some((t) => t.trim() === "1") || etiquettes2.length >= 4, `${l} : les longueurs des deux écarts sont affichées`);
+    verifier(s.base.table("aides_utilisees").length === 1 && s.base.table("aides_utilisees")[0]!.palier === 2, `${l} : un seul usage d'aide, palier 2`);
+    await page.screenshot({ path: join(CAPTURES, `${largeur}-gen8-aide-palier-2.png`), fullPage: true });
+    await ecrireExpressionFx(page, ecritureFx(f));
+    await page.waitForSelector(".moteur-statut-correct");
+    verifier(!(await page.evaluate("document.documentElement.scrollWidth > window.innerWidth")), `${l} : pas de défilement horizontal`);
+    verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+    void brut;
+    await contexte.close();
+  }
+
+  // ── 4. Option 4 : une réponse fausse (inatteignable avec TH seule : q ≠ 0) à l'écran 1 ──
+  for (const regime of [
+    { nom: "coupée", o: { feedback: false, visible: false }, montree: false },
+    { nom: "immédiate sans case", o: { feedback: true, visible: false }, montree: false },
+    { nom: "immédiate avec case", o: { feedback: true, visible: true }, montree: true },
+  ]) {
+    const l = `${largeur} gen8 option 4 (${regime.nom})`;
+    const s: Scenario = creerScenario();
+    installerBase(s.base);
+    const { f } = await assignerFx(s, ["TH"], 99, regime.o);
+    const gEleve: ParametresFx = { a: ratFx(1), p: f.p, q: ratFx(5) }; // même p, q = 5 que TH ne justifie pas
+    const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+    await ecrireExpressionFx(page, ecritureFx(gEleve));
+    if (regime.o.feedback) await page.waitForSelector(".moteur-statut-not_equivalent");
+    else await page.waitForSelector(".moteur-statut");
+    if (!regime.o.feedback) verifier((await page.locator(".moteur-statut-correct, .moteur-statut-not_equivalent, .moteur-solution").count()) === 0, `${l} : aucun verdict ni solution après l'écran 1`);
+    if (regime.montree) verifier((await page.locator(".moteur-solution").count()) >= 1, `${l} : la solution de l'écran 1 est montrée`);
+    else verifier((await page.locator(".moteur-solution").count()) === 0, `${l} : la solution de l'écran 1 n'est PAS montrée`);
+    await page.getByRole("button", { name: /Question suivante/ }).click();
+    await page.waitForSelector(".moteur-chaine");
+    const consigne = await lireConsigneGen7(page);
+    const affichee = regime.montree ? f : gEleve;
+    verifier(consigne.includes(`$f(x) = ${latexFonction(affichee)}$`), `${l} : l'énoncé de l'écran 2 affiche ${regime.montree ? "la VRAIE fonction (§45)" : "la fonction confirmée par l'élève"} (« ${consigne.slice(0, 150)} »)`);
+    if (!regime.montree) verifier(!consigne.includes(`$f(x) = ${latexFonction(f)}$`), `${l} : la vraie fonction ne fuit pas`);
+    await composerChaineFx(page, chaineEleveFx(affichee, ["TH"]));
+    if (regime.o.feedback) {
+      await page.waitForSelector(".moteur-statut-correct");
+      verifier((await page.locator(".moteur-ecran-courant .moteur-statut-correct").count()) === 1, `${l} : la chaîne vers la fonction affichée est JUSTE, même avec une transformation que la ligne n'active pas`);
+    } else {
+      await page.waitForSelector(".moteur-statut, .moteur-fin, .moteur-retour");
+    }
+    await page.getByRole("button", { name: /Voir la fin/ }).click();
+    await page.waitForSelector(".moteur-fin");
+    const rangees: string[] = await page.locator(".moteur-fin .moteur-recap-table tbody tr").allInnerTexts();
+    const sansScore = regime.o.feedback && !regime.o.visible; // « le score suit la solution » (§50) : verdict seul, jamais de score
+    if (sansScore) verifier(rangees.length === 0 && (await page.locator(".moteur-rappel-score, .moteur-rappel-total-points").count()) === 0, `${l} : sans « Afficher la réponse attendue », aucun score n'est montré (verdicts seuls)`);
+    else verifier(rangees.length === 3 && /^Expression canonique\s+0 \/ 3 pts$/.test(rangees[0]!) && /^Chaîne de transformations\s+2 \/ 2 pts$/.test(rangees[1]!) && /^Total\s+2 \/ 5 pts$/.test(rangees[2]!), `${l} : à la fin, écran 1 = 0 / 3 et écran 2 = 2 / 2 : se tromper exprès ne rapporte JAMAIS plus que de réussir (${JSON.stringify(rangees)})`);
+    const reps = s.base.table("reponses");
+    verifier(reps.find((r) => r.champ === "chaine")?.statut === "correct" && reps.find((r) => r.champ === "expression")?.statut === "not_equivalent", `${l} : en base, écran 1 faux et écran 2 juste`);
+    await page.screenshot({ path: join(CAPTURES, `${largeur}-gen8-option-4-${regime.nom.replace(/[^A-Za-z]+/g, "-")}.png`), fullPage: true });
+    verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+    await contexte.close();
+  }
+  void constanteFx;
+  void plusPFx;
+  void polynomeDeFx;
+  void POLYNOME_DEPART;
+}
+
 /** Le professeur COMPOSE une tâche gen7 dans prof.html (champs actifs, création réelle), puis l'assigne ; l'élève la reçoit. */
 async function scenarioGen7Prof(navigateur: any, base: string, largeur: number) {
   const l = `${largeur}`;
@@ -2797,6 +3022,14 @@ async function main() {
   try {
     await temoinControleHttp(navigateur, url);
     for (const largeur of [390, 1280]) {
+      // Confort de développement : `SCENARIOS_GEN8_SEULEMENT=1` ne joue que les scénarios gen8 (la suite complète prend plusieurs minutes). Jamais utilisé pour valider une livraison.
+      if (process.env.SCENARIOS_GEN8_SEULEMENT === "1") {
+        await scenarioGen8Prof(navigateur, url, largeur);
+        controlerReponsesHttp(`${largeur} gen8 prof`);
+        await scenarioGen8Eleve(navigateur, url, largeur);
+        controlerReponsesHttp(`${largeur} gen8 élève`);
+        continue;
+      }
       // Chaque scénario est suivi du contrôle de ses réponses HTTP >= 400 (attendus déclarés à part, s'il y en a).
       await scenarioEleve(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} élève`);
@@ -2824,6 +3057,8 @@ async function main() {
       controlerReponsesHttp(`${largeur} config ligne`);
       await scenarioGen8Prof(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} gen8 prof`);
+      await scenarioGen8Eleve(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} gen8 élève`);
       await scenarioFigureAidePaliers(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} figure aide paliers`);
       await scenarioChaineTransformations(navigateur, url, largeur);
