@@ -129,8 +129,12 @@ create table taches_composition (
   -- `chrono_mode='par_ecran'`. Pas de contrainte d'unicité sur `(tache_id, variante_id)` (aucune
   -- ajoutée par ce correctif — décision actée : si plusieurs lignes correspondantes existent avec
   -- des valeurs différentes, `resoudreChronoDureeSecondes` retient la première valeur non nulle
-  -- trouvée).
-  chrono_duree_secondes int
+  -- trouvée). RAPPORT §55 : cette règle ne subsiste que pour les exercices HISTORIQUES (sans `composition_id`) ; un exercice assigné depuis connaît sa ligne.
+  chrono_duree_secondes int,
+  -- Configuration PAR LIGNE de composition (RAPPORT §55, docs/AUDIT-config-par-ligne-composition.md) : forme canonique `{ "actives": [...] }`
+  -- (lib/configurationLigne.ts, seule autorité), `null` pour un générateur qui n'en déclare pas. Jamais complétée par un défaut : une ligne sans case
+  -- cochée est refusée par le serveur. Copiée sur chaque `exercices_assignes` à l'assignation (figée, jamais relue dynamiquement ici).
+  configuration jsonb
 );
 
 create table taches_assignations (
@@ -207,7 +211,11 @@ create table exercices_assignes (
   graine bigint,
   -- Retour en arrière (RAPPORT §37) : instant où l'élève a « rendu » cet exercice (étape explicite « Rendre cet
   -- exercice »). Nul = pas encore rendu. Une fois posé, l'exercice est verrouillé (plus aucune modification).
-  remis_le timestamptz
+  remis_le timestamptz,
+  -- RAPPORT §55 : identité de la LIGNE de composition d'origine (deux lignes de même variante restent distinctes : chrono, regroupement des résultats) et
+  -- configuration FIGÉE à l'assignation. Nullables : exercices historiques et générateurs sans configuration.
+  composition_id uuid references taches_composition(id) on delete set null,
+  configuration jsonb
 );
 
 create table reponses (
@@ -263,6 +271,9 @@ create table aides_utilisees (
   exercice_assigne_id uuid not null references exercices_assignes(id),
   champ text not null,
   horodatage timestamptz not null default now(),
+  -- RAPPORT §56 : palier le plus élevé atteint pour une aide PAR PALIERS (`annotations_figure`). Une aide sans paliers reste à 1. La pénalité reste binaire et unique
+  -- (`aideUtilisee`) : utiliser un palier ou deux coûte la même chose (décision D2 du propriétaire).
+  palier int not null default 1,
   primary key (exercice_assigne_id, champ)
 );
 

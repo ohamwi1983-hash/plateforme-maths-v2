@@ -27,6 +27,7 @@ import listeValeurs from "./listeValeurs.js";
 import tableauSignes from "./tableauSignes.js";
 import champsMultiples from "./champsMultiples.js";
 import intervalle from "./intervalle.js";
+import chaineTransformations from "./chaineTransformations.js";
 
 export const COMPOSANTS_ECRAN = Object.freeze({
   [champExpression.type]: champExpression,
@@ -35,4 +36,5 @@ export const COMPOSANTS_ECRAN = Object.freeze({
   [tableauSignes.type]: tableauSignes,
   [champsMultiples.type]: champsMultiples,
   [intervalle.type]: intervalle,
+  [chaineTransformations.type]: chaineTransformations,
 });

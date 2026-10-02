@@ -4,6 +4,8 @@ import { avecGestionErreurs } from "../avecGestionErreurs";
 import { profAuthentifie, supabaseAdmin } from "../supabaseAdmin";
 import { chercherGenerateur } from "../registreGenerateurs";
 import { estCorpsValide, validerComposition } from "../validationCorpsTaches";
+import { lignesDeComposition } from "../lignesComposition";
+import { genererPourLigne } from "../genererPourLigne";
 import { genererEmailSynthetique } from "../emailSynthetique";
 import { recupererToutesLesLignes } from "../supabasePagination";
 import { tirerGraine } from "../prng";
@@ -103,7 +105,7 @@ async function creerApercu(req: RequeteHttp, res: ReponseHttp): Promise<void> {
     res.status(400).json({ erreur: "Corps invalide : { nom: string, composition: [{ variante_id, nombre_exercices }] }" });
     return;
   }
-  const resultatComposition = validerComposition(req.body.composition);
+  const resultatComposition = validerComposition(req.body.composition, req.body.chrono_mode ?? "aucun");
   if (!resultatComposition.ok) {
     res.status(400).json({ erreur: resultatComposition.erreur });
     return;
@@ -153,22 +155,17 @@ async function creerApercu(req: RequeteHttp, res: ReponseHttp): Promise<void> {
   }
   const tacheId = tache.id as string;
 
-  const { error: erreurComposition } = await admin.from("taches_composition").insert(
-    composition.map((ligne) => ({
-      tache_id: tacheId,
-      generateur_id: chercherGenerateur(ligne.variante_id)!.generateur_id,
-      variante_id: ligne.variante_id,
-      nombre_exercices: ligne.nombre_exercices,
-      chrono_duree_secondes: ligne.chrono_duree_secondes ?? null,
-    })),
-  );
+  const { data: lignesInserees, error: erreurComposition } = await admin
+    .from("taches_composition")
+    .insert(lignesDeComposition(tacheId, composition, (varianteId) => chercherGenerateur(varianteId)!.generateur_id))
+    .select("id");
   if (erreurComposition) {
     res.status(500).json({ erreur: "Échec de création de la composition de l'aperçu", detail: erreurComposition.message });
     return;
   }
 
   const lignes: Record<string, unknown>[] = [];
-  for (const ligne of composition) {
+  composition.forEach((ligne, indice) => {
     const generateur = chercherGenerateur(ligne.variante_id)!;
     for (let i = 0; i < ligne.nombre_exercices; i++) {
       const graine = tirerGraine();
@@ -178,10 +175,13 @@ async function creerApercu(req: RequeteHttp, res: ReponseHttp): Promise<void> {
         generateur_id: generateur.generateur_id,
         variante_id: generateur.variante_id,
         graine,
-        champs_attendus: generateur.ecrans(generateur.generer(graine)).map((e) => e.champ),
+        // Identité de la ligne de composition (RAPPORT §55) : l'ordre d'insertion est celui de `composition`. Configuration FIGÉE sur l'exercice.
+        composition_id: lignesInserees?.[indice]?.id ?? null,
+        configuration: ligne.configuration ?? null,
+        champs_attendus: (generateur.ecrans(genererPourLigne(generateur, graine, ligne.configuration ?? null)) as { champ: string }[]).map((e) => e.champ),
       });
     }
-  }
+  });
   const { error: erreurExercices } = await admin.from("exercices_assignes").insert(lignes);
   if (erreurExercices) {
     res.status(500).json({ erreur: "Échec de génération des exercices de l'aperçu", detail: erreurExercices.message });

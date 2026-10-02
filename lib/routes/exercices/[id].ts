@@ -4,9 +4,10 @@ import { eleveAuthentifie, supabaseAdmin } from "../../supabaseAdmin";
 import { ecransServis } from "../../cascadeEcrans";
 import { resoudreRangees } from "../../structureTableau";
 import { calculerEtatExercice, chargerContexteTache, chargerDonneesExercice, COLONNES_EXERCICE_ASSIGNE, projeterExercice, regenererExercice, revelationFinDeTache, tacheEstCompletePourEleve, type LigneExerciceAssigne } from "../../etatExercice";
-import { aidePresente } from "../../aideTypee";
+import { aidePresente, nombrePaliers } from "../../aideTypee";
 import { recalculerPartiesFausses } from "../../partiesFausses";
 import { solutionStructureeSiMontree } from "../../solutionStructuree";
+import { validerFigure } from "../../figureDeclaree";
 import { construireChampVue, REGLAGES_FORCEES_ANTERIEURES } from "../../tableauDeBord";
 import { categorieTachePourEleve } from "../../verrouillageTache";
 import { poidsDansMap, poidsDesEcrans } from "../../poidsEcran";
@@ -54,7 +55,7 @@ export const gererExercicesId = avecGestionErreurs(async function handler(req: R
     res.status(403).json({ erreur: "Cette tâche n'a pas encore commencé" });
     return;
   }
-  const contexte = await chargerContexteTache(admin, ligne.tache_id as string, ligne.variante_id as string);
+  const contexte = await chargerContexteTache(admin, ligne.tache_id as string, ligne.variante_id as string, (ligne.composition_id as string | null | undefined) ?? null);
   if (!contexte) {
     res.status(404).json({ erreur: "Tâche associée introuvable" });
     return;
@@ -89,6 +90,8 @@ export const gererExercicesId = avecGestionErreurs(async function handler(req: R
       modifiable: c.modifiable && !anterieure,
       tentatives_restantes: (c.verrouille && !c.modifiable) || anterieure ? 0 : c.modifiable ? 1 : Math.max(0, contexte.tentativesMax - c.etat.tentativesUtilisees),
       aide_utilisee: c.aideUtilisee,
+      // Aide par paliers (RAPPORT §56) : palier atteint (0 = aucune aide utilisée). Une aide sans paliers vaut 1 dès qu'elle est utilisée.
+      aide_palier: donnees.paliersAide?.get(c.champ) ?? (c.aideUtilisee ? 1 : 0),
     };
   });
 
@@ -108,9 +111,14 @@ export const gererExercicesId = avecGestionErreurs(async function handler(req: R
     saisie_possible: !anterieure,
     ecrans: ecransServis(projete.ecrans, new Set(etat.reponsesConfirmees.map((r) => r.champ)), anterieure).map((ecran) => {
       const { aide, ...publics } = ecran;
+      // Figure (RAPPORT §56) : un défaut du générateur échoue ICI, bruyamment, avant d'atteindre le navigateur.
+      if (ecran.figure !== undefined) {
+        const problemesFigure = validerFigure(ecran.figure);
+        if (problemesFigure.length > 0) throw new Error(`Figure invalide pour ${ligne.variante_id} / ${ecran.champ} : ${problemesFigure.join(" ; ")}`);
+      }
       // Tableau de signes (RAPPORT §30) : le navigateur reçoit la structure DÉJÀ résolue (cases, fusions, alphabets) — il ne la recalcule pas.
       const servi = ecran.type === "tableau_signes" ? { ...publics, rangees: resoudreRangees(ecran) } : publics;
-      return { ...servi, aide_disponible: contexte.aideActivee && aidePresente(aide) };
+      return { ...servi, aide_disponible: contexte.aideActivee && aidePresente(aide), aide_paliers: contexte.aideActivee && aidePresente(aide) ? nombrePaliers(aide) : 0 };
     }),
     champs,
     champ_courant: anterieure ? null : etat.champCourant,

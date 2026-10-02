@@ -1,6 +1,7 @@
 import type { EcranDeclare, Generateur } from "./contratGenerateur";
 import { chercherGenerateur } from "./registreGenerateurs";
 import { estGraineValide } from "./prng";
+import { ConfigurationDeLigneInvalide, genererPourLigne } from "./genererPourLigne";
 
 /**
  * SEULE lecture du poids d'un écran (RAPPORT §17) : `EcranDeclare.poids` est une donnée dérivée de
@@ -36,11 +37,16 @@ export function poidsDuChamp(generateur: Generateur<any> | null, exercice: unkno
  * Poids de tous les champs d'une ligne `exercices_assignes` (`variante_id` + `graine`) : pour les routes
  * qui ne régénèrent pas déjà l'exercice. Ligne non exécutable → map vide (chaque champ vaut 1).
  */
-export function poidsDesChampsDeLigne(ligne: { variante_id: string; graine?: number | string | null }): Map<string, number> {
+export function poidsDesChampsDeLigne(ligne: { variante_id: string; graine?: number | string | null; configuration: unknown }): Map<string, number> {
   const generateur = chercherGenerateur(ligne.variante_id);
   const graine = ligne.graine === null || ligne.graine === undefined ? null : Number(ligne.graine);
   if (!generateur || graine === null || !estGraineValide(graine)) return new Map();
-  return poidsDesEcrans(generateur.ecrans(generateur.generer(graine)));
+  try {
+    return poidsDesEcrans(generateur.ecrans(genererPourLigne(generateur, graine, ligne.configuration)));
+  } catch (e) {
+    if (e instanceof ConfigurationDeLigneInvalide) return new Map();
+    throw e;
+  }
 }
 
 /** Lecture d'un poids dans une map issue de `poidsDesEcrans`/`poidsDesChampsDeLigne` (absent = 1). */

@@ -3,6 +3,7 @@ import { CATALOGUE_GENERATEURS } from "./catalogueGenerateurs";
 import { DICTIONNAIRE_COMPETENCES } from "./dictionnaireCompetences";
 import { generateurTemoinTechnique } from "../src/generateurs/_temoinTechnique";
 import { GENERATEURS_MOTIF_DELTA } from "../src/generateurs/analyseFonctionMotifDelta/generateurs";
+import { generateurFxDepuisGraphe } from "../src/generateurs/fxDepuisGraphe/generateur";
 
 /**
  * REGISTRE UNIQUE — seule autorité sur « quel `variante_id` correspond à quel générateur exécutable ».
@@ -15,7 +16,7 @@ import { GENERATEURS_MOTIF_DELTA } from "../src/generateurs/analyseFonctionMotif
  * (ce qu'on peut composer) : le registre sait EXÉCUTER. Les deux ne sont pas fusionnés, leur
  * cohérence est contrôlée par `verifierCoherenceRegistre` au chargement de ce module.
  */
-export const REGISTRE_GENERATEURS: readonly Generateur<any>[] = [generateurTemoinTechnique, ...GENERATEURS_MOTIF_DELTA];
+export const REGISTRE_GENERATEURS: readonly Generateur<any>[] = [generateurTemoinTechnique, ...GENERATEURS_MOTIF_DELTA, generateurFxDepuisGraphe];
 
 interface EntreeCatalogue {
   generateur_id: string;

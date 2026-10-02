@@ -108,8 +108,9 @@ export const gererElevesTableauDeBord = avecGestionErreurs(async function handle
     for (const ligne of exercices) {
       const regenere = regenererExercice(ligne);
       if (!regenere) continue;
-      const cle = `${tacheId}:${ligne.variante_id}`;
-      if (!cacheContextes.has(cle)) cacheContextes.set(cle, await chargerContexteTache(admin, tacheId, ligne.variante_id));
+      // Contexte par LIGNE de composition (RAPPORT §55) : le chrono propre à la ligne peut différer entre deux lignes de même variante.
+      const cle = `${tacheId}:${ligne.composition_id ?? ligne.variante_id}`;
+      if (!cacheContextes.has(cle)) cacheContextes.set(cle, await chargerContexteTache(admin, tacheId, ligne.variante_id, ligne.composition_id ?? null));
       const contexte = cacheContextes.get(cle)!;
       if (!contexte) continue;
       contexteTache = contexte;

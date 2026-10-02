@@ -22,6 +22,9 @@ export const CATALOGUE_GENERATEURS = [
   { generateur_id: "gen7", variante_id: "af_delta_aucune_racine", label: "Aucune racine réelle (Δ<0)" },
   { generateur_id: "gen7", variante_id: "af_delta_racines_rationnelles", label: "Deux racines distinctes rationnelles" },
   { generateur_id: "gen7", variante_id: "af_delta_racines_irrationnelles", label: "Deux racines distinctes irrationnelles" },
+  // gen8 « f(x) à partir du graphe » (RAPPORT §56-§57) : UNE seule entrée ; les transformations actives (TH, TV, EV | CV, SOX) se choisissent PAR LIGNE de composition (`Generateur.configuration`,
+  // §55), pas par multiplication de variantes. Libellé IDENTIQUE à `public/catalogue-generateurs-complet.json` (4e, n° 67).
+  { generateur_id: "gen8", variante_id: "fx_depuis_graphe", label: "f(x) à partir du graphe" },
 ] as const;
 
 export type VariantePilote = (typeof CATALOGUE_GENERATEURS)[number]["variante_id"];

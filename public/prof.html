@@ -1497,6 +1497,12 @@
         { index: 8, variante_id: "af_delta_racines_rationnelles" },
         { index: 9, variante_id: "af_delta_racines_irrationnelles" },
       ],
+      /**
+       * gen8 « f(x) à partir du graphe » (RAPPORT §57) — 4e/numero 67 : UNE variante (`fx_depuis_graphe`), dont les transformations actives (TH, TV, EV | CV, SOX) se cochent PAR LIGNE de
+       * composition (descripteur `configuration` servi par `GET /api/catalogue-generateurs` → `construireBlocConfigurable`). `variantes` est un tableau d'un élément, jamais "aucune" : une entrée
+       * « aucune » ne passe pas par `construireLigneVariante`, donc n'aurait pas de bloc de cases.
+       */
+      "4e:67": [{ index: 0, variante_id: "fx_depuis_graphe" }],
     };
 
     /** Étape 1.1 : `variantes` peut être la chaîne littérale "aucune" — jamais itérée comme un tableau. */
@@ -1711,14 +1717,162 @@
       return variante.label;
     }
 
+    /**
+     * Configuration PAR LIGNE de composition (RAPPORT §55, docs/AUDIT-config-par-ligne-composition.md). Descripteurs servis par GET /api/catalogue-generateurs (dérivés du
+     * registre, jamais une liste tenue ici) : `variante_id -> { type: "cases", libelle, cases, exclusifs }`. Une variante qui en a un n'a PAS un seul champ « nombre d'exercices » mais des
+     * LIGNES (cases à cocher + nombre + durée) que le professeur ajoute et retire : deux lignes de la même variante, configurations différentes, coexistent dans une même tâche.
+     * Chaque ligne garde UN `input[data-variante-id]` (le nombre) : tous les sites qui comptent ou listent les exercices (badge, sélection, aperçu) restent inchangés.
+     */
+    const descripteursConfiguration = new Map();
+    const MESSAGE_LIGNE_CONFIG_VIDE = "Sélectionnez au moins une case pour cette ligne.";
+
+    function casesCocheesDeLigne(ligne) {
+      return [...ligne.querySelectorAll("input[data-case-id]")].filter((c) => c.checked).map((c) => c.dataset.caseId);
+    }
+
+    /** Libellé de sélection, message « ligne vide », mise à jour à chaque changement de case ou de nombre. */
+    function majEtatLigneConfig(ligne) {
+      const coches = casesCocheesDeLigne(ligne);
+      const nombre = ligne.querySelector("input[data-variante-id]");
+      const noms = ligne.descripteur.cases.filter((c) => coches.includes(c.id)).map((c) => c.libelle);
+      nombre.dataset.libelle = ligne.libelleBase + (noms.length > 0 ? " [" + noms.join(", ") + "]" : "");
+      ligne.querySelector(".message-config").hidden = !(coches.length === 0 && (Number(nombre.value) || 0) > 0);
+    }
+
+    /** Lignes de configuration sans case cochée alors qu'un nombre d'exercices est demandé : le serveur les refuse (400), le bouton « Créer » l'anticipe. */
+    function lignesConfigInvalides() {
+      return [...document.querySelectorAll("#composition-dynamique .ligne-config")].filter((l) => casesCocheesDeLigne(l).length === 0 && (Number(l.querySelector("input[data-variante-id]").value) || 0) > 0);
+    }
+
+    /** Signale (sans décider) les lignes identiques : le serveur les fusionne en additionnant les nombres (décision C de l'audit). */
+    function signalerDoublonsConfig() {
+      const parCle = new Map();
+      for (const l of document.querySelectorAll("#composition-dynamique .ligne-config")) {
+        const nombre = l.querySelector("input[data-variante-id]");
+        const duree = l.querySelector("input[data-chrono-variante-id]");
+        const parEcran = document.getElementById("chrono-mode").value === "par_ecran";
+        const cle = nombre.dataset.varianteId + "|" + casesCocheesDeLigne(l).sort().join(",") + "|" + (parEcran ? duree.value.trim() : "");
+        if (!parCle.has(cle)) parCle.set(cle, []);
+        if (casesCocheesDeLigne(l).length > 0 && (Number(nombre.value) || 0) > 0) parCle.get(cle).push(l);
+      }
+      for (const l of document.querySelectorAll("#composition-dynamique .ligne-config")) {
+        l.querySelector(".note-doublon-config").hidden = true;
+      }
+      for (const lignes of parCle.values()) {
+        if (lignes.length > 1) for (const l of lignes) l.querySelector(".note-doublon-config").hidden = false;
+      }
+    }
+
+    function ajouterLigneConfiguration(liste, varianteId, libelleBase, descripteur, valeurs = {}) {
+      const ligne = document.createElement("div");
+      ligne.className = "ligne-config";
+      ligne.descripteur = descripteur;
+      ligne.libelleBase = libelleBase;
+
+      const groupe = document.createElement("fieldset");
+      groupe.className = "cases-config";
+      const legende = document.createElement("legend");
+      legende.textContent = descripteur.libelle;
+      groupe.appendChild(legende);
+      for (const c of descripteur.cases) {
+        const etiquette = document.createElement("label");
+        etiquette.className = "case-config";
+        const coche = document.createElement("input");
+        coche.type = "checkbox";
+        coche.dataset.caseId = c.id;
+        // Une nouvelle ligne naît VIDE (décision D de l'audit) : jamais de case pré-cochée ; seules les cases d'une ligne restaurée (Modifier / Dupliquer) le sont.
+        coche.checked = (valeurs.actives ?? []).includes(c.id);
+        coche.addEventListener("change", () => {
+          // Cases exclusives (ex. EV / CV) : en cocher une décoche les autres du groupe — l'interface l'applique, le serveur le refuse de toute façon.
+          if (coche.checked) {
+            for (const groupeExclusif of descripteur.exclusifs ?? []) {
+              if (!groupeExclusif.includes(c.id)) continue;
+              for (const autre of groupe.querySelectorAll("input[data-case-id]")) if (autre !== coche && groupeExclusif.includes(autre.dataset.caseId)) autre.checked = false;
+            }
+          }
+        });
+        etiquette.appendChild(coche);
+        etiquette.appendChild(document.createTextNode(" " + c.libelle));
+        groupe.appendChild(etiquette);
+      }
+      ligne.appendChild(groupe);
+
+      const rangee = document.createElement("div");
+      rangee.className = "rangee-config";
+      rangee.appendChild(document.createTextNode("nombre d'exercices : "));
+      const stepper = creerChampNombreExercices(varianteId, libelleBase);
+      stepper.querySelector("input").value = String(valeurs.nombre ?? 1);
+      rangee.appendChild(stepper);
+      const duree = creerChampDureeVariante(varianteId);
+      if (valeurs.chrono !== undefined && valeurs.chrono !== null) duree.querySelector("input").value = String(valeurs.chrono);
+      rangee.appendChild(duree);
+      const retirer = document.createElement("button");
+      retirer.type = "button";
+      retirer.className = "retirer-ligne-config";
+      retirer.textContent = "Retirer la ligne";
+      retirer.addEventListener("click", () => {
+        ligne.remove();
+        mettreAJourBadgeComposition();
+      });
+      rangee.appendChild(retirer);
+      ligne.appendChild(rangee);
+
+      const message = document.createElement("p");
+      message.className = "message-config";
+      message.hidden = true;
+      message.setAttribute("role", "alert");
+      message.textContent = MESSAGE_LIGNE_CONFIG_VIDE;
+      ligne.appendChild(message);
+      const note = document.createElement("p");
+      note.className = "note-doublon-config";
+      note.hidden = true;
+      note.textContent = "Cette ligne est identique à une autre : les nombres d'exercices seront additionnés à l'enregistrement.";
+      ligne.appendChild(note);
+
+      liste.appendChild(ligne);
+      majEtatLigneConfig(ligne);
+      appliquerVerrouReglages();
+      return ligne;
+    }
+
+    /** Variante à configuration : un bloc de LIGNES (aucune au départ) plutôt qu'un champ unique. */
+    function construireBlocConfigurable(generateur, variante, libelle, varianteId, descripteur) {
+      const bloc = document.createElement("div");
+      bloc.className = "ligne-variante ligne-configurable";
+      bloc.dataset.configVarianteId = varianteId;
+      bloc.dataset.libelleBase = `${generateur.libelle} — ${libelle}`;
+      const titre = document.createElement("span");
+      titre.className = "titre-ligne-configurable";
+      titre.textContent = libelle + " — lignes de composition :";
+      bloc.appendChild(titre);
+      const exemple = construireBoutonExemple(variante.exemple, `${generateur.libelle} — ${libelle}`, varianteId);
+      if (exemple) bloc.appendChild(exemple.bouton);
+      const liste = document.createElement("div");
+      liste.className = "lignes-config";
+      const ajouter = document.createElement("button");
+      ajouter.type = "button";
+      ajouter.className = "ajouter-ligne-config";
+      ajouter.textContent = "Ajouter une ligne";
+      ajouter.addEventListener("click", () => {
+        ajouterLigneConfiguration(liste, varianteId, `${generateur.libelle} — ${libelle}`, descripteur);
+        mettreAJourBadgeComposition();
+      });
+      bloc.appendChild(liste);
+      bloc.appendChild(ajouter);
+      if (exemple) bloc.appendChild(exemple.panneau);
+      return bloc;
+    }
+
     function construireLigneVariante(generateur, variante, index, niveauCle, idsConnus) {
       const ligne = document.createElement("label");
       ligne.className = "ligne-variante";
       const libelle = libelleVariante(generateur, variante);
-      ligne.appendChild(document.createTextNode(libelle + " — nombre d'exercices : "));
       // `generateur.libelle` porte déjà le numéro en préfixe (catalogue-generateurs-complet.json,
       // ex. "8. Transformations graphiques..."), jamais reconcaténé avec `generateur.numero`.
       const varianteIdActif = varianteIdActive(niveauCle, generateur.numero, index, idsConnus);
+      const descripteur = varianteIdActif ? descripteursConfiguration.get(varianteIdActif) : undefined;
+      if (descripteur) return construireBlocConfigurable(generateur, variante, libelle, varianteIdActif, descripteur);
+      ligne.appendChild(document.createTextNode(libelle + " — nombre d'exercices : "));
       const exemple = construireBoutonExemple(variante.exemple, `${generateur.libelle} — ${libelle}`, varianteIdActif);
       if (exemple) ligne.appendChild(exemple.bouton);
       ligne.appendChild(creerChampNombreExercices(varianteIdActif, `${generateur.libelle} — ${libelle}`));
@@ -1828,7 +1982,7 @@
       8: "Géométrie dans l'espace",
     };
     const NUMEROS_PAR_CHAPITRE_4E = {
-      1: [7, 8, 9, 55, 57, 60],
+      1: [7, 8, 9, 67, 55, 57, 60],
       2: [1, 2, 3, 4, 5, 6, 61],
       3: [10, 11, 12, 13, 56, 62],
       4: [30, 31, 32, 33, 34, 35, 36, 37, 38, 59],
@@ -1916,6 +2070,8 @@
      */
     function construireArbreComposition(catalogueServeur) {
       const idsConnus = new Set(catalogueServeur.map((e) => e.variante_id));
+      descripteursConfiguration.clear();
+      for (const entree of catalogueServeur) if (entree.configuration) descripteursConfiguration.set(entree.variante_id, entree.configuration);
       const conteneur = document.getElementById("composition-dynamique");
       conteneur.innerHTML = "";
       for (const niveauInfo of NIVEAUX_AFFICHES) {
@@ -1968,7 +2124,11 @@
       );
       document.getElementById("badge-composition-valeur").textContent = total;
       const nom = document.getElementById("nom-tache").value.trim();
-      document.getElementById("btn-creer-tache").disabled = nom === "" || total === 0;
+      for (const l of document.querySelectorAll("#composition-dynamique .ligne-config")) majEtatLigneConfig(l);
+      signalerDoublonsConfig();
+      const configIncomplete = lignesConfigInvalides().length > 0;
+      document.getElementById("btn-creer-tache").disabled = nom === "" || total === 0 || configIncomplete;
+      document.getElementById("btn-creer-tache").title = configIncomplete ? MESSAGE_LIGNE_CONFIG_VIDE : "";
       mettreAJourBoutonApercu();
       // Prompt "Nouveau design (Aperçu en direct)" : même total/même nom que le badge flottant
       // ci-dessus, réutilisés tels quels pour l'aperçu en direct de la carte "Créer une tâche"
@@ -2173,6 +2333,9 @@
 
     document.getElementById("composition-dynamique").addEventListener("input", (evenement) => {
       if (evenement.target.matches("input[data-variante-id]")) mettreAJourBadgeComposition();
+    });
+    document.getElementById("composition-dynamique").addEventListener("change", (evenement) => {
+      if (evenement.target.matches("input[data-case-id], input[data-chrono-variante-id]")) mettreAJourBadgeComposition();
     });
     document.getElementById("nom-tache").addEventListener("input", mettreAJourBadgeComposition);
     document.getElementById("comp-recherche").addEventListener("input", filtrerArbreComposition);
@@ -2551,6 +2714,8 @@
 
     function reinitialiserFormulaireTache() {
       document.getElementById("nom-tache").value = "";
+      // Lignes de configuration (RAPPORT §55) : retirées (une nouvelle composition repart sans ligne), puis les champs uniques remis à 0.
+      for (const l of document.querySelectorAll("#composition-dynamique .ligne-config")) l.remove();
       for (const input of document.querySelectorAll("#composition-dynamique input[data-variante-id]")) {
         input.value = "0";
       }
@@ -2581,8 +2746,21 @@
     }
 
     function remplirFormulaireComposition(composition) {
-      const nombreParVariante = Object.fromEntries(composition.map((l) => [l.variante_id, l.nombre_exercices]));
+      // Lignes de configuration (RAPPORT §55) : restaurées par LISTE ORDONNÉE (plusieurs lignes d'une même variante), jamais par dictionnaire variante -> valeur.
+      for (const l of document.querySelectorAll("#composition-dynamique .ligne-config")) l.remove();
+      for (const ligne of composition) {
+        const descripteur = descripteursConfiguration.get(ligne.variante_id);
+        const bloc = document.querySelector(`#composition-dynamique [data-config-variante-id="${CSS.escape(ligne.variante_id)}"]`);
+        if (!descripteur || !bloc || !ligne.configuration) continue;
+        ajouterLigneConfiguration(bloc.querySelector(".lignes-config"), ligne.variante_id, bloc.dataset.libelleBase || ligne.variante_id, descripteur, {
+          actives: ligne.configuration.actives,
+          nombre: ligne.nombre_exercices,
+          chrono: ligne.chrono_duree_secondes,
+        });
+      }
+      const nombreParVariante = Object.fromEntries(composition.filter((l) => !l.configuration).map((l) => [l.variante_id, l.nombre_exercices]));
       for (const input of document.querySelectorAll("#composition-dynamique input[data-variante-id]")) {
+        if (input.closest(".ligne-config")) continue;
         input.value = nombreParVariante[input.dataset.varianteId] ?? 0;
       }
       // Correctif "Chrono par variante" : restaure la surcharge par ligne si `demarrerModification`/
@@ -2590,8 +2768,9 @@
       // sur le réglage de tâche), jamais "0". `?? null` : `taches_composition.chrono_duree_secondes`
       // est nullable (voir supabase/schema.sql) — `null` explicite comme absence est distinct de "0"
       // absent de l'objet composition.
-      const chronoParVariante = Object.fromEntries(composition.map((l) => [l.variante_id, l.chrono_duree_secondes ?? null]));
+      const chronoParVariante = Object.fromEntries(composition.filter((l) => !l.configuration).map((l) => [l.variante_id, l.chrono_duree_secondes ?? null]));
       for (const input of document.querySelectorAll("#composition-dynamique input[data-chrono-variante-id]")) {
+        if (input.closest(".ligne-config")) continue; // la durée d'une ligne de configuration est posée à sa création (liste ordonnée)
         const valeur = chronoParVariante[input.dataset.chronoVarianteId];
         input.value = valeur === null || valeur === undefined ? "" : valeur;
         // Même raison que `reinitialiserFormulaireTache` : une valeur restaurée depuis une tâche
@@ -4502,17 +4681,21 @@
       // `construireGenerateur`). Champ vide (`""`) ou masqué (mode != "par_ecran") -> absente de
       // la ligne envoyée (`undefined`), jamais `0` ni `NaN` — repli serveur sur le réglage de
       // tâche (lib/validationCorpsTaches.ts : `chrono_duree_secondes` optionnel par ligne).
-      const dureeParVariante = Object.fromEntries(
-        [...document.querySelectorAll("#composition-dynamique input[data-chrono-variante-id]")]
-          .filter((input) => !input.hidden && input.value.trim() !== "")
-          .map((input) => [input.dataset.chronoVarianteId, Number(input.value)]),
-      );
+      // RAPPORT §55 : la durée est lue dans la MÊME ligne que le nombre (`.ligne-config` ou `.ligne-variante`), plus par `variante_id` (deux lignes de même variante, deux durées).
+      // La configuration (cases cochées) est envoyée telle quelle : le serveur la canonise ; une ligne sans case cochée est refusée (400).
       const composition = [...document.querySelectorAll("#composition-dynamique input[data-variante-id]")]
-        .map((input) => ({
-          variante_id: input.dataset.varianteId,
-          nombre_exercices: Number(input.value),
-          ...(dureeParVariante[input.dataset.varianteId] !== undefined ? { chrono_duree_secondes: dureeParVariante[input.dataset.varianteId] } : {}),
-        }))
+        .map((input) => {
+          const ligneDOM = input.closest(".ligne-config, .ligne-variante");
+          const champDuree = ligneDOM ? ligneDOM.querySelector("input[data-chrono-variante-id]") : null;
+          const duree = champDuree && !champDuree.hidden && champDuree.value.trim() !== "" ? Number(champDuree.value) : undefined;
+          const config = input.closest(".ligne-config");
+          return {
+            variante_id: input.dataset.varianteId,
+            nombre_exercices: Number(input.value),
+            ...(duree !== undefined ? { chrono_duree_secondes: duree } : {}),
+            ...(config ? { configuration: { actives: casesCocheesDeLigne(config) } } : {}),
+          };
+        })
         .filter((ligne) => ligne.nombre_exercices > 0);
 
       const feedbackImmediat = document.getElementById("feedback-immediat").checked;

@@ -24,6 +24,9 @@ interface ExerciceBrut {
   graine: number | null;
   /** Retour en arrière (RAPPORT §37) : exercice rendu ; nul = pas rendu. */
   remis_le: string | null;
+  /** RAPPORT §55 : ligne de composition d'origine et configuration figée (poids / écrans / chrono de CETTE ligne) ; `null` = historique. */
+  composition_id: string | null;
+  configuration: unknown;
 }
 
 interface ReponseBrute {
@@ -73,7 +76,7 @@ export const gererElevesMesResultats = avecGestionErreurs(async function handler
 
   const { data: exercicesBruts, error: erreurExercices } = await admin
     .from("exercices_assignes")
-    .select("id, tache_id, champs_attendus, variante_id, date_creation, graine, remis_le")
+    .select("id, tache_id, champs_attendus, variante_id, date_creation, graine, remis_le, composition_id, configuration")
     .eq("eleve_id", eleve.id)
     .returns<ExerciceBrut[]>();
   if (erreurExercices) {
@@ -225,8 +228,8 @@ export const gererElevesMesResultats = avecGestionErreurs(async function handler
     // — reste traité comme jamais complet, jamais vacuously complet.
     const champsTermineParExercice = new Map<string, Set<string>>();
     for (const ex of exercicesDeLaTache) {
-      const cleContexte = `${tacheId}:${ex.variante_id}`;
-      if (!contextesParTacheVariante.has(cleContexte)) contextesParTacheVariante.set(cleContexte, await chargerContexteTache(admin, tacheId, ex.variante_id));
+      const cleContexte = `${tacheId}:${ex.composition_id ?? ex.variante_id}`;
+      if (!contextesParTacheVariante.has(cleContexte)) contextesParTacheVariante.set(cleContexte, await chargerContexteTache(admin, tacheId, ex.variante_id, ex.composition_id ?? null));
       const contexte = contextesParTacheVariante.get(cleContexte);
       if (!contexte) continue; // tâche introuvable : déjà écartée plus haut, défensif
       // Définition UNIQUE (lib/etatExercice.ts, RAPPORT §37) : mêmes historiques (statuts + fractions), même chrono.
@@ -241,14 +244,14 @@ export const gererElevesMesResultats = avecGestionErreurs(async function handler
     const completions = exercicesDeLaTache.map((ex) => (ex.champs_attendus === null ? false : exerciceEstComplet(ex.champs_attendus, champsTermineParExercice.get(ex.id) ?? new Set())));
     const complete = tacheEstComplete(completions);
     const categorie: CategorieOuNonCommencee = classifierTache(debutParTache.get(tacheId) ?? new Date(0).toISOString(), echeanceParTache.get(tacheId) ?? null, complete, maintenant);
-    const feedbackCoupe = exercicesDeLaTache.some((ex) => contextesParTacheVariante.get(`${tacheId}:${ex.variante_id}`)?.reglages.feedback_immediat === false);
+    const feedbackCoupe = exercicesDeLaTache.some((ex) => contextesParTacheVariante.get(`${tacheId}:${ex.composition_id ?? ex.variante_id}`)?.reglages.feedback_immediat === false);
     if (feedbackCoupe && !complete && categorie !== "anterieures") tachesMasquees.add(tacheId);
     if (categorie !== "effectuees" && categorie !== "anterieures") continue; // ni "en_cours" (pas encore noté) ni "pas_commencee"
 
     // Statut retenu d'un champ : sa dernière réponse ; sous retour en arrière, sa dernière réponse VALIDE (une réponse amont modifiée
     // depuis a périmé les réponses aval — `lib/reponsesValides.ts`), et « sans réponse » si aucune ne l'est.
     const statutRetenu = (ex: ExerciceBrut, champ: string): StatutVerification | undefined => {
-      if (contextesParTacheVariante.get(`${tacheId}:${ex.variante_id}`)?.retourArriere !== true) return derniereStatutParCle.get(`${ex.id}:${champ}`);
+      if (contextesParTacheVariante.get(`${tacheId}:${ex.composition_id ?? ex.variante_id}`)?.retourArriere !== true) return derniereStatutParCle.get(`${ex.id}:${champ}`);
       const ecrans = ecransDeLigne(ex);
       if (ecrans === null) return derniereStatutParCle.get(`${ex.id}:${champ}`);
       return dernieresReponsesValides(amontsTransitifs(ecrans), lignesParExercice.get(ex.id) ?? []).get(champ)?.statut;

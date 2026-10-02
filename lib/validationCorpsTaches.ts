@@ -1,5 +1,10 @@
-import { type VariantePilote, estVarianteConnue } from "./catalogueGenerateurs";
+import { type VariantePilote, estVarianteConnue, labelPourVariante } from "./catalogueGenerateurs";
 import type { ChronoMode } from "./moteurTentatives";
+import type { ConfigurationCases } from "./contratGenerateur";
+import { validerDependances } from "./cascadeEcrans";
+import { cleConfiguration, validerConfigurationDeLigne } from "./configurationLigne";
+import { genererPourLigne } from "./genererPourLigne";
+import { chercherGenerateur } from "./registreGenerateurs";
 
 const CHRONO_MODES_VALIDES: readonly ChronoMode[] = ["aucun", "par_ecran", "global"];
 
@@ -14,12 +19,17 @@ export interface LigneComposition {
    * réglé une valeur avant de changer de mode).
    */
   chrono_duree_secondes?: number;
+  /**
+   * Configuration PAR LIGNE, forme CANONIQUE (RAPPORT §55, `lib/configurationLigne.ts`) : présente seulement pour un générateur qui déclare une configuration, jamais complétée
+   * par un défaut. Deux lignes de même variante peuvent porter des configurations différentes dans une même tâche.
+   */
+  configuration?: ConfigurationCases;
 }
 
 /** `variante_id` en `string` ici (pas encore `VariantePilote`) : le catalogue n'est vérifié qu'ensuite, séparément, pour pouvoir produire un message d'erreur explicite. */
 export interface CorpsTaches {
   nom: string;
-  composition: { variante_id: string; nombre_exercices: number; chrono_duree_secondes?: number }[];
+  composition: { variante_id: string; nombre_exercices: number; chrono_duree_secondes?: number; configuration?: unknown }[];
   /** Réglages de correction (prompt "Authentification élève", Étape 1/4) — optionnels : valeurs par défaut du schéma (true/false) si omis. */
   feedback_immediat?: boolean;
   reponse_visible?: boolean;
@@ -92,6 +102,8 @@ export function estCorpsValide(corps: unknown): corps is CorpsTaches {
     if (l.chrono_duree_secondes !== undefined && (typeof l.chrono_duree_secondes !== "number" || !Number.isInteger(l.chrono_duree_secondes) || l.chrono_duree_secondes <= 0)) {
       return false;
     }
+    // Forme seulement : le contenu de la configuration est validé par `validerComposition` (il faut le registre).
+    if (l.configuration !== undefined && l.configuration !== null && (typeof l.configuration !== "object" || Array.isArray(l.configuration))) return false;
     return (
       typeof l.variante_id === "string" &&
       typeof l.nombre_exercices === "number" &&
@@ -103,6 +115,9 @@ export function estCorpsValide(corps: unknown): corps is CorpsTaches {
 
 export type ResultatValidationComposition = { ok: true; composition: LigneComposition[] } | { ok: false; erreur: string };
 
+/** Graine de contrôle : valide pour tout générateur (`estGraineValide`) ; sert uniquement à vérifier qu'une configuration produit des écrans. */
+const GRAINE_DE_CONTROLE = 1;
+
 /**
  * Rejette (message explicite) une combinaison absente du catalogue plutôt que de tenter une
  * génération qui échouerait plus loin, moins clairement — validé contre
@@ -110,8 +125,18 @@ export type ResultatValidationComposition = { ok: true; composition: LigneCompos
  * `nombre_exercices: 0` (jamais de ligne `taches_composition` à 0) et rejette une composition
  * entièrement vide après cette omission. Même règle pour la création et la modification d'une
  * tâche (Étape 3) — jamais redéfinie séparément aux deux endroits.
+ *
+ * Configuration par ligne (RAPPORT §55, audit décisions A à E) — POINT UNIQUE des trois routes d'écriture (création, modification, aperçu) :
+ *  1. chaque ligne retenue est validée et CANONISÉE par `validerConfigurationDeLigne` (une ligne sans case cochée est refusée : 400, aucune écriture) ;
+ *  2. une configuration qui ne produit AUCUN écran, ou des dépendances invalides, est refusée (sans quoi `champs_attendus` serait vide et l'exercice « complet » d'emblée) ;
+ *  3. les doublons EXACTS sont fusionnés en ADDITIONNANT les `nombre_exercices`. Clé : `(variante_id, configuration canonique, durée de chrono normalisée)` ; la durée n'a d'effet
+ *     qu'en mode `par_ecran` : hors de ce mode elle est ignorée par la clé (elle ne distingue pas deux lignes), jamais rejetée. Deux lignes de même variante et de durées
+ *     différentes en `par_ecran` restent DISTINCTES. L'ordre est celui de la première occurrence.
  */
-export function validerComposition(compositionBrute: { variante_id: string; nombre_exercices: number; chrono_duree_secondes?: number }[]): ResultatValidationComposition {
+export function validerComposition(
+  compositionBrute: { variante_id: string; nombre_exercices: number; chrono_duree_secondes?: number; configuration?: unknown }[],
+  chronoMode: ChronoMode = "aucun",
+): ResultatValidationComposition {
   const ligneInconnue = compositionBrute.find((ligne) => !estVarianteConnue(ligne.variante_id));
   if (ligneInconnue) {
     return { ok: false, erreur: `Variante inconnue du catalogue : "${ligneInconnue.variante_id}"` };
@@ -119,10 +144,35 @@ export function validerComposition(compositionBrute: { variante_id: string; nomb
   // `Array.prototype.find` ci-dessus ne renarrowe pas le tableau entier (contrairement à `every`
   // avec un type predicate) : cast explicite, sûr puisque chaque ligne vient d'être vérifiée contre
   // `estVarianteConnue`.
-  const compositionConnue = compositionBrute as LigneComposition[];
-  const composition = compositionConnue.filter((ligne) => ligne.nombre_exercices > 0);
-  if (composition.length === 0) {
+  const compositionConnue = compositionBrute as (Omit<LigneComposition, "configuration"> & { configuration?: unknown })[];
+  const retenues = compositionConnue.filter((ligne) => ligne.nombre_exercices > 0);
+  if (retenues.length === 0) {
     return { ok: false, erreur: "Au moins une variante doit avoir nombre_exercices > 0" };
   }
-  return { ok: true, composition };
+  const fusionnees = new Map<string, LigneComposition>();
+  for (const ligne of retenues) {
+    const generateur = chercherGenerateur(ligne.variante_id);
+    const lue = validerConfigurationDeLigne(generateur, ligne.configuration);
+    const nom = labelPourVariante(ligne.variante_id) ?? ligne.variante_id;
+    if (!lue.ok) return { ok: false, erreur: `Ligne « ${nom} » : ${lue.erreur}` };
+    if (generateur !== null && lue.configuration !== null) {
+      try {
+        const ecrans = (generateur.ecrans(genererPourLigne(generateur, GRAINE_DE_CONTROLE, lue.configuration)) as unknown[]).length;
+        const problemes = validerDependances(generateur.ecrans(genererPourLigne(generateur, GRAINE_DE_CONTROLE, lue.configuration)));
+        if (ecrans === 0) return { ok: false, erreur: `Ligne « ${nom} » : cette configuration ne produit aucun écran.` };
+        if (problemes.length > 0) return { ok: false, erreur: `Ligne « ${nom} » : configuration incohérente (${problemes.join(" ; ")}).` };
+      } catch (e) {
+        return { ok: false, erreur: `Ligne « ${nom} » : configuration inutilisable (${(e as Error).message}).` };
+      }
+    }
+    const dureeEffective = chronoMode === "par_ecran" ? (ligne.chrono_duree_secondes ?? null) : null;
+    const cle = `${ligne.variante_id}\u0000${cleConfiguration(lue.configuration)}\u0000${dureeEffective === null ? "" : dureeEffective}`;
+    const existante = fusionnees.get(cle);
+    if (existante) existante.nombre_exercices += ligne.nombre_exercices;
+    else {
+      const { configuration: _brute, ...reste } = ligne;
+      fusionnees.set(cle, { ...reste, ...(lue.configuration === null ? {} : { configuration: lue.configuration }) });
+    }
+  }
+  return { ok: true, composition: [...fusionnees.values()] };
 }

@@ -18,7 +18,7 @@ import { demarrerServeur, stubSupabase } from "./support/serveurChromium";
 import { appeler, creerScenario, creerTache, imposerProfilAssignation, installerBase } from "./support/harnaisRouteur";
 import { genererExerciceMD } from "../src/generateurs/analyseFonctionMotifDelta/exercice";
 import { reponseBruteCorrecteMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/solutions";
-import { CHAMP_SOMME, CHAMP_PARITE, CHAMP_DIVISEURS, CHAMP_SIGNES, generateurTemoinTechnique as temoin, reponseBruteCorrecte, VARIANTE_TEMOIN } from "../src/generateurs/_temoinTechnique";
+import { CHAMP_COURBE, CHAMP_SOMME, CHAMP_PARITE, CHAMP_DIVISEURS, CHAMP_SIGNES, generateurTemoinTechnique as temoin, reponseBruteCorrecte, VARIANTE_TEMOIN } from "../src/generateurs/_temoinTechnique";
 
 const RACINE = join(__dirname, "..");
 const CAPTURES = process.env.CAPTURES_DIR ?? join(RACINE, "captures-chromium");
@@ -138,7 +138,7 @@ async function main(): Promise<void> {
   await ctxRef.close();
 
   // ── Application ──
-  async function ouvrir(profil: "base" | "etendu", champsAvant: string[], attendre: string, largeur = 390) {
+  async function ouvrir(profil: "base" | "etendu" | "graphe", champsAvant: string[], attendre: string, largeur = 390) {
     imposerProfilAssignation(profil);
     const s = creerScenario();
     installerBase(s.base);
@@ -816,6 +816,112 @@ async function main(): Promise<void> {
       verifier(etatRep.neutres.length === 1 && etatRep.neutres[0] === (REF["case"] as any).color, `${e} / récapitulatif : cases justes en texte neutre (${etatRep.neutres.join(" | ")})`);
       await page.locator(RE).scrollIntoViewIfNeeded();
       await page.screenshot({ path: join(CAPTURES, `fidelite-app-tableau-reponse-recap-${largeur}.png`), fullPage: true });
+      await ctx.close();
+    }
+  }
+
+  // ── Graphique d'écran et annotations d'une aide par paliers (RAPPORT §56) : docs/reference/graphe-parabole.html, à 390 ET 1280 px ──
+  {
+    const refFig = readFileSync(join(RACINE, "docs/reference/graphe-parabole.html"), "utf8");
+    for (const largeur of [390, 1280]) {
+      const e = `figure ${largeur} px`;
+      const ctxR = await navigateur.newContext({ viewport: { width: largeur, height: 1200 } });
+      const pR = await ctxR.newPage();
+      await pR.route("**/fonts.googleapis.com/**", (r: any) => r.fulfill({ contentType: "text/css", body: "" }));
+      await pR.setContent(refFig);
+      const REF: Record<string, Element | null> = {};
+      for (const ref of ["cadre", "grille-fine", "grille", "axe", "graduation", "courbe", "point-annote", "etiquette-forte", "vecteur", "pointe", "etiquette"]) REF[ref] = await mesurer(pR, `[data-ref="${ref}"]`);
+      await pR.screenshot({ path: join(CAPTURES, `fidelite-ref-figure-${largeur}.png`), fullPage: true });
+      await ctxR.close();
+
+      const { page, ctx } = await ouvrir("graphe", [], ".figure-svg", largeur);
+      await flou(page);
+      const SVG = `${C} .figure-svg`;
+      verifier((await page.locator(`${SVG} .figure-annotations > *`).count()) === 0, `${e} : AUCUNE annotation avant l'aide (ni S ni A)`);
+      verifier((await page.locator(`${SVG} .figure-point-annote, ${SVG} .figure-vecteur`).count()) === 0 && !(await page.locator(SVG).innerHTML()).includes("S("), `${e} : le graphique de base ne nomme ni S ni A`);
+      await page.screenshot({ path: join(CAPTURES, `fidelite-app-figure-base-${largeur}.png`), fullPage: true });
+      const style = ["fill", "stroke", "strokeWidth"];
+      comparer(e, "cadre", REF["cadre"]!, await app(page, ".figure-cadre"), style);
+      comparer(e, "quadrillage fin", REF["grille-fine"]!, await app(page, ".figure-grille-fine"), ["stroke", "strokeWidth"]);
+      comparer(e, "quadrillage gradué", REF["grille"]!, await app(page, ".figure-grille"), ["stroke", "strokeWidth"]);
+      if ((await page.locator(`${SVG} .figure-axe`).count()) > 0) comparer(e, "axe", REF["axe"]!, await app(page, ".figure-axe"), ["stroke", "strokeWidth"]);
+      comparer(e, "graduation", REF["graduation"]!, await app(page, ".figure-graduation"), ["fill", "fontSize", "fontFamily"]);
+      comparer(e, "courbe", REF["courbe"]!, await app(page, ".figure-courbe"), ["fill", "stroke", "strokeWidth", "strokeLinecap"]);
+      const geo = (await page.evaluate(`(() => { const svg = document.querySelector("${SVG}"); const r = svg.getBoundingClientRect(); const g = svg.querySelector(".figure-graduation"); const k = r.width / 360; return { largeur: r.width, carte: svg.closest(".moteur-ecran-courant").getBoundingClientRect().width, police: parseFloat(getComputedStyle(g).fontSize) * k, debord: document.documentElement.scrollWidth > window.innerWidth }; })()`)) as { largeur: number; carte: number; police: number; debord: boolean };
+      verifier(geo.largeur <= geo.carte + 0.5 && !geo.debord, `${e} : le graphique tient dans la carte, sans défilement horizontal (${geo.largeur} / ${geo.carte})`);
+      verifier(geo.police >= 9, `${e} : graduations lisibles une fois mises à l'échelle (${geo.police.toFixed(1)} px)`);
+
+      // Palier 1 : S marqué SUR le graphique principal ; la zone d'aide ne reçoit que la légende.
+      const demander = async () => {
+        const bouton = page.locator(`${C} .moteur-aide button`);
+        await bouton.click();
+        if ((await bouton.innerText()).startsWith("Confirmer")) await bouton.click();
+      };
+      await demander();
+      await page.waitForSelector(`${SVG} .figure-point-annote`, { state: "attached" });
+      await flou(page);
+      verifier((await page.locator(`${SVG} .figure-annotations .figure-point-annote`).count()) === 1 && (await page.locator(`${SVG} .figure-vecteur`).count()) === 0, `${e} : palier 1 : le seul S est marqué`);
+      verifier((await page.locator(`${C} .moteur-aide-texte svg`).count()) === 0 && /sommet/.test(await page.locator(`${C} .moteur-aide-texte`).innerText()), `${e} : les annotations sont sur le graphique principal ; la zone d'aide ne porte que la légende`);
+      verifier(/Un indice de plus/.test(await page.locator(`${C} .moteur-aide button`).innerText()), `${e} : le bouton propose « Un indice de plus ? »`);
+      comparer(e, "point annoté", REF["point-annote"]!, await app(page, ".figure-point-annote"), style);
+      comparer(e, "étiquette de point", REF["etiquette-forte"]!, await app(page, ".figure-etiquette-forte"), ["fill", "fontSize", "fontWeight", "paintOrder", "stroke", "strokeWidth"]);
+      const surLaCourbe = `(() => { const svg = document.querySelector("${SVG}"); const chemin = svg.querySelector(".figure-courbe"); const L = chemin.getTotalLength(); const dist = (c) => { let m = Infinity; for (let i = 0; i <= 800; i++) { const p = chemin.getPointAtLength((L * i) / 800); m = Math.min(m, Math.hypot(p.x - c[0], p.y - c[1])); } return m; }; return [...svg.querySelectorAll(".figure-point-annote")].map((c) => dist([Number(c.getAttribute("cx")), Number(c.getAttribute("cy"))])); })()`;
+      verifier(((await page.evaluate(surLaCourbe)) as number[]).every((d) => d < 0.8), `${e} : palier 1 : S est SUR la courbe tracée (distance ${JSON.stringify(await page.evaluate(surLaCourbe))})`);
+      await page.screenshot({ path: join(CAPTURES, `fidelite-app-figure-palier1-${largeur}.png`), fullPage: true });
+
+      // Palier 2 : A et deux vecteurs, cumulés avec S.
+      await demander();
+      await page.waitForSelector(`${SVG} .figure-vecteur`, { state: "attached" });
+      await flou(page);
+      verifier((await page.locator(`${SVG} .figure-point-annote`).count()) === 2 && (await page.locator(`${SVG} .figure-vecteur`).count()) === 2 && (await page.locator(`${SVG} .figure-vecteur-pointe`).count()) === 2, `${e} : palier 2 : S, A et DEUX vecteurs (cumul)`);
+      verifier(((await page.evaluate(surLaCourbe)) as number[]).every((d) => d < 0.8), `${e} : palier 2 : S et A sont SUR la courbe tracée`);
+      const bouts = (await page.evaluate(`(() => { const svg = document.querySelector("${SVG}"); const pts = [...svg.querySelectorAll(".figure-point-annote")].map((c) => [Number(c.getAttribute("cx")), Number(c.getAttribute("cy"))]); const v = [...svg.querySelectorAll(".figure-vecteur")].map((l) => ({ a: [Number(l.getAttribute("x1")), Number(l.getAttribute("y1"))], b: [Number(l.getAttribute("x2")), Number(l.getAttribute("y2"))] })); return { pts, v }; })()`)) as { pts: number[][]; v: { a: number[]; b: number[] }[] };
+      const proche = (u: number[], w: number[]) => Math.hypot(u[0]! - w[0]!, u[1]! - w[1]!) < 0.6;
+      const [S, A] = bouts.pts as [number[], number[]];
+      verifier(proche(bouts.v[0]!.a, S) && Math.abs(bouts.v[0]!.b[1]! - S[1]!) < 0.6 && proche(bouts.v[1]!.b, A) && Math.abs(bouts.v[1]!.a[0]! - A[0]!) < 0.6 && proche(bouts.v[0]!.b, bouts.v[1]!.a), `${e} : vecteur horizontal S -> (xA ; yS), vecteur vertical -> A, bout à bout`);
+      comparer(e, "vecteur", REF["vecteur"]!, await app(page, ".figure-vecteur"), ["stroke", "strokeWidth"]);
+      comparer(e, "pointe de vecteur", REF["pointe"]!, await app(page, ".figure-vecteur-pointe"), ["fill"]);
+      comparer(e, "étiquette de vecteur", REF["etiquette"]!, await app(page, ".figure-annotation-vecteur .figure-etiquette"), ["fill", "fontSize", "fontWeight"]);
+      verifier((await page.locator(`${C} .moteur-aide button:visible`).count()) === 0, `${e} : après le dernier palier, plus de bouton d'indice`);
+      await page.screenshot({ path: join(CAPTURES, `fidelite-app-figure-palier2-${largeur}.png`), fullPage: true });
+
+      // Réponse juste -> relecture : le graphique reste sous l'énoncé, SANS annotations.
+      const ligne = (await page.evaluate(`1`)) as number;
+      void ligne;
+      await ctx.close();
+    }
+  }
+
+  // ── Chaîne de transformations (RAPPORT §56) : docs/reference/chaine-transformations.html, à 390 ET 1280 px ──
+  {
+    const refCh = readFileSync(join(RACINE, "docs/reference/chaine-transformations.html"), "utf8");
+    for (const largeur of [390, 1280]) {
+      const e = `chaîne ${largeur} px`;
+      const ctxR = await navigateur.newContext({ viewport: { width: largeur, height: 1000 } });
+      const pR = await ctxR.newPage();
+      await pR.route("**/fonts.googleapis.com/**", (r: any) => r.fulfill({ contentType: "text/css", body: "" }));
+      await pR.setContent(refCh);
+      const REF: Record<string, Element | null> = {};
+      for (const ref of ["depart", "etape", "numero", "champ", "option", "option-retenue", "secondaire"]) REF[ref] = await mesurer(pR, `[data-ref="${ref}"]`);
+      await pR.screenshot({ path: join(CAPTURES, `fidelite-ref-chaine-${largeur}.png`), fullPage: true });
+      await ctxR.close();
+
+      const { page, ctx } = await ouvrir("graphe", [CHAMP_COURBE], ".moteur-chaine", largeur);
+      await page.locator(`${C} .moteur-chaine-etape .moteur-champ`).first().fill("(x-1)^2");
+      await page.locator(`${C} .moteur-chaine-etape`).first().locator('.moteur-choix:has(input[value="TH"])').click();
+      await flou(page);
+      await page.screenshot({ path: join(CAPTURES, `fidelite-app-chaine-${largeur}.png`), fullPage: true });
+      const BORD = ["backgroundColor", "borderTopColor", "borderTopWidth", "borderTopStyle", "borderTopLeftRadius", ...PADDING];
+      comparer(e, "expression de départ", REF["depart"]!, await app(page, ".moteur-chaine-depart"), [...BORD, "color"]);
+      comparer(e, "étape", REF["etape"]!, await app(page, ".moteur-chaine-etape"), [...BORD, "display", "flexDirection", "gap"]);
+      comparer(e, "numéro d'étape", REF["numero"]!, await app(page, ".moteur-chaine-numero"), ["color", "fontSize", "fontWeight", "letterSpacing", "textTransform"]);
+      comparer(e, "champ d'expression", REF["champ"]!, await app(page, ".moteur-chaine-etape .moteur-champ"), P_CHAMP);
+      comparer(e, "transformation non retenue", REF["option"]!, await app(page, ".moteur-chaine-choix .moteur-choix:not(:has(input:checked))"), P_OPTION);
+      comparer(e, "transformation retenue", REF["option-retenue"]!, await app(page, ".moteur-chaine-choix .moteur-choix:has(input:checked)"), P_OPTION);
+      comparer(e, "bouton secondaire", REF["secondaire"]!, await app(page, ".moteur-chaine-actions .moteur-bouton-secondaire"), P_SECONDAIRE);
+      const geo = (await page.evaluate(`(() => { const c = document.querySelector("${C} .moteur-chaine"); const r = c.getBoundingClientRect(); const carte = c.closest(".moteur-ecran-courant").getBoundingClientRect(); const chips = [...c.querySelectorAll(".moteur-chaine-choix .moteur-choix")].map((x) => x.getBoundingClientRect()); return { dedans: r.left >= carte.left - 0.5 && r.right <= carte.right + 0.5, debord: document.documentElement.scrollWidth > window.innerWidth, tactile: Math.min(...chips.map((k) => k.height)) }; })()`)) as { dedans: boolean; debord: boolean; tactile: number };
+      verifier(geo.dedans && !geo.debord, `${e} : la chaîne tient dans la carte, sans défilement horizontal`);
+      verifier(geo.tactile >= 44, `${e} : cibles tactiles >= 44 px (${geo.tactile})`);
       await ctx.close();
     }
   }

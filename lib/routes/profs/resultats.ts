@@ -29,6 +29,9 @@ interface ExerciceBrut {
   graine: number | null;
   /** Retour en arrière (RAPPORT §37) : exercice rendu ; nul = pas rendu. */
   remis_le: string | null;
+  /** RAPPORT §55 : ligne de composition d'origine et configuration figée de l'exercice ; `null` = historique / générateur sans configuration. */
+  composition_id: string | null;
+  configuration: unknown;
 }
 
 interface EleveBrut {
@@ -62,6 +65,9 @@ interface ExerciceResultat {
    */
   date_creation_tache: string;
   variante_id: string;
+  /** RAPPORT §55 : identité de la LIGNE de composition (deux lignes de même variante restent distinguables) et sa configuration figée ; `null` = historique / sans configuration. */
+  composition_id: string | null;
+  configuration: unknown;
   complet: boolean;
   champs: ChampResultat[];
   /**
@@ -144,7 +150,7 @@ async function exercicesEtElevesParTache(
 
   const { data: exercicesBruts, error } = await admin
     .from("exercices_assignes")
-    .select("id, tache_id, eleve_id, variante_id, champs_attendus, graine, remis_le")
+    .select("id, tache_id, eleve_id, variante_id, champs_attendus, graine, remis_le, composition_id, configuration")
     .eq("tache_id", tacheId)
     .returns<ExerciceBrut[]>();
   if (error) throw new Error(error.message);
@@ -180,7 +186,7 @@ async function exercicesEtElevesParClasse(
   const exercicesBruts = await recupererToutesLesLignes<ExerciceBrut>(() =>
     admin
       .from("exercices_assignes")
-      .select("id, tache_id, eleve_id, variante_id, champs_attendus, graine, remis_le")
+      .select("id, tache_id, eleve_id, variante_id, champs_attendus, graine, remis_le, composition_id, configuration")
       .in("eleve_id", eleveIds.length > 0 ? eleveIds : [""]),
   );
 
@@ -305,9 +311,9 @@ export const gererProfsResultats = avecGestionErreurs(async function handler(req
     parChamp.get(r.champ)!.push({ statut: r.statut as StatutVerification, fraction_correcte: r.fraction_correcte ?? null });
   }
   const contextesParTacheVariante = new Map<string, ContexteTache | null>();
-  const contexteDe = async (tacheIdEx: string, varianteId: string): Promise<ContexteTache | null> => {
-    const cle = `${tacheIdEx}:${varianteId}`;
-    if (!contextesParTacheVariante.has(cle)) contextesParTacheVariante.set(cle, await chargerContexteTache(admin, tacheIdEx, varianteId));
+  const contexteDe = async (tacheIdEx: string, varianteId: string, compositionId: string | null): Promise<ContexteTache | null> => {
+    const cle = `${tacheIdEx}:${compositionId ?? varianteId}`;
+    if (!contextesParTacheVariante.has(cle)) contextesParTacheVariante.set(cle, await chargerContexteTache(admin, tacheIdEx, varianteId, compositionId));
     return contextesParTacheVariante.get(cle)!;
   };
   const maintenant = new Date();
@@ -315,7 +321,7 @@ export const gererProfsResultats = avecGestionErreurs(async function handler(req
   const exercicesAvecRetour = new Set<string>();
   try {
     for (const ex of exercicesBruts) {
-      const contexte = ex.champs_attendus === null ? null : await contexteDe(ex.tache_id, ex.variante_id);
+      const contexte = ex.champs_attendus === null ? null : await contexteDe(ex.tache_id, ex.variante_id, ex.composition_id ?? null);
       if (ex.champs_attendus === null || contexte === null) continue;
       champsTerminesParExercice.set(ex.id, champsTermines(ex.champs_attendus, historiqueParExercice.get(ex.id) ?? new Map(), debutsParExercice.get(ex.id) ?? [], contexte, maintenant, ex.remis_le != null));
       if (contexte.retourArriere) exercicesAvecRetour.add(ex.id);
@@ -423,6 +429,8 @@ export const gererProfsResultats = avecGestionErreurs(async function handler(req
         nom_tache: nomTacheParId.get(ex.tache_id) ?? "(tâche introuvable)",
         date_creation_tache: dateTacheParId.get(ex.tache_id) ?? "",
         variante_id: ex.variante_id,
+        composition_id: ex.composition_id ?? null,
+        configuration: ex.configuration ?? null,
         // Définition UNIQUE (RAPPORT §37) : « complet » = chaque champ attendu est TERMINÉ (réussi, tentatives épuisées ou chrono écoulé), plus « a une réponse ».
         complet: ex.champs_attendus !== null && exerciceEstComplet(ex.champs_attendus, champsTerminesParExercice.get(ex.id) ?? new Set()),
         champs,

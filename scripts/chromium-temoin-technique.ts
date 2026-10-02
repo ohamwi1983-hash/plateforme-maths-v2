@@ -16,12 +16,13 @@ export {}; // module
 // Code exécuté DANS la page (fonctions passées à `locator.evaluate`) : le projet n'inclut pas la bibliothèque DOM.
 declare const getComputedStyle: (el: unknown) => Record<string, string>;
 
+import { injecterGenerateurConfigurable, VARIANTE_CONFIGURABLE } from "./support/generateurConfigurable";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { demarrerServeur, stubSupabase } from "./support/serveurChromium";
 import { appeler, creerScenario, creerTache, imposerProfilAssignation, installerBase, type Scenario } from "./support/harnaisRouteur";
 import {
-  CHAMP_ALLURE, CHAMP_AXE, CHAMP_COEFFICIENTS, CHAMP_DIVISEURS, CHAMP_EXTREMUM, CHAMP_IMAGE, CHAMP_PARITE, CHAMP_QUOTIENT, CHAMP_RACINES, CHAMP_SIGNES, CHAMP_SIGNES_VARIATION, CHAMP_SOMME,
+  CHAMP_ALLURE, CHAMP_AXE, CHAMP_COEFFICIENTS, CHAMP_COURBE, CHAMP_DIVISEURS, CHAMP_EXTREMUM, CHAMP_IMAGE, CHAMP_PARITE, CHAMP_QUOTIENT, CHAMP_RACINES, CHAMP_SIGNES, CHAMP_SIGNES_VARIATION, CHAMP_SOMME,
   generateurTemoinTechnique as temoin, graineDeProfil, reponseBruteCorrecte, VARIANTE_TEMOIN, type ExerciceEtendu, type ExerciceTemoin,
 } from "../src/generateurs/_temoinTechnique";
 
@@ -32,6 +33,12 @@ import { rangeesTableauMD } from "../src/generateurs/analyseFonctionMotifDelta/t
 import { projeterMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/cascade";
 import { champsMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/ecrans";
 import { fonctionEffective, fonctionVraie, type ExerciceMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/types";
+import { genererExerciceFx } from "../src/generateurs/fxDepuisGraphe/generation";
+import { chaineCanonique, transformationsAdmises, POLYNOME_DEPART } from "../src/generateurs/fxDepuisGraphe/chaine";
+import { latexFonction } from "../src/generateurs/fxDepuisGraphe/formatage";
+import { parametres as parametresFx, polynomeDe as polynomeDeFx, type Parametres as ParametresFx, type Transformation as TransformationFx } from "../src/generateurs/fxDepuisGraphe/types";
+import { constante as constanteFx, plusP as plusPFx } from "../src/generateurs/fxDepuisGraphe/polynome";
+import { rat as ratFx, signeR as signeRFx, type Rat as RatFx } from "../src/generateurs/analyseFonctionMotifDelta/exact/rationnel";
 
 const RACINE = join(__dirname, "..");
 const CAPTURES = process.env.CAPTURES_DIR ?? join(RACINE, "captures-chromium");
@@ -2148,6 +2155,520 @@ async function scenarioApercuRetour(navigateur: any, base: string, largeur: numb
   }
 }
 
+/**
+ * Écran « chaîne de transformations » (RAPPORT §56) sur le TÉMOIN (profil `graphe`) : étapes ajoutées / retirées dans les bornes, « Valider » inactif tant qu'une étape est incomplète,
+ * réponse envoyée = UNE chaîne JSON exacte, parties fausses par étape (retirées dès qu'on modifie l'étape), restauration sans altération (retour en arrière), relecture.
+ */
+async function scenarioChaineTransformations(navigateur: any, base: string, largeur: number) {
+  for (const tentatives of [2, 0]) {
+    const l = `${largeur} chaîne (${tentatives} essai${tentatives > 1 ? "s" : ""} en plus)`;
+    imposerProfilAssignation("graphe");
+    const s: Scenario = creerScenario();
+    installerBase(s.base);
+    const tacheId = creerTache(s, { nom: "Chaîne", feedback_immediat: true, tentatives_supplementaires: tentatives, variantes: [{ variante_id: VARIANTE_TEMOIN, nombre_exercices: 1 }] });
+    const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tacheId, eleve_ids: ["eleve-1"] } });
+    verifier(a.statut === 201, `${l} : assignation ${a.statut}`);
+    const ex = temoin.generer(Number(s.base.table("exercices_assignes")[0]!.graine));
+    const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+    const courant = page.locator(".moteur-ecran-courant");
+    const valider = courant.getByRole("button", { name: "Valider", exact: true });
+    // Écran 1 (courbe) : réponse juste, puis écran suivant.
+    await courant.locator(".moteur-champ").fill(reponseBruteCorrecte(ex, CHAMP_COURBE));
+    await valider.click();
+    await page.waitForSelector(".moteur-statut-correct");
+    await page.getByRole("button", { name: /Question suivante/ }).click();
+    await page.waitForSelector(".moteur-chaine");
+    const etapes = courant.locator(".moteur-chaine-etape");
+    const ajouter = courant.getByRole("button", { name: "Ajouter une étape" });
+    const retirer = courant.getByRole("button", { name: "Retirer la dernière étape" });
+    verifier((await etapes.count()) === 1 && (await retirer.isDisabled()) && (await valider.isDisabled()), `${l} : une étape au départ ; ni retrait ni validation possibles`);
+    verifier((await courant.locator(".moteur-chaine-choix").first().locator(".moteur-choix").count()) === 5, `${l} : le menu a toujours cinq transformations`);
+    for (let k = 0; k < 4; k++) await ajouter.click();
+    verifier((await etapes.count()) === 5 && (await ajouter.isDisabled()), `${l} : cinq étapes au plus (« Ajouter » désactivé)`);
+    for (let k = 0; k < 3; k++) await retirer.click();
+    verifier((await etapes.count()) === 2 && (await ajouter.isEnabled()), `${l} : retrait de la dernière étape`);
+    // Étape incomplète : pas de validation.
+    await etapes.nth(0).locator(".moteur-champ").fill("(x-1)^2");
+    await etapes.nth(0).locator('.moteur-choix:has(input[value="TH"])').click();
+    await etapes.nth(1).locator(".moteur-champ").fill("(x-1)^2+1");
+    verifier(await valider.isDisabled(), `${l} : une étape sans transformation : « Valider » reste inactif`);
+    await etapes.nth(1).locator('.moteur-choix:has(input[value="EV"])').click(); // fausse : TV attendue
+    verifier(await valider.isEnabled(), `${l} : toutes les étapes complètes : « Valider » actif`);
+    const avantEnvoi = reponsesEnvoyees(journal);
+    await valider.click();
+    await page.waitForSelector(".moteur-retour .moteur-statut");
+    verifier(reponsesEnvoyees(journal) === avantEnvoi + 1, `${l} : une seule requête pour la validation (étapes et frappes restent locales)`);
+    const envoye = JSON.parse(journal.requetes.filter((r: any) => r.methode === "POST" && r.url.endsWith("/api/reponses")).slice(-1)[0].corps ?? "{}");
+    verifier(Object.keys(envoye).sort().join() === "champ,exercice_assigne_id,reponse_brute" && envoye.reponse_brute === '{"etapes":[{"expression":"(x-1)^2","transformation":"TH"},{"expression":"(x-1)^2+1","transformation":"EV"}]}', `${l} : réponse envoyée = UNE chaîne JSON exacte (${envoye.reponse_brute})`);
+    verifier((await courant.locator(".moteur-statut-not_equivalent").count()) === 1, `${l} : verdict négatif`);
+    // Restauration sans altération (retour en arrière) : le composant relit sa propre réponse et la reproduit à l'identique.
+    const restaure = await page.evaluate(`(async () => { const { COMPOSANTS_ECRAN } = await import("/moteur/ecrans/index.js"); const ecran = { champ: "chaine", type: "chaine_transformations", choix: ${JSON.stringify(["TH", "TV", "EV", "CV", "SOX"].map((id) => ({ id, libelle: id })))}, etapesMin: 1, etapesMax: 5, depart: "x", consigne: "c" }; const brute = ${JSON.stringify(envoye.reponse_brute)}; const v = COMPOSANTS_ECRAN.chaine_transformations.creer(ecran, { surSoumission() {}, surChangement() {}, valeurInitiale: brute }); return v.lireReponse() === brute; })()`);
+    verifier(restaure === true, `${l} : valeurInitiale restaurée SANS altération`);
+    if (tentatives > 0) {
+      verifier((await courant.locator(".moteur-chaine-etape input.moteur-partie-fausse").count()) === 1 && (await etapes.nth(1).locator("input.moteur-champ").getAttribute("aria-invalid")) === "true" && (await etapes.nth(0).locator("input.moteur-champ").getAttribute("aria-invalid")) === null, `${l} : seule l'étape 2 est marquée fausse (aria-invalid)`);
+      verifier((await etapes.nth(1).locator(".moteur-choix.moteur-partie-fausse").count()) === 1 && (await etapes.nth(0).locator(".moteur-choix.moteur-partie-fausse").count()) === 0, `${l} : la transformation choisie à l'étape 2 est marquée`);
+      await etapes.nth(1).locator('.moteur-choix:has(input[value="TV"])').click();
+      verifier((await courant.locator(".moteur-partie-fausse").count()) === 0, `${l} : modifier l'étape retire sa marque`);
+      await valider.click();
+      await page.waitForSelector(".moteur-statut-correct");
+      verifier((await courant.locator(".moteur-chaine-etape input").first().isDisabled()) && (await ajouter.isDisabled()) && (await retirer.isDisabled()), `${l} : après la réussite, tout est verrouillé`);
+    } else {
+      // Plus d'essai : verrouillé, relecture avec l'étape fausse surlignée.
+      await page.getByRole("button", { name: /Voir la fin/ }).click();
+      await page.waitForSelector(".moteur-ecran-termine");
+      const pieces: string[] = await page.locator(".moteur-ecran-termine .moteur-piece-fausse").allInnerTexts();
+      verifier(pieces.length === 1 && pieces[0] === "(x-1)^2+1 (EV)", `${l} : relecture : l'étape 2 est surlignée (${JSON.stringify(pieces)})`);
+      verifier((await page.locator(".moteur-ecran-termine .moteur-reponse-eleve").last().innerText()).includes("(x-1)^2 (TH) ; (x-1)^2+1 (EV)"), `${l} : relecture : « Ta réponse » en texte d'élève`);
+    }
+    await page.screenshot({ path: join(CAPTURES, `${l.replace(/[ ()]/g, "-")}.png`), fullPage: true });
+    verifier(!(await page.evaluate("document.documentElement.scrollWidth > window.innerWidth")), `${l} : pas de défilement horizontal`);
+    verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+    await contexte.close();
+  }
+  imposerProfilAssignation("aleatoire");
+}
+
+/**
+ * Graphique d'écran et aide PAR PALIERS (RAPPORT §56) sur le TÉMOIN (profil `graphe`) : le graphique est servi sans annotation ; l'aide à deux paliers pose S puis A et les vecteurs SUR ce
+ * graphique ; recharger la page efface les annotations (état local) et « Revoir l'indice » rejoue le palier ATTEINT sans nouvelle pénalité ; en relecture le graphique reste, sans annotation.
+ */
+async function scenarioFigureAidePaliers(navigateur: any, base: string, largeur: number) {
+  const l = `${largeur} figure aide paliers`;
+  imposerProfilAssignation("graphe");
+  const s: Scenario = creerScenario();
+  installerBase(s.base);
+  const tacheId = creerTache(s, { nom: "Figure et paliers", aide_activee: true, aide_penalite_pourcent: 25, reponse_visible: true, variantes: [{ variante_id: VARIANTE_TEMOIN, nombre_exercices: 1 }] });
+  const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tacheId, eleve_ids: ["eleve-1"] } });
+  verifier(a.statut === 201, `${l} : assignation ${a.statut}`);
+  const ligne = s.base.table("exercices_assignes")[0]!;
+  const ex = temoin.generer(Number(ligne.graine));
+  const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+  const courant = page.locator(".moteur-ecran-courant");
+  const SVG = ".moteur-ecran-courant .figure-svg";
+  await page.waitForSelector(SVG);
+  verifier((await page.locator(`${SVG} .figure-annotations > *`).count()) === 0 && (await page.locator(".moteur-aide-texte").isHidden()), `${l} : graphique sans annotation, zone d'aide fermée`);
+  const demander = async () => {
+    const bouton = courant.locator(".moteur-aide button");
+    await bouton.click();
+    if ((await bouton.innerText()).startsWith("Confirmer")) await bouton.click();
+  };
+  await demander();
+  await page.waitForSelector(`${SVG} .figure-point-annote`, { state: "attached" });
+  verifier((await page.locator(`${SVG} .figure-point-annote`).count()) === 1, `${l} : palier 1 : S sur le graphique`);
+  await courant.locator(".moteur-aide button").click();
+  await page.waitForSelector(`${SVG} .figure-vecteur`, { state: "attached" });
+  verifier((await page.locator(`${SVG} .figure-point-annote`).count()) === 2 && (await page.locator(`${SVG} .figure-vecteur`).count()) === 2, `${l} : palier 2 : A et deux vecteurs en plus de S`);
+  verifier(journal.requetes.filter((r: any) => r.url.endsWith("/api/reponses/aide")).map((r: any) => JSON.parse(r.corps ?? "{}").palier).join() === ",2", `${l} : première demande SANS palier (le serveur choisit), la suivante palier 2 (${journal.requetes.filter((r: any) => r.url.endsWith("/api/reponses/aide")).map((r: any) => r.corps).join(" | ")})`);
+  // Rechargement : les annotations sont un état local, elles disparaissent ; « Revoir l'indice » rejoue le palier atteint (2), gratuitement.
+  await page.reload();
+  await page.waitForSelector(".carte-tache");
+  await page.locator(".carte-tache").click();
+  await page.waitForSelector(SVG);
+  verifier((await page.locator(`${SVG} .figure-annotations > *`).count()) === 0, `${l} : après rechargement, aucune annotation (état local)`);
+  verifier(/Revoir l'indice/.test(await courant.locator(".moteur-aide button").innerText()), `${l} : « Revoir l'indice » proposé (l'usage est enregistré côté serveur)`);
+  await courant.locator(".moteur-aide button").click();
+  await page.waitForSelector(`${SVG} .figure-vecteur`, { state: "attached" });
+  verifier((await page.locator(`${SVG} .figure-point-annote`).count()) === 2 && (await courant.locator(".moteur-aide button:visible").count()) === 0, `${l} : « Revoir » rejoue le palier ATTEINT (2) ; plus d'indice à proposer`);
+  verifier(s.base.table("aides_utilisees").length === 1 && s.base.table("aides_utilisees")[0]!.palier === 2, `${l} : une seule ligne d'usage, palier 2`);
+  // Réponse juste.
+  await courant.locator(".moteur-champ").fill(reponseBruteCorrecte(ex, CHAMP_COURBE));
+  await courant.getByRole("button", { name: "Valider", exact: true }).click();
+  await page.waitForSelector(".moteur-statut-correct");
+  await page.screenshot({ path: join(CAPTURES, `${l}-reponse.png`), fullPage: true });
+  // Écran suivant (la chaîne) : la MÊME figure, SANS les annotations de l'écran 1 (l'aide est par écran) ; puis fin de l'exercice.
+  await page.getByRole("button", { name: /Question suivante/ }).click();
+  await page.waitForSelector(".moteur-chaine");
+  verifier((await page.locator(`${SVG}`).count()) === 1 && (await page.locator(`${SVG} .figure-annotations > *`).count()) === 0, `${l} : écran suivant : même graphique, sans annotation`);
+  const etapes = courant.locator(".moteur-chaine-etape");
+  await courant.getByRole("button", { name: "Ajouter une étape" }).click();
+  await etapes.nth(0).locator(".moteur-champ").fill("(x-1)^2");
+  await etapes.nth(0).locator('.moteur-choix:has(input[value="TH"])').click();
+  await etapes.nth(1).locator(".moteur-champ").fill("(x-1)^2+1");
+  await etapes.nth(1).locator('.moteur-choix:has(input[value="TV"])').click();
+  await courant.getByRole("button", { name: "Valider", exact: true }).click();
+  await page.waitForSelector(".moteur-statut-correct");
+  await page.getByRole("button", { name: /Voir la fin/ }).click();
+  await page.waitForSelector(".moteur-ecran-termine");
+  verifier((await page.locator(".moteur-ecran-termine .figure-svg").count()) === 2 && (await page.locator(".moteur-ecran-termine .figure-annotations > *").count()) === 0, `${l} : relecture : le graphique reste sous chaque énoncé, sans annotation`);
+  verifier(!(await page.evaluate("document.documentElement.scrollWidth > window.innerWidth")), `${l} : pas de défilement horizontal`);
+  verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+  await contexte.close();
+  imposerProfilAssignation("aleatoire");
+}
+
+/**
+ * Configuration PAR LIGNE de composition (RAPPORT §55) dans le formulaire du professeur, avec le générateur de TEST à configuration (scripts/support/generateurConfigurable.ts) :
+ * il n'est ni dans le catalogue réel ni dans l'arbre JSON, donc injecté ici au registre/catalogue du serveur ET dans la page (arbre JSON + table de correspondance, par interception).
+ * Vérifie : lignes ajoutées/retirées, nouvelle ligne VIDE (jamais pré-cochée), message et bouton « Créer » désactivé, cases exclusives, doublons signalés, envoi et stockage de la
+ * configuration, restauration par liste ordonnée (Modifier / Dupliquer), aucun champ gen7 touché.
+ */
+async function scenarioConfigurationLigne(navigateur: any, base: string, largeur: number) {
+  const l = `${largeur} config ligne`;
+  const s: Scenario = creerScenario();
+  installerBase(s.base);
+  const retirer = injecterGenerateurConfigurable();
+  const { page, contexte, journal } = await preparerPage(navigateur, base, largeur, largeur < 600 ? 800 : 900, `prof:${s.profId}`, "p@x");
+  // Arbre JSON et correspondance : un générateur « 999 » de test au niveau 5e_4h, relié à la variante injectée.
+  await page.route("**/catalogue-generateurs-complet.json", async (route: any) => {
+    const reponse = await route.fetch();
+    const json = await reponse.json();
+    // Niveau « 5e_4h » : son regroupement suit le champ du JSON (le niveau « 4e » est rangé par une table de numéros qui ignorerait ce générateur de test).
+    json["5e_4h"].push({ ...json["5e_4h"][0], numero: 999, libelle: "999. Générateur configurable (test)", variantes: [{ axe: "variante", label: "Variante configurable (test)", exemple: "Exemple de test." }] });
+    await route.fulfill({ response: reponse, json });
+  });
+  await page.route("**/prof.html", async (route: any) => {
+    const reponse = await route.fetch();
+    const texte = (await reponse.text()).replace("const CORRESPONDANCE_JSON_VERS_PILOTE = {", `const CORRESPONDANCE_JSON_VERS_PILOTE = { "5e_4h:999": [{ index: 0, variante_id: "${VARIANTE_CONFIGURABLE}" }],`);
+    await route.fulfill({ response: reponse, body: texte });
+  });
+  await page.goto(base + "/prof.html");
+  await page.waitForSelector('button[data-onglet="taches"]:visible');
+  await page.locator('button[data-onglet="taches"]').click();
+  await page.locator("#bouton-accordeon-creer").click();
+  await page.waitForSelector("#composition-dynamique input.stepper-valeur", { state: "attached" });
+  await page.evaluate("document.querySelectorAll('#composition-dynamique details').forEach((d) => { d.open = true; })");
+  const bloc = `#composition-dynamique [data-config-variante-id="${VARIANTE_CONFIGURABLE}"]`;
+  verifier((await page.locator(bloc).count()) === 1 && (await page.locator(`${bloc} .ligne-config`).count()) === 0, `${l} : la variante à configuration est un BLOC de lignes, sans ligne au départ`);
+  verifier((await page.locator(`${bloc} input[data-variante-id]`).count()) === 0, `${l} : aucun champ « nombre d'exercices » unique pour cette variante`);
+  // gen7 : toujours un champ unique, non désactivé (discipline de câblage).
+  verifier((await page.locator('#composition-dynamique input[data-variante-id="af_motif_racine_nulle_rationnelle"]').count()) === 1, `${l} : gen7 garde son champ unique`);
+  await page.locator("#nom-tache").fill("Tâche configurée");
+
+  // Nouvelle ligne : VIDE, jamais pré-cochée ; « Créer » refusé tant qu'une ligne demandée est vide.
+  await page.locator(`${bloc} .ajouter-ligne-config`).click();
+  await page.locator(`${bloc} .ajouter-ligne-config`).click();
+  const lignes = page.locator(`${bloc} .ligne-config`);
+  verifier((await lignes.count()) === 2, `${l} : deux lignes ajoutées`);
+  verifier((await page.locator(`${bloc} input[data-case-id]:checked`).count()) === 0, `${l} : une nouvelle ligne naît VIDE (aucune case pré-cochée)`);
+  verifier((await lignes.nth(0).locator("input[data-variante-id]").inputValue()) === "1", `${l} : une nouvelle ligne demande 1 exercice`);
+  verifier((await page.locator(`${bloc} .message-config:visible`).count()) === 2 && (await page.locator(`${bloc} .message-config`).first().innerText()).trim() === "Sélectionnez au moins une case pour cette ligne.", `${l} : message explicite sous chaque ligne vide`);
+  verifier(await page.locator("#btn-creer-tache").isDisabled(), `${l} : « Créer » désactivé tant qu'une ligne demandée n'a aucune case`);
+
+  const cocher = async (ligne: number, id: string) => lignes.nth(ligne).locator(`.case-config:has(input[data-case-id="${id}"])`).click();
+  await cocher(0, "A");
+  await cocher(0, "B");
+  verifier((await page.locator(`${bloc} .message-config:visible`).count()) === 1, `${l} : le message disparaît quand une case est cochée (reste sur l'autre ligne)`);
+  // Cases exclusives B / C : cocher C décoche B.
+  await cocher(1, "B");
+  await cocher(1, "C");
+  verifier(!(await lignes.nth(1).locator('input[data-case-id="B"]').isChecked()) && (await lignes.nth(1).locator('input[data-case-id="C"]').isChecked()), `${l} : cases exclusives (cocher C décoche B)`);
+  verifier(await page.locator("#btn-creer-tache").isEnabled(), `${l} : « Créer » actif quand chaque ligne demandée a une case`);
+  // Doublon signalé : ligne 2 devient A + C ... puis identique à la ligne 1 (A + B).
+  await cocher(1, "A");
+  await cocher(1, "B");
+  verifier((await page.locator(`${bloc} .note-doublon-config:visible`).count()) === 2, `${l} : deux lignes identiques : note de fusion sur les deux`);
+  await cocher(1, "C");
+  verifier((await page.locator(`${bloc} .note-doublon-config:visible`).count()) === 0, `${l} : lignes différentes : plus de note`);
+  // Libellé de sélection (onglet « Sélection ») : la configuration y figure.
+  await page.locator('.onglet-composition[data-vue-composition="selection"]').click();
+  const selection = await page.locator("#composition-selection-contenu").innerText();
+  verifier(selection.includes("[Case A, Case B]") && selection.includes("[Case A, Case C]"), `${l} : la vue Sélection distingue les deux lignes par leur configuration (${selection.replace(/\n/g, " | ").slice(0, 160)})`);
+  await page.locator('.onglet-composition[data-vue-composition="parcourir"]').click();
+  await lignes.nth(1).locator("input[data-variante-id]").fill("3");
+  await page.screenshot({ path: join(CAPTURES, `${largeur}-config-ligne-formulaire.png`), fullPage: false });
+  verifier(!(await page.evaluate("document.documentElement.scrollWidth > window.innerWidth")), `${l} : pas de défilement horizontal de la page`);
+
+  // Envoi : la configuration part avec chaque ligne, stockée CANONIQUE.
+  await page.locator("#btn-creer-tache").click();
+  await page.waitForFunction(`document.getElementById("nom-tache").value === ""`);
+  const composition = s.base.table("taches_composition");
+  verifier(composition.length === 2 && composition.every((c) => c.variante_id === VARIANTE_CONFIGURABLE), `${l} : deux lignes de composition créées (${composition.length})`);
+  verifier(JSON.stringify(composition.map((c) => c.configuration)) === '[{"actives":["A","B"]},{"actives":["A","C"]}]' && JSON.stringify(composition.map((c) => c.nombre_exercices)) === "[1,3]", `${l} : configurations et nombres stockés (${JSON.stringify(composition.map((c) => [c.configuration, c.nombre_exercices]))})`);
+  verifier((await page.locator(`${bloc} .ligne-config`).count()) === 0, `${l} : après création le formulaire repart SANS ligne`);
+
+  // Restauration (Modifier / Dupliquer) par liste ordonnée, depuis ce que renvoie GET /api/taches.
+  const restaure = composition.map((c) => ({ variante_id: c.variante_id, nombre_exercices: c.nombre_exercices, chrono_duree_secondes: c.chrono_duree_secondes ?? null, configuration: c.configuration, id: c.id }));
+  await page.evaluate(`remplirFormulaireComposition(${JSON.stringify(restaure)})`);
+  const etat = await page.evaluate(`[...document.querySelectorAll('#composition-dynamique .ligne-config')].map((l) => ({ cases: [...l.querySelectorAll('input[data-case-id]:checked')].map((c) => c.dataset.caseId), n: l.querySelector('input[data-variante-id]').value }))`);
+  verifier(JSON.stringify(etat) === '[{"cases":["A","B"],"n":"1"},{"cases":["A","C"],"n":"3"}]', `${l} : restauration des deux lignes dans l'ordre (${JSON.stringify(etat)})`);
+  await page.evaluate("remplirFormulaireComposition([])");
+  verifier((await page.locator(`${bloc} .ligne-config`).count()) === 0, `${l} : restaurer une composition vide retire les lignes`);
+  // Retirer une ligne.
+  await page.locator(`${bloc} .ajouter-ligne-config`).click();
+  await page.locator(`${bloc} .retirer-ligne-config`).click();
+  verifier((await page.locator(`${bloc} .ligne-config`).count()) === 0, `${l} : « Retirer la ligne »`);
+
+  verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+  retirer();
+  await contexte.close();
+}
+
+// ══ gen8 « f(x) à partir du graphe » (RAPPORT §57) : câblage prof.html (CLAUDE.md « discipline de câblage »), puis parcours élève ══
+
+/**
+ * Câblage RÉEL de gen8 dans `prof.html` (aucune interception : vrai JSON, vraie table `CORRESPONDANCE_JSON_VERS_PILOTE`, vrai `GET /api/catalogue-generateurs`) : l'entrée « 67. f(x) à partir du
+ * graphe » est dans « La fonction du second degré », sa variante est un BLOC de lignes configurables (descripteur servi par le registre) dont le champ « nombre d'exercices » n'est PAS
+ * `disabled`, une tâche à DEUX lignes de configurations différentes est créée par l'interface, puis assignée par la route réelle.
+ */
+async function scenarioGen8Prof(navigateur: any, base: string, largeur: number) {
+  const l = `${largeur} gen8 prof`;
+  const s: Scenario = creerScenario();
+  installerBase(s.base);
+  const { page, contexte, journal } = await preparerPage(navigateur, base, largeur, largeur < 600 ? 800 : 900, `prof:${s.profId}`, "p@x");
+  await page.goto(base + "/prof.html");
+  await page.waitForSelector('button[data-onglet="taches"]:visible');
+  await page.locator('button[data-onglet="taches"]').click();
+  await page.locator("#bouton-accordeon-creer").click();
+  await page.waitForSelector("#composition-dynamique input.stepper-valeur", { state: "attached" });
+  await page.evaluate("document.querySelectorAll('#composition-dynamique details').forEach((d) => { d.open = true; })");
+  const bloc = '#composition-dynamique [data-config-variante-id="fx_depuis_graphe"]';
+  verifier((await page.locator(bloc).count()) === 1, `${l} : la variante fx_depuis_graphe est un bloc de lignes configurables (entrée JSON + correspondance + descripteur serveur)`);
+  const arbre = (await page.evaluate(`(() => { const d = document.querySelector('${bloc}').closest("details.arbre-generateur"); const chapitre = d.parentElement.closest("details"); return { generateur: d.querySelector("summary").textContent.trim(), chapitre: chapitre ? chapitre.querySelector("summary").textContent.trim() : null }; })()`)) as { generateur: string; chapitre: string | null };
+  verifier(arbre.generateur === "67. f(x) à partir du graphe" && /second degré/.test(arbre.chapitre ?? ""), `${l} : rangé sous « La fonction du second degré » (${JSON.stringify(arbre)})`);
+  verifier((await page.locator(`${bloc} .ligne-config`).count()) === 0 && (await page.locator(`${bloc} .ajouter-ligne-config`).isEnabled()), `${l} : aucune ligne au départ ; « Ajouter une ligne » actif (équivalent du champ non disabled)`);
+  await page.locator("#nom-tache").fill("f(x) depuis le graphe");
+  await page.locator(`${bloc} .ajouter-ligne-config`).click();
+  await page.locator(`${bloc} .ajouter-ligne-config`).click();
+  const lignes = page.locator(`${bloc} .ligne-config`);
+  const libellesCases: string[] = await lignes.nth(0).locator(".case-config").allInnerTexts();
+  verifier(libellesCases.map((t) => t.trim()).join("|") === "Translation horizontale (TH)|Translation verticale (TV)|Étirement vertical (EV)|Compression verticale (CV)|Symétrie d'axe Ox (SOX)", `${l} : les cinq cases, dans l'ordre du descripteur (${JSON.stringify(libellesCases)})`);
+  verifier((await page.locator(`${bloc} input[data-case-id]:checked`).count()) === 0 && (await page.locator(`${bloc} input[data-variante-id="fx_depuis_graphe"]:disabled`).count()) === 0 && (await lignes.nth(0).locator("input[data-variante-id]").isEnabled()), `${l} : cases vides, champs « nombre d'exercices » NON désactivés`);
+  verifier(await page.locator("#btn-creer-tache").isDisabled(), `${l} : « Créer » désactivé tant que les lignes n'ont aucune case`);
+  const cocher = async (ligne: number, id: string) => lignes.nth(ligne).locator(`.case-config:has(input[data-case-id="${id}"])`).click();
+  await cocher(0, "TH");
+  await cocher(0, "EV");
+  await cocher(0, "CV"); // exclusif avec EV : décoche EV
+  verifier(!(await lignes.nth(0).locator('input[data-case-id="EV"]').isChecked()) && (await lignes.nth(0).locator('input[data-case-id="CV"]').isChecked()), `${l} : EV et CV s'excluent (cocher CV décoche EV)`);
+  await cocher(0, "EV");
+  await cocher(1, "TV");
+  await cocher(1, "SOX");
+  await lignes.nth(1).locator("input[data-variante-id]").fill("2");
+  await page.screenshot({ path: join(CAPTURES, `${largeur}-gen8-prof-formulaire.png`), fullPage: false });
+  verifier(!(await page.evaluate("document.documentElement.scrollWidth > window.innerWidth")), `${l} : pas de défilement horizontal`);
+  verifier(await page.locator("#btn-creer-tache").isEnabled(), `${l} : « Créer » actif`);
+  await page.locator("#btn-creer-tache").click();
+  await page.waitForFunction(`document.getElementById("nom-tache").value === ""`);
+  const composition = s.base.table("taches_composition");
+  verifier(composition.length === 2 && composition.every((c) => c.variante_id === "fx_depuis_graphe" && c.generateur_id === "gen8"), `${l} : deux lignes de composition gen8 créées par l'interface`);
+  verifier(JSON.stringify(composition.map((c) => c.configuration)) === '[{"actives":["TH","EV"]},{"actives":["TV","SOX"]}]' && JSON.stringify(composition.map((c) => c.nombre_exercices)) === "[1,2]", `${l} : configurations canoniques et nombres stockés (${JSON.stringify(composition.map((c) => [c.configuration, c.nombre_exercices]))})`);
+  const tacheId = s.base.table("taches").find((t) => t.nom === "f(x) depuis le graphe")!.id as string;
+  const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tacheId, eleve_ids: ["eleve-1"] } });
+  verifier(a.statut === 201 && a.corps.nombre_exercices_generes === 3, `${l} : assignation de la tâche créée (${a.statut} ${JSON.stringify(a.corps)})`);
+  const exercices = s.base.table("exercices_assignes").filter((x) => x.tache_id === tacheId);
+  verifier(exercices.length === 3 && exercices.filter((x) => JSON.stringify(x.configuration) === '{"actives":["TH","EV"]}').length === 1 && exercices.filter((x) => JSON.stringify(x.configuration) === '{"actives":["TV","SOX"]}').length === 2 && exercices.every((x) => typeof x.composition_id === "string"), `${l} : exercices assignés : configuration figée et ligne d'origine`);
+  verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+  await contexte.close();
+}
+
+// ── gen8 : parcours ÉLÈVE dans le navigateur (vrai routeur, vrai registre) ──
+
+/** Écriture qu'un élève taperait pour `a(x − p)² + q` (relisible par `lirePolynome`) : `2(x-3)^2+1`, `(3/2)x^2-4`, `-(x+1)^2`. */
+function ecritureFx(g: ParametresFx): string {
+  const fraction = (r: RatFx): string => (r.d === 1 ? `${Math.abs(r.n)}` : `${Math.abs(r.n)}/${r.d}`);
+  const carre = signeRFx(g.p) === 0 ? "x^2" : `(x${signeRFx(g.p) > 0 ? "-" : "+"}${fraction(g.p)})^2`;
+  const unite = Math.abs(g.a.n) === 1 && g.a.d === 1;
+  const coef = unite ? "" : g.a.d === 1 ? `${Math.abs(g.a.n)}` : `(${fraction(g.a)})*`;
+  const corps = `${signeRFx(g.a) < 0 ? "-" : ""}${coef}${coef !== "" && g.a.d === 1 ? "*" : ""}${carre}`;
+  return signeRFx(g.q) === 0 ? corps : `${corps}${signeRFx(g.q) > 0 ? "+" : "-"}${fraction(g.q)}`;
+}
+
+/** Tâche gen8 d'UNE ligne (configuration donnée), assignée à l'élève avec la graine voulue ; renvoie l'exercice brut. */
+async function assignerFx(s: Scenario, actives: TransformationFx[], graine: number, options: { feedback?: boolean; visible?: boolean; aide?: boolean; tentatives?: number; nombre?: number } = {}) {
+  imposerProfilAssignation("aleatoire");
+  const cree = await appeler("taches", "POST", {
+    jeton: `prof:${s.profId}`,
+    corps: { nom: `gen8 ${actives.join("+")}`, feedback_immediat: options.feedback ?? true, reponse_visible: options.visible ?? true, tentatives_supplementaires: options.tentatives ?? 0, aide_activee: options.aide ?? false, composition: [{ variante_id: "fx_depuis_graphe", nombre_exercices: options.nombre ?? 1, configuration: { actives } }] },
+  });
+  verifier(cree.statut === 201, `gen8 ${actives.join("+")} : création de la tâche ${cree.statut} ${JSON.stringify(cree.corps)}`);
+  const origine = Math.random;
+  Math.random = () => graine / 2 ** 32;
+  try {
+    const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: cree.corps.id, eleve_ids: ["eleve-1"] } });
+    verifier(a.statut === 201, `gen8 ${actives.join("+")} : assignation ${a.statut} ${JSON.stringify(a.corps)}`);
+  } finally {
+    Math.random = origine;
+  }
+  const ligne = s.base.table("exercices_assignes").find((x) => x.tache_id === cree.corps.id)!;
+  const brut = genererExerciceFx(Number(ligne.graine), { actives });
+  return { brut, f: parametresFx(brut), tacheId: cree.corps.id as string, ligne };
+}
+
+/** Écran 1 : tape l'expression et valide (sans passer à la suite). */
+async function ecrireExpressionFx(page: any, texte: string): Promise<void> {
+  const courant = page.locator(".moteur-ecran-courant");
+  await courant.locator(".moteur-champ").fill(texte);
+  await courant.getByRole("button", { name: "Valider", exact: true }).click();
+}
+
+/** Écran 2 : compose la chaîne (étapes `[expression, transformation]`) et valide. */
+async function composerChaineFx(page: any, etapes: { expression: string; t: string }[]): Promise<void> {
+  const courant = page.locator(".moteur-ecran-courant");
+  await page.waitForSelector(".moteur-chaine");
+  for (let k = 1; k < etapes.length; k++) await courant.getByRole("button", { name: "Ajouter une étape" }).click();
+  const lignes = courant.locator(".moteur-chaine-etape");
+  for (let k = 0; k < etapes.length; k++) {
+    await lignes.nth(k).locator(".moteur-champ").fill(etapes[k]!.expression);
+    await lignes.nth(k).locator(`.moteur-choix:has(input[value="${etapes[k]!.t}"])`).click();
+  }
+  await courant.getByRole("button", { name: "Valider", exact: true }).click();
+}
+
+/** La chaîne canonique (étapes écrites comme un élève) qui atteint `g` avec les transformations ADMISES de `actives` pour cet élève. */
+const chaineEleveFx = (g: ParametresFx, actives: TransformationFx[]): { expression: string; t: string }[] =>
+  (chaineCanonique(g, transformationsAdmises(actives, g)) ?? []).map((e) => ({ expression: ecritureFx(e.apres), t: e.transformation }));
+
+/**
+ * Parcours gen8 complet dans le navigateur : (1) CHAQUE transformation seule puis plusieurs combinées, de la figure à la relecture, avec le score aux DEUX écrans (3 + 2 points) ;
+ * (2) une étape HORS SUJET, y compris deux étapes qui s'annulent numériquement ; (3) les DEUX paliers d'aide sur le graphique ; (4) l'option 4 : une réponse fausse à l'écran 1 donne un
+ * écran 2 sur SA fonction (sous correction coupée, rien n'est révélé avant la fin ; solution montrée : la vraie fonction).
+ */
+async function scenarioGen8Eleve(navigateur: any, base: string, largeur: number) {
+  const CONFIGS: { actives: TransformationFx[]; nom: string }[] = [
+    { actives: ["TH"], nom: "TH seule" },
+    { actives: ["TV"], nom: "TV seule" },
+    { actives: ["EV"], nom: "EV seule" },
+    { actives: ["CV"], nom: "CV seule" },
+    { actives: ["SOX"], nom: "SOX seule" },
+    { actives: ["TH", "TV", "EV", "SOX"], nom: "TH+TV+EV+SOX" },
+    { actives: ["TV", "CV", "SOX"], nom: "TV+CV+SOX" },
+  ];
+  // ── 1. Chaque transformation seule, puis combinées : parcours juste, score aux deux écrans ──
+  for (const cas of CONFIGS) {
+    const l = `${largeur} gen8 ${cas.nom}`;
+    const s: Scenario = creerScenario();
+    installerBase(s.base);
+    const { brut, f } = await assignerFx(s, cas.actives, 31337, { visible: true });
+    const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+    const courant = page.locator(".moteur-ecran-courant");
+    await page.waitForSelector(".moteur-ecran-courant .figure-svg");
+    verifier((await page.locator(".moteur-ecran-courant .figure-annotations > *").count()) === 0, `${l} : le graphique est servi SANS annotation`);
+    const consigne1 = await lireConsigneGen7(page);
+    verifier(consigne1.startsWith("Détermine l'expression analytique de la parabole ci-dessous.") && /forme canonique/.test(consigne1), `${l} : consigne de l'écran 1`);
+    await ecrireExpressionFx(page, ecritureFx(f));
+    await page.waitForSelector(".moteur-statut-correct");
+    await page.getByRole("button", { name: /Question suivante/ }).click();
+    await page.waitForSelector(".moteur-chaine");
+    const consigne2 = await lireConsigneGen7(page);
+    verifier(consigne2.includes(`$f(x) = ${latexFonction(f)}$`) && consigne2.startsWith("Détermine l'expression analytique de la parabole ci-dessous."), `${l} : l'écran 2 rappelle la consigne globale et reprend la fonction (« ${consigne2.slice(0, 120)} »)`);
+    verifier((await courant.locator(".moteur-chaine-choix").first().locator(".moteur-choix").count()) === 5 && (await courant.locator(".moteur-aide button").count()) === 0, `${l} : cinq transformations au menu quelle que soit la ligne ; aucun bouton d'aide`);
+    await composerChaineFx(page, chaineEleveFx(f, cas.actives));
+    await page.waitForSelector(".moteur-statut-correct");
+    verifier((await page.locator(".moteur-rappel-score").allInnerTexts()).join("|") === "3 / 3 pts", `${l} : score de l'écran 1 dans le rappel (${JSON.stringify(await page.locator(".moteur-rappel-score").allInnerTexts())})`);
+    await page.getByRole("button", { name: /Voir la fin/ }).click();
+    await page.waitForSelector(".moteur-fin");
+    const rangees: string[] = await page.locator(".moteur-fin .moteur-recap-table tbody tr").allInnerTexts();
+    verifier(rangees.length === 3 && /^Expression canonique\s+3 \/ 3 pts$/.test(rangees[0]!) && /^Chaîne de transformations\s+2 \/ 2 pts$/.test(rangees[1]!) && /^Total\s+5 \/ 5 pts$/.test(rangees[2]!), `${l} : score aux DEUX écrans et total 5 / 5 (${JSON.stringify(rangees)})`);
+    verifier(s.base.table("reponses").every((r) => r.statut === "correct") && s.base.table("reponses").length === 2, `${l} : deux réponses justes en base`);
+    await page.screenshot({ path: join(CAPTURES, `${largeur}-gen8-${cas.nom.replace(/[^A-Za-z0-9]+/g, "-")}.png`), fullPage: true });
+    verifier(!(await page.evaluate("document.documentElement.scrollWidth > window.innerWidth")), `${l} : pas de défilement horizontal`);
+    verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+    void brut;
+    await contexte.close();
+  }
+
+  // ── 2. Étape HORS SUJET (TH seule ; TV inactive) : +3 puis −3 qui s'annulent, la chaîne arrive pourtant à f ──
+  {
+    const l = `${largeur} gen8 hors sujet`;
+    const s: Scenario = creerScenario();
+    installerBase(s.base);
+    const { f } = await assignerFx(s, ["TH"], 4242, { visible: true });
+    const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+    await ecrireExpressionFx(page, ecritureFx(f));
+    await page.waitForSelector(".moteur-statut-correct");
+    await page.getByRole("button", { name: /Question suivante/ }).click();
+    const canonique = chaineEleveFx(f, ["TH"]);
+    const paire = [{ expression: "x^2+3", t: "TV" }, { expression: "x^2", t: "TV" }];
+    await composerChaineFx(page, [...paire, ...canonique]);
+    await page.waitForSelector(".moteur-statut-not_equivalent");
+    verifier((await page.locator(".moteur-ecran-courant .moteur-piece-fausse, .moteur-ecran-courant input.moteur-partie-fausse").count()) >= 2, `${l} : les deux étapes hors sujet sont surlignées alors que la chaîne arrive à f`);
+    const fausses = await page.evaluate(`[...document.querySelectorAll(".moteur-ecran-courant .moteur-chaine-etape")].map((e) => !!e.querySelector(".moteur-partie-fausse"))`);
+    verifier(JSON.stringify(fausses) === JSON.stringify([true, true, false]), `${l} : étapes 1 et 2 fausses, l'étape 3 (TH, active) n'est pas marquée (${JSON.stringify(fausses)})`);
+    await page.screenshot({ path: join(CAPTURES, `${largeur}-gen8-hors-sujet.png`), fullPage: true });
+    const rep = s.base.table("reponses").find((r) => r.champ === "chaine")!;
+    verifier(rep.statut === "not_equivalent" && String(rep.bug_detecte ?? "").includes("TRANSFORMATION_HORS_SUJET"), `${l} : faux en base, avec le code TRANSFORMATION_HORS_SUJET`);
+    verifier(!(await page.locator("body").innerText()).includes("HORS_SUJET"), `${l} : le code n'est jamais affiché à l'élève`);
+    await page.getByRole("button", { name: /Voir la fin/ }).click();
+    await page.waitForSelector(".moteur-fin");
+    const rangees: string[] = await page.locator(".moteur-fin .moteur-recap-table tbody tr").allInnerTexts();
+    const m = /^Chaîne de transformations\s+([0-9,]+) \/ 2 pts$/.exec(rangees[1] ?? "");
+    verifier(m !== null && Number(m[1]!.replace(",", ".")) > 0 && Number(m[1]!.replace(",", ".")) < 2, `${l} : score partiel de l'écran 2, entre 0 et 2 (${JSON.stringify(rangees)})`);
+    verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+    await contexte.close();
+  }
+
+  // ── 3. Les DEUX paliers d'aide sur le graphique de gen8 ──
+  {
+    const l = `${largeur} gen8 aide`;
+    const s: Scenario = creerScenario();
+    installerBase(s.base);
+    const { brut, f } = await assignerFx(s, ["TH", "TV", "EV"], 2718, { visible: true, aide: true });
+    const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+    const courant = page.locator(".moteur-ecran-courant");
+    const SVG = ".moteur-ecran-courant .figure-svg";
+    await page.waitForSelector(SVG);
+    const demander = async () => {
+      const bouton = courant.locator(".moteur-aide button");
+      await bouton.click();
+      if ((await bouton.innerText()).startsWith("Confirmer")) await bouton.click();
+    };
+    await demander();
+    await page.waitForSelector(`${SVG} .figure-point-annote`, { state: "attached" });
+    const etiquettes1: string[] = await page.locator(`${SVG} .figure-annotations text`).allTextContents();
+    verifier((await page.locator(`${SVG} .figure-point-annote`).count()) === 1 && etiquettes1.some((t) => t.includes(`S(${f.p.n} ; ${f.q.n})`)), `${l} : palier 1 : le sommet S(${f.p.n} ; ${f.q.n}) est marqué sur le graphique (${JSON.stringify(etiquettes1)})`);
+    await courant.locator(".moteur-aide button").click();
+    await page.waitForSelector(`${SVG} .figure-vecteur`, { state: "attached" });
+    const etiquettes2: string[] = await page.locator(`${SVG} .figure-annotations text`).allTextContents();
+    verifier((await page.locator(`${SVG} .figure-point-annote`).count()) === 2 && (await page.locator(`${SVG} .figure-vecteur`).count()) === 2 && etiquettes2.some((t) => t.startsWith("A(")), `${l} : palier 2 : A et les deux vecteurs s'ajoutent à S (${JSON.stringify(etiquettes2)})`);
+    verifier(etiquettes2.some((t) => t.trim() === "1") || etiquettes2.length >= 4, `${l} : les longueurs des deux écarts sont affichées`);
+    verifier(s.base.table("aides_utilisees").length === 1 && s.base.table("aides_utilisees")[0]!.palier === 2, `${l} : un seul usage d'aide, palier 2`);
+    await page.screenshot({ path: join(CAPTURES, `${largeur}-gen8-aide-palier-2.png`), fullPage: true });
+    await ecrireExpressionFx(page, ecritureFx(f));
+    await page.waitForSelector(".moteur-statut-correct");
+    verifier(!(await page.evaluate("document.documentElement.scrollWidth > window.innerWidth")), `${l} : pas de défilement horizontal`);
+    verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+    void brut;
+    await contexte.close();
+  }
+
+  // ── 4. Option 4 : une réponse fausse (inatteignable avec TH seule : q ≠ 0) à l'écran 1 ──
+  for (const regime of [
+    { nom: "coupée", o: { feedback: false, visible: false }, montree: false },
+    { nom: "immédiate sans case", o: { feedback: true, visible: false }, montree: false },
+    { nom: "immédiate avec case", o: { feedback: true, visible: true }, montree: true },
+  ]) {
+    const l = `${largeur} gen8 option 4 (${regime.nom})`;
+    const s: Scenario = creerScenario();
+    installerBase(s.base);
+    const { f } = await assignerFx(s, ["TH"], 99, regime.o);
+    const gEleve: ParametresFx = { a: ratFx(1), p: f.p, q: ratFx(5) }; // même p, q = 5 que TH ne justifie pas
+    const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+    await ecrireExpressionFx(page, ecritureFx(gEleve));
+    if (regime.o.feedback) await page.waitForSelector(".moteur-statut-not_equivalent");
+    else await page.waitForSelector(".moteur-statut");
+    if (!regime.o.feedback) verifier((await page.locator(".moteur-statut-correct, .moteur-statut-not_equivalent, .moteur-solution").count()) === 0, `${l} : aucun verdict ni solution après l'écran 1`);
+    if (regime.montree) verifier((await page.locator(".moteur-solution").count()) >= 1, `${l} : la solution de l'écran 1 est montrée`);
+    else verifier((await page.locator(".moteur-solution").count()) === 0, `${l} : la solution de l'écran 1 n'est PAS montrée`);
+    await page.getByRole("button", { name: /Question suivante/ }).click();
+    await page.waitForSelector(".moteur-chaine");
+    const consigne = await lireConsigneGen7(page);
+    const affichee = regime.montree ? f : gEleve;
+    verifier(consigne.includes(`$f(x) = ${latexFonction(affichee)}$`), `${l} : l'énoncé de l'écran 2 affiche ${regime.montree ? "la VRAIE fonction (§45)" : "la fonction confirmée par l'élève"} (« ${consigne.slice(0, 150)} »)`);
+    if (!regime.montree) verifier(!consigne.includes(`$f(x) = ${latexFonction(f)}$`), `${l} : la vraie fonction ne fuit pas`);
+    await composerChaineFx(page, chaineEleveFx(affichee, ["TH"]));
+    if (regime.o.feedback) {
+      await page.waitForSelector(".moteur-statut-correct");
+      verifier((await page.locator(".moteur-ecran-courant .moteur-statut-correct").count()) === 1, `${l} : la chaîne vers la fonction affichée est JUSTE, même avec une transformation que la ligne n'active pas`);
+    } else {
+      await page.waitForSelector(".moteur-statut, .moteur-fin, .moteur-retour");
+    }
+    await page.getByRole("button", { name: /Voir la fin/ }).click();
+    await page.waitForSelector(".moteur-fin");
+    const rangees: string[] = await page.locator(".moteur-fin .moteur-recap-table tbody tr").allInnerTexts();
+    const sansScore = regime.o.feedback && !regime.o.visible; // « le score suit la solution » (§50) : verdict seul, jamais de score
+    if (sansScore) verifier(rangees.length === 0 && (await page.locator(".moteur-rappel-score, .moteur-rappel-total-points").count()) === 0, `${l} : sans « Afficher la réponse attendue », aucun score n'est montré (verdicts seuls)`);
+    else verifier(rangees.length === 3 && /^Expression canonique\s+0 \/ 3 pts$/.test(rangees[0]!) && /^Chaîne de transformations\s+2 \/ 2 pts$/.test(rangees[1]!) && /^Total\s+2 \/ 5 pts$/.test(rangees[2]!), `${l} : à la fin, écran 1 = 0 / 3 et écran 2 = 2 / 2 : se tromper exprès ne rapporte JAMAIS plus que de réussir (${JSON.stringify(rangees)})`);
+    const reps = s.base.table("reponses");
+    verifier(reps.find((r) => r.champ === "chaine")?.statut === "correct" && reps.find((r) => r.champ === "expression")?.statut === "not_equivalent", `${l} : en base, écran 1 faux et écran 2 juste`);
+    await page.screenshot({ path: join(CAPTURES, `${largeur}-gen8-option-4-${regime.nom.replace(/[^A-Za-z]+/g, "-")}.png`), fullPage: true });
+    verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+    await contexte.close();
+  }
+  void constanteFx;
+  void plusPFx;
+  void polynomeDeFx;
+  void POLYNOME_DEPART;
+}
+
 /** Le professeur COMPOSE une tâche gen7 dans prof.html (champs actifs, création réelle), puis l'assigne ; l'élève la reçoit. */
 async function scenarioGen7Prof(navigateur: any, base: string, largeur: number) {
   const l = `${largeur}`;
@@ -2501,6 +3022,14 @@ async function main() {
   try {
     await temoinControleHttp(navigateur, url);
     for (const largeur of [390, 1280]) {
+      // Confort de développement : `SCENARIOS_GEN8_SEULEMENT=1` ne joue que les scénarios gen8 (la suite complète prend plusieurs minutes). Jamais utilisé pour valider une livraison.
+      if (process.env.SCENARIOS_GEN8_SEULEMENT === "1") {
+        await scenarioGen8Prof(navigateur, url, largeur);
+        controlerReponsesHttp(`${largeur} gen8 prof`);
+        await scenarioGen8Eleve(navigateur, url, largeur);
+        controlerReponsesHttp(`${largeur} gen8 élève`);
+        continue;
+      }
       // Chaque scénario est suivi du contrôle de ses réponses HTTP >= 400 (attendus déclarés à part, s'il y en a).
       await scenarioEleve(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} élève`);
@@ -2524,6 +3053,16 @@ async function main() {
       controlerReponsesHttp(`${largeur} gen7 coupé`);
       await scenarioGen7Prof(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} gen7 prof`);
+      await scenarioConfigurationLigne(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} config ligne`);
+      await scenarioGen8Prof(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} gen8 prof`);
+      await scenarioGen8Eleve(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} gen8 élève`);
+      await scenarioFigureAidePaliers(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} figure aide paliers`);
+      await scenarioChaineTransformations(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} chaîne`);
       await scenarioPartiesFausses(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} parties fausses`);
       await scenarioPartiesFaussesTemoin(navigateur, url, largeur);

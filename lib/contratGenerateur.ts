@@ -68,7 +68,24 @@ import type { AideTypee } from "./aideTypee";
  * serveur ne changent.
  */
 
-export type TypeEcran = "champ_expression" | "qcm" | "liste_valeurs" | "tableau_signes" | "champs_multiples" | "intervalle";
+export type TypeEcran = "champ_expression" | "qcm" | "liste_valeurs" | "tableau_signes" | "champs_multiples" | "intervalle" | "chaine_transformations";
+
+/**
+ * FIGURE d'un écran (RAPPORT §56) : un graphique STATIQUE, calculé par le générateur à partir de l'exercice BRUT (jamais d'une réponse de l'élève : il est identique sur tous les écrans de
+ * l'exercice), rendu par le moteur entre la consigne et la zone de réponse. Donnée pure, jamais du SVG. La parabole est transmise comme un arc de Bézier quadratique EXACT (départ,
+ * contrôle, arrivée) : aucun coefficient ni point remarquable n'est servi, et les marques posées ensuite par une aide (`annotations_figure`) sont sur la courbe par construction.
+ * `description` : texte alternatif GÉNÉRIQUE (« Graphique d'une parabole… »), jamais une indication sur la réponse.
+ */
+export interface FigureGrapheParabole {
+  type: "graphe_parabole";
+  fenetre: { xMin: number; xMax: number; yMin: number; yMax: number };
+  /** Graduations ÉTIQUETÉES (entiers du repère), dans la fenêtre. */
+  graduations: { x: number[]; y: number[] };
+  courbe: { x0: number; y0: number; xc: number; yc: number; x1: number; y1: number };
+  description: string;
+}
+
+export type FigureDeclaree = FigureGrapheParabole;
 
 interface EcranCommun {
   /** Identifiant du champ = `reponses.champ` en base. Unique dans un exercice. */
@@ -86,6 +103,8 @@ interface EcranCommun {
    * l'usage côté serveur (pénalité calculée serveur, jamais déclarée par le client).
    */
   aide?: string | AideTypee;
+  /** Figure affichée au-dessus de la zone de réponse (RAPPORT §56) ; absente = comportement inchangé. Identique d'un écran à l'autre d'un même exercice si le générateur le veut. */
+  figure?: FigureDeclaree;
   /**
    * Poids de CET écran dans le score de l'exercice (RAPPORT §17) : entier ≥ 1 ; absent = 1. Sert
    * uniquement à pondérer l'agrégation « champs corrects / champs comptés » (lib/poidsEcran.ts, seule
@@ -241,8 +260,25 @@ export interface EcranIntervalle extends EcranCommun {
   apercu?: { libelle: string; auDessus?: boolean };
 }
 
+/**
+ * `chaine_transformations` (RAPPORT §56) : une CHAÎNE d'étapes, de `etapesMin` à `etapesMax`, chacune une paire (expression libre, transformation choisie parmi `choix`). L'élève part de
+ * `depart` et écrit, à chaque étape, l'expression obtenue et le nom de la transformation appliquée. `choix` est TOUJOURS la même liste, quelle que soit la configuration de la ligne de
+ * composition (le menu ne trahit pas les transformations actives). Réponse envoyée : UNE chaîne JSON `{"etapes":[{"expression":"…","transformation":"<id>"}, …]}` (décodeur
+ * `decoderChaineTransformations`) ; étapes ajoutées, texte tapé et choix non confirmés restent dans le composant. Parties fausses : `etape:<i>` (0-indexé) désigne une étape entière.
+ */
+export interface EcranChaineTransformations extends EcranCommun {
+  type: "chaine_transformations";
+  /** Expression de départ (texte d'auteur, balisage `$…$` admis) : « $f_0(x) = x^2$ ». */
+  depart: string;
+  choix: { id: string; libelle: string }[];
+  etapesMin: number;
+  etapesMax: number;
+  placeholder?: string;
+}
+
 export type EcranDeclare =
   | EcranChampExpression
+  | EcranChaineTransformations
   | EcranQcm
   | EcranListeValeurs
   | EcranTableauSignes
@@ -304,9 +340,35 @@ export type ResultatVerification =
       messageErreur: string;
     };
 
+/**
+ * Configuration PAR LIGNE de composition de tâche (RAPPORT §55, `docs/AUDIT-config-par-ligne-composition.md`) : un générateur qui la déclare laisse le professeur choisir, ligne par
+ * ligne, parmi des CASES (ex. les transformations actives de gen8) — jamais une multiplication de `variante_id`. UNE seule forme (`cases`) : en ajouter une est une décision de contrat.
+ *  - La configuration est stockée sous sa forme CANONIQUE `{ actives: string[] }` (`lib/configurationLigne.ts`, seule autorité) : identifiants connus, sans doublon, dans l'ordre de `cases`.
+ *  - Une ligne SANS case cochée est REFUSÉE (400) : aucune configuration par défaut n'est jamais choisie à la place du professeur, une nouvelle ligne naît vide.
+ *  - `exclusifs` : groupes d'identifiants dont AU PLUS un peut être actif ensemble (ex. `["EV", "CV"]`).
+ *  - Elle est copiée sur chaque `exercices_assignes` à l'assignation (figée) : `generer(graine, configuration)` ne relit jamais la ligne de composition.
+ */
+export interface DescripteurConfigurationCases {
+  type: "cases";
+  /** Titre du bloc de cases (texte d'auteur). */
+  libelle: string;
+  cases: { id: string; libelle: string }[];
+  exclusifs?: string[][];
+}
+
+/** Forme canonique d'une configuration de ligne `cases`. */
+export interface ConfigurationCases {
+  actives: string[];
+}
+
 export interface Generateur<TExercice = unknown> {
   variante_id: string;
   generateur_id: string;
+  /**
+   * OPTIONNEL : ce générateur exige une configuration par ligne de composition. Absent (gen7, témoin) : toute configuration fournie est refusée, `generer` ne reçoit jamais de second
+   * argument et le comportement est strictement inchangé. Présent : une configuration valide et non vide est OBLIGATOIRE sur chaque ligne.
+   */
+  configuration?: DescripteurConfigurationCases;
   /**
    * `false` pour un générateur technique (témoin) : ses codes de compétence ne sont alors pas
    * contrôlés contre `lib/dictionnaireCompetences.ts`, et il ne doit JAMAIS figurer dans
@@ -322,9 +384,10 @@ export interface Generateur<TExercice = unknown> {
    * L'exercice n'est PAS stocké : il est régénéré à chaque appel depuis `exercices_assignes.graine`.
    * Conséquence : toute modification qui change ce que `generer` produit pour une graine donnée doit
    * s'accompagner d'un NOUVEAU `variante_id` (suffixe `_v2`…), sans quoi les exercices déjà assignés
-   * changeraient sous les pieds des élèves.
+   * changeraient sous les pieds des élèves. Même règle pour le couple `(graine, configuration)` : ajouter une case = compatible, changer le sens d'une case existante = nouveau `variante_id`.
+   * `configuration` n'est transmise que par `genererPourLigne` (`lib/genererPourLigne.ts`, SEUL appelant de `generer` en production) et seulement pour un générateur qui la déclare.
    */
-  generer(graine: number): TExercice;
+  generer(graine: number, configuration?: ConfigurationCases): TExercice;
   /** Écrans de l'exercice, dans l'ordre. Donnée pure : ne contient jamais la solution. */
   ecrans(exercice: TExercice): EcranDeclare[];
   /** Dérivé uniquement de `exercice` et des réponses confirmées — jamais d'une saisie en cours. */

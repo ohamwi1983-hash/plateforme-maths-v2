@@ -4,6 +4,7 @@ import { validerDependances } from "./cascadeEcrans";
 import { amontsTransitifs, dernieresReponsesValides } from "./reponsesValides";
 import { chercherGenerateur } from "./registreGenerateurs";
 import { estGraineValide } from "./prng";
+import { ConfigurationDeLigneInvalide, genererPourLigne } from "./genererPourLigne";
 import {
   calculerChronoExpire,
   calculerEtatChampTentatives,
@@ -29,12 +30,16 @@ export interface LigneExerciceAssigne {
   generateur_id: string;
   variante_id: string;
   graine: number | null;
+  /** Identité de la ligne de composition d'origine (RAPPORT §55) ; `null` pour une ligne historique. */
+  composition_id?: string | null;
+  /** Configuration FIGÉE à l'assignation (RAPPORT §55) ; `null` pour un générateur qui n'en déclare pas. */
+  configuration?: unknown;
   champs_attendus: string[] | null;
   /** Retour en arrière (RAPPORT §37) : instant de remise de l'exercice ; nul/absent = pas rendu. */
   remis_le?: string | null;
 }
 
-export const COLONNES_EXERCICE_ASSIGNE = "id, tache_id, eleve_id, generateur_id, variante_id, graine, champs_attendus, remis_le";
+export const COLONNES_EXERCICE_ASSIGNE = "id, tache_id, eleve_id, generateur_id, variante_id, graine, champs_attendus, remis_le, composition_id, configuration";
 
 export interface ExerciceRegenere {
   ligne: LigneExerciceAssigne;
@@ -53,7 +58,13 @@ export function regenererExercice(ligne: LigneExerciceAssigne): ExerciceRegenere
   // Postgres `bigint` remonte en nombre via PostgREST ; tolère aussi une chaîne numérique.
   const graine = ligne.graine === null || ligne.graine === undefined ? null : Number(ligne.graine);
   if (!generateur || graine === null || !estGraineValide(graine)) return null;
-  const exercice = generateur.generer(graine);
+  let exercice: unknown;
+  try {
+    exercice = genererPourLigne(generateur, graine, ligne.configuration ?? null);
+  } catch (e) {
+    if (e instanceof ConfigurationDeLigneInvalide) return null; // configuration figée absente ou invalide : ligne non exécutable (409), jamais exécutée avec un défaut
+    throw e;
+  }
   return { ligne, generateur, exercice, ecrans: generateur.ecrans(exercice) };
 }
 
@@ -61,11 +72,16 @@ export function regenererExercice(ligne: LigneExerciceAssigne): ExerciceRegenere
  * Écrans déclarés d'une ligne `exercices_assignes` (`variante_id` + `graine`), pour les lecteurs qui n'ont besoin que de leur
  * STRUCTURE (`dependDe`) sans exécuter l'exercice — même repli que `poidsDesChampsDeLigne` : ligne non exécutable -> `null`.
  */
-export function ecransDeLigne(ligne: { variante_id: string; graine?: number | string | null }): EcranDeclare[] | null {
+export function ecransDeLigne(ligne: { variante_id: string; graine?: number | string | null; configuration: unknown }): EcranDeclare[] | null {
   const generateur = chercherGenerateur(ligne.variante_id);
   const graine = ligne.graine === null || ligne.graine === undefined ? null : Number(ligne.graine);
   if (!generateur || graine === null || !estGraineValide(graine)) return null;
-  return generateur.ecrans(generateur.generer(graine));
+  try {
+    return generateur.ecrans(genererPourLigne(generateur, graine, ligne.configuration));
+  } catch (e) {
+    if (e instanceof ConfigurationDeLigneInvalide) return null;
+    throw e;
+  }
 }
 
 /** Exercice tel que l'ÉLÈVE le voit (RAPPORT §18) : les données dérivées d'un écran précédent viennent de ses réponses confirmées. */
@@ -114,7 +130,11 @@ export interface ContexteTache {
   retourArriere: boolean;
 }
 
-export async function chargerContexteTache(admin: AdminClient, tacheId: string, varianteId: string): Promise<ContexteTache | null> {
+/**
+ * `compositionId` (RAPPORT §55) : identité de la LIGNE de composition de l'exercice — le chrono propre à la ligne en dépend (deux lignes de même variante peuvent avoir deux durées).
+ * `null`/absent (exercice historique, sans ligne identifiée) : résolution d'origine par `(tâche, variante)`.
+ */
+export async function chargerContexteTache(admin: AdminClient, tacheId: string, varianteId: string, compositionId: string | null = null): Promise<ContexteTache | null> {
   const { data: tache, error } = await admin
     .from("taches")
     .select("nom, feedback_immediat, reponse_visible, tentatives_supplementaires, aide_activee, aide_penalite_pourcent, chrono_mode, chrono_duree_secondes, autoriser_retour_arriere")
@@ -123,7 +143,7 @@ export async function chargerContexteTache(admin: AdminClient, tacheId: string, 
   if (error) throw new Error(error.message);
   if (!tache) return null;
   const chronoMode = tache.chrono_mode as ChronoMode;
-  const chronoDureeSecondes = await resoudreChronoDureeSecondes(admin, tacheId, varianteId, chronoMode, tache.chrono_duree_secondes as number | null);
+  const chronoDureeSecondes = await resoudreChronoDureeSecondes(admin, tacheId, varianteId, chronoMode, tache.chrono_duree_secondes as number | null, compositionId);
   return {
     nom: tache.nom as string,
     reglages: { feedback_immediat: tache.feedback_immediat as boolean, reponse_visible: tache.reponse_visible as boolean },
@@ -153,6 +173,8 @@ export interface DonneesExercice {
   reponsesParChamp: Map<string, LigneReponse[]>;
   debuts: LigneDebutEcran[];
   champsAvecAide: Set<string>;
+  /** Palier d'aide atteint par champ (RAPPORT §56) ; absent = aide sans paliers (palier 1 dès qu'elle est utilisée). */
+  paliersAide?: Map<string, number>;
 }
 
 /** Lecture bornée à UN exercice (jamais soumise au plafond de 1000 lignes). */
@@ -165,14 +187,16 @@ export async function chargerDonneesExercice(admin: AdminClient, exerciceId: str
   if (erreurReponses) throw new Error(erreurReponses.message);
   const { data: debuts, error: erreurDebuts } = await admin.from("debuts_ecran").select("champ, horodatage_debut").eq("exercice_assigne_id", exerciceId);
   if (erreurDebuts) throw new Error(erreurDebuts.message);
-  const { data: aides, error: erreurAides } = await admin.from("aides_utilisees").select("champ").eq("exercice_assigne_id", exerciceId);
+  const { data: aides, error: erreurAides } = await admin.from("aides_utilisees").select("champ, palier").eq("exercice_assigne_id", exerciceId);
   if (erreurAides) throw new Error(erreurAides.message);
 
-  return donneesDepuisLignes(
+  const donnees = donneesDepuisLignes(
     (reponses ?? []) as LigneReponse[],
     (debuts ?? []) as LigneDebutEcran[],
     new Set((aides ?? []).map((a) => a.champ as string)),
   );
+  donnees.paliersAide = new Map((aides ?? []).map((a) => [a.champ as string, typeof a.palier === "number" ? a.palier : 1]));
+  return donnees;
 }
 
 /** Construit `DonneesExercice` depuis les lignes brutes (chronologique croissant) — point unique du regroupement par champ. */

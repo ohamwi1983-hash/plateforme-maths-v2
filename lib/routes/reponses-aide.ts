@@ -1,7 +1,7 @@
 import type { RequeteHttp, ReponseHttp } from "../httpTypes";
 import { avecGestionErreurs } from "../avecGestionErreurs";
 import { eleveAuthentifie, supabaseAdmin } from "../supabaseAdmin";
-import { validerAide } from "../aideTypee";
+import { aideAuPalier, nombrePaliers, validerAide, type AideAnnotationsFigure } from "../aideTypee";
 import { calculerEtatExercice, chargerContexteTache, chargerDonneesExercice, COLONNES_EXERCICE_ASSIGNE, projeterExercice, regenererExercice, type LigneExerciceAssigne } from "../etatExercice";
 import { dependancesTerminees } from "../cascadeEcrans";
 
@@ -23,7 +23,13 @@ export const gererReponsesAide = avecGestionErreurs(async function handler(req: 
   }
   const corps = req.body as Record<string, unknown> | null;
   if (typeof corps !== "object" || corps === null || typeof corps.exercice_assigne_id !== "string" || typeof corps.champ !== "string") {
-    res.status(400).json({ erreur: "Corps invalide : { exercice_assigne_id, champ }" });
+    res.status(400).json({ erreur: "Corps invalide : { exercice_assigne_id, champ[, palier] }" });
+    return;
+  }
+  // `palier` (RAPPORT §56) : seulement pour une aide PAR PALIERS ; entier ≥ 1. Ignoré pour les autres aides.
+  const palierDemande = corps.palier;
+  if (palierDemande !== undefined && (typeof palierDemande !== "number" || !Number.isInteger(palierDemande) || palierDemande < 1)) {
+    res.status(400).json({ erreur: "Corps invalide : `palier` doit être un entier ≥ 1" });
     return;
   }
   const { exercice_assigne_id, champ } = corps as { exercice_assigne_id: string; champ: string };
@@ -45,7 +51,7 @@ export const gererReponsesAide = avecGestionErreurs(async function handler(req: 
     res.status(400).json({ erreur: `Champ inconnu pour cet exercice : ${champ}` });
     return;
   }
-  const contexte = await chargerContexteTache(admin, ligne.tache_id as string, ligne.variante_id as string);
+  const contexte = await chargerContexteTache(admin, ligne.tache_id as string, ligne.variante_id as string, (ligne.composition_id as string | null | undefined) ?? null);
   if (!contexte || !contexte.aideActivee) {
     res.status(403).json({ erreur: "L'aide n'est pas activée pour cette tâche" });
     return;
@@ -78,7 +84,35 @@ export const gererReponsesAide = avecGestionErreurs(async function handler(req: 
     return;
   }
 
-  const { error: erreurUpsert } = await admin.from("aides_utilisees").upsert({ exercice_assigne_id, champ }, { onConflict: "exercice_assigne_id,champ", ignoreDuplicates: true });
-  if (erreurUpsert) throw new Error(erreurUpsert.message);
-  res.status(200).json({ aide: ecranProjete.aide, penalite_pourcent: contexte.aidePenalitePourcent });
+  // Aide PAR PALIERS (`annotations_figure`, RAPPORT §56) : le serveur ne sert QUE le palier demandé (annotations cumulées), jamais les suivants. Palier demandé : 1..n ; permis
+  // seulement s'il est ≤ palier atteint + 1 (on ne saute pas un palier) ; sans `palier`, le premier ou, une fois l'aide utilisée, le palier atteint (rejouer est gratuit).
+  // Le palier atteint est enregistré CÔTÉ SERVEUR (`aides_utilisees.palier`) ; la pénalité reste binaire (un palier ou deux : même coût, décision D2).
+  const { data: ligneAide, error: erreurLecture } = await admin.from("aides_utilisees").select("palier").eq("exercice_assigne_id", exercice_assigne_id).eq("champ", champ).maybeSingle();
+  if (erreurLecture) throw new Error(erreurLecture.message);
+  const palierAtteint = ligneAide ? (typeof ligneAide.palier === "number" ? ligneAide.palier : 1) : 0;
+  const parPaliers = typeof ecranProjete.aide !== "string" && ecranProjete.aide.type === "annotations_figure";
+  if (!parPaliers) {
+    const { error: erreurUpsert } = await admin.from("aides_utilisees").upsert({ exercice_assigne_id, champ }, { onConflict: "exercice_assigne_id,champ", ignoreDuplicates: true });
+    if (erreurUpsert) throw new Error(erreurUpsert.message);
+    res.status(200).json({ aide: ecranProjete.aide, penalite_pourcent: contexte.aidePenalitePourcent });
+    return;
+  }
+  const total = nombrePaliers(ecranProjete.aide);
+  const palier = (palierDemande as number | undefined) ?? Math.max(1, palierAtteint);
+  if (palier > total) {
+    res.status(400).json({ erreur: `Cette aide n'a que ${total} palier${total > 1 ? "s" : ""}.` });
+    return;
+  }
+  if (palier > palierAtteint + 1) {
+    res.status(409).json({ erreur: "Demande d'abord le palier précédent." });
+    return;
+  }
+  if (palier > palierAtteint) {
+    const ecriture =
+      palierAtteint === 0
+        ? await admin.from("aides_utilisees").insert({ exercice_assigne_id, champ, palier })
+        : await admin.from("aides_utilisees").update({ palier }).eq("exercice_assigne_id", exercice_assigne_id).eq("champ", champ);
+    if (ecriture.error) throw new Error(ecriture.error.message);
+  }
+  res.status(200).json({ aide: aideAuPalier(ecranProjete.aide as AideAnnotationsFigure, palier), penalite_pourcent: contexte.aidePenalitePourcent });
 });

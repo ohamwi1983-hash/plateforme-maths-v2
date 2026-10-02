@@ -194,3 +194,12 @@ alter table invitations_prof add column if not exists cree_par uuid references p
 -- Retour en arrière (RAPPORT §37) : voir supabase/schema.sql pour la justification complète. Idempotent.
 alter table taches add column if not exists autoriser_retour_arriere boolean not null default false;
 alter table exercices_assignes add column if not exists remis_le timestamptz;
+
+-- Configuration PAR LIGNE de composition (RAPPORT §55, docs/AUDIT-config-par-ligne-composition.md) : voir supabase/schema.sql pour la justification complète. Idempotent.
+-- À EXÉCUTER AVANT le déploiement du code : COLONNES_EXERCICE_ASSIGNE (lib/etatExercice.ts) lit `composition_id` et `configuration`, toutes les routes élèves échoueraient sinon.
+alter table taches_composition add column if not exists configuration jsonb;
+alter table exercices_assignes add column if not exists composition_id uuid references taches_composition(id) on delete set null;
+alter table exercices_assignes add column if not exists configuration jsonb;
+
+-- Aide par PALIERS (RAPPORT §56) : voir supabase/schema.sql. Idempotent. À exécuter avant le déploiement : `chargerDonneesExercice` lit `aides_utilisees.palier`.
+alter table aides_utilisees add column if not exists palier int not null default 1;

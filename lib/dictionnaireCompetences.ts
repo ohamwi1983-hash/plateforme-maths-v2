@@ -287,4 +287,27 @@ export const DICTIONNAIRE_COMPETENCES: Record<string, { libelle: string; descrip
     libelle: "Signe de la tangente",
     description: "Erreur sur le signe de la tangente dans un quadrant donné du cercle trigonométrique",
   },
+  // gen8 « f(x) à partir du graphe » (PROMPT-gen8-transformations.md, RAPPORT §56) : quatre codes DIAGNOSTIQUES de l'écran « expression canonique », jamais pris en compte dans la note.
+  // Les définitions sont PARTITIONNANTES (une réponse fausse reçoit au plus un de ces codes) : `src/generateurs/fxDepuisGraphe/codes.ts`. Distincts de `FORME_CANONIQUE_SIGNE_P` (ancien gen9,
+  // masqué aux professeurs) : autre détecteur, autre définition, grep fait avant de les créer.
+  SIGNE_P_INVERSE: {
+    libelle: "Signe de p inversé (forme canonique)",
+    description: "Expression canonique a(x − p)² + q avec a et q corrects mais p remplacé par son opposé : confusion sur le sens du décalage horizontal",
+  },
+  Q_INCORRECT: {
+    libelle: "Ordonnée du sommet incorrecte",
+    description: "Expression canonique avec a et p corrects mais une constante q fausse (seule l'ordonnée du sommet est mal lue)",
+  },
+  A_INCORRECT: {
+    libelle: "Coefficient a incorrect",
+    description: "Expression canonique avec p et q (le sommet) corrects mais un coefficient a faux (étirement, compression ou sens d'ouverture mal lus)",
+  },
+  P_MAGNITUDE_INCORRECTE: {
+    libelle: "Abscisse du sommet incorrecte",
+    description: "Expression canonique avec a et q corrects mais une abscisse p fausse qui n'est pas l'opposée de la vraie (valeur absolue mal lue)",
+  },
+  TRANSFORMATION_HORS_SUJET: {
+    libelle: "Transformation hors sujet",
+    description: "Étape de la chaîne bien formée algébriquement, mais utilisant une transformation que ni la ligne de la tâche ni la fonction visée ne justifient",
+  },
 };

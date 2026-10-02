@@ -1,0 +1,54 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Référence — chaîne de transformations</title>
+<!-- RÉFÉRENCE de l'écran « chaîne d'étapes » (RAPPORT §56) : expression de départ, puis des étapes répétables (numéro, expression libre, transformation choisie parmi cinq), et les deux
+     boutons « Ajouter une étape » / « Retirer la dernière étape ». Le champ de saisie, les choix et les boutons secondaires sont CEUX des composants existants (`composants-ecran.html`) :
+     seuls l'encadré de départ, l'enveloppe d'une étape et son numéro sont nouveaux. Valeurs = tokens du design system. `chromium-design` compare les styles CALCULÉS de
+     public/moteur/ecrans/chaineTransformations.js à ce fichier (390 et 1280 px). Exemple : x² -> (x − 2)² -> 3(x − 2)² -> 3(x − 2)² + 1. -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; padding: 16px; background: #FAF9FC; font-family: 'Inter', sans-serif; font-size: 16px; color: #1C1730; }
+  .carte { max-width: 560px; background: #FFFFFF; border: 1px solid #E9E4F3; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 16px; box-sizing: border-box; }
+  .depart { margin: 0; padding: 8px 16px; background: #F6F3FB; border: 1px solid #E9E4F3; border-radius: 13px; color: #1C1730; }
+  .etapes { display: flex; flex-direction: column; gap: 16px; margin: 0; padding: 0; list-style: none; }
+  .etape { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 16px; background: #FFFFFF; border: 1px solid #E9E4F3; border-radius: 13px; }
+  .numero { color: #3B1470; font-size: 0.8em; font-weight: 700; letter-spacing: 0.03em; }
+  .champ { box-sizing: border-box; width: 100%; min-height: 44px; padding: 10px 12px; font-family: 'Inter', sans-serif; font-size: 15.2px; color: #1C1730; background: #F6F3FB; border: 1px solid #E9E4F3; border-radius: 13px; }
+  .choix { display: flex; flex-wrap: wrap; gap: 8px; }
+  .option { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 14px; box-sizing: border-box; color: #1C1730; background: #FFFFFF; border: 1px solid #E9E4F3; border-radius: 13px; }
+  .option.retenue { color: #3B1470; font-weight: 600; background: #F1EBFC; border: 2px solid #7C3AED; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  /* Bouton secondaire du site (style.css) : fond transparent, 16 px, mêmes que « Ajouter une valeur » des listes — pas un style propre à cet écran. */
+  .secondaire { font-family: 'Inter', sans-serif; font-weight: 600; font-size: 16px; min-height: 44px; padding: 9px 16px; color: #7C3AED; background: transparent; border: 2px solid #7C3AED; border-radius: 13px; }
+</style>
+<div class="carte" data-ref="carte">
+  <p class="depart" data-ref="depart">f₀(x) = x²</p>
+  <ol class="etapes">
+    <li class="etape" data-ref="etape">
+      <span class="numero" data-ref="numero">Étape 1</span>
+      <input class="champ" data-ref="champ" value="(x-2)^2">
+      <div class="choix">
+        <label class="option retenue" data-ref="option-retenue">TH</label>
+        <label class="option" data-ref="option">TV</label>
+        <label class="option">EV</label>
+        <label class="option">CV</label>
+        <label class="option">SOX</label>
+      </div>
+    </li>
+    <li class="etape">
+      <span class="numero">Étape 2</span>
+      <input class="champ" value="3(x-2)^2">
+      <div class="choix">
+        <label class="option">TH</label>
+        <label class="option">TV</label>
+        <label class="option retenue">EV</label>
+        <label class="option">CV</label>
+        <label class="option">SOX</label>
+      </div>
+    </li>
+  </ol>
+  <div class="actions">
+    <button class="secondaire" data-ref="secondaire">Ajouter une étape</button>
+    <button class="secondaire">Retirer la dernière étape</button>
+  </div>
+</div>

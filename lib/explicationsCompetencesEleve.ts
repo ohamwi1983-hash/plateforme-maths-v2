@@ -57,4 +57,9 @@ export const EXPLICATIONS_COMPETENCES_ELEVE: Record<string, string> = {
   SIGNE_SIN_QUADRANT: "Revois le signe du sinus selon le quadrant du cercle trigonométrique.",
   SIGNE_COS_QUADRANT: "Revois le signe du cosinus selon le quadrant du cercle trigonométrique.",
   SIGNE_TAN_QUADRANT: "Revois le signe de la tangente selon le quadrant du cercle trigonométrique.",
+  SIGNE_P_INVERSE: "Tes nombres sont bons, mais le décalage horizontal est de l'autre côté : si le sommet est en x = 3, la parenthèse est (x − 3), pas (x + 3).",
+  Q_INCORRECT: "Ton coefficient et ton décalage horizontal sont bons — relis seulement la hauteur du sommet (la constante à la fin).",
+  A_INCORRECT: "Ton sommet est bon, mais pas le coefficient devant la parenthèse : utilise un second point de la courbe pour le retrouver.",
+  P_MAGNITUDE_INCORRECTE: "Ton coefficient et la hauteur du sommet sont bons — relis la position horizontale du sommet sur l'axe.",
+  TRANSFORMATION_HORS_SUJET: "Une de tes étapes est bien calculée, mais elle utilise une transformation qui n'est pas nécessaire pour passer de x² à cette fonction — cherche un chemin plus direct.",
 };

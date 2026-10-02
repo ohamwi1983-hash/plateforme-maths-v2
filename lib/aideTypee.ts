@@ -1,8 +1,8 @@
 import { commandesInterditesDans } from "./balisageMath";
 
 /**
- * Aide TYPÉE : exactement DEUX formes, pas une de plus (une troisième forme = nouvelle décision de
- * contrat). Une aide reste une donnée : jamais du HTML, jamais du code. Elle n'est jamais envoyée avec
+ * Aide TYPÉE : exactement TROIS formes (la troisième, `annotations_figure`, est une décision de contrat du propriétaire, RAPPORT §56) ; une quatrième = nouvelle décision de
+ * contrat. Une aide reste une donnée : jamais du HTML, jamais du code. Elle n'est jamais envoyée avec
  * l'écran, seulement par `POST /api/reponses/aide` (qui en enregistre l'usage côté serveur), et le
  * serveur la VALIDE avant de la servir (`validerAide`) : une aide invalide n'est ni servie ni comptée.
  *
@@ -39,7 +39,65 @@ export interface AideCroquisParabole {
   marquesOx?: boolean;
 }
 
-export type AideTypee = AideFormuleColoree | AideCroquisParabole;
+/**
+ * Annotation d'une FIGURE déjà affichée (RAPPORT §56) : un point étiqueté, ou un vecteur étiqueté (flèche de `de` à `vers`). Coordonnées dans le REPÈRE de la figure (mêmes unités
+ * que `fenetre`). L'étiquette est du TEXTE BRUT (rendu dans le SVG : ni `$`, ni LaTeX).
+ */
+export type Annotation =
+  | { genre: "point"; x: number; y: number; etiquette: string }
+  | { genre: "vecteur"; de: [number, number]; vers: [number, number]; etiquette: string };
+
+export interface PalierAnnotations {
+  /** Texte d'AUTEUR (balisage `$…$` admis) affiché dans la zone d'aide, à côté du graphique annoté. */
+  legende: string;
+  annotations: Annotation[];
+}
+
+/**
+ * 3ᵉ forme d'aide typée (décision de contrat du propriétaire, RAPPORT §56) : des PALIERS d'annotations posées sur la figure de l'écran. Déclarée ENTIÈRE par le générateur, jamais envoyée
+ * avec l'écran : `POST /api/reponses/aide` ne sert que le palier demandé, sous la forme `AideAnnotationsFigureServie` (annotations CUMULÉES des paliers ≤ p). Un palier `p` n'est servi que si
+ * le palier `p − 1` l'a été (état serveur : `aides_utilisees.palier`).
+ */
+export interface AideAnnotationsFigure {
+  type: "annotations_figure";
+  paliers: PalierAnnotations[];
+}
+
+/** Ce que le navigateur reçoit pour `annotations_figure` : un palier, annotations cumulées, nombre total de paliers (pour proposer « Un indice de plus »). */
+export interface AideAnnotationsFigureServie {
+  type: "annotations_figure";
+  palier: number;
+  palierTotal: number;
+  legende: string;
+  annotations: Annotation[];
+}
+
+export type AideTypee = AideFormuleColoree | AideCroquisParabole | AideAnnotationsFigure;
+
+export const PALIERS_MAX = 3;
+export const ANNOTATIONS_PAR_PALIER_MAX = 6;
+export const ETIQUETTE_LONGUEUR_MAX = 60;
+export const COORDONNEE_MAX = 1e6;
+
+/** Nombre de paliers d'une aide DÉCLARÉE (1 pour toute aide sans paliers). */
+export function nombrePaliers(aide: unknown): number {
+  if (typeof aide === "object" && aide !== null && (aide as { type?: unknown }).type === "annotations_figure" && Array.isArray((aide as { paliers?: unknown }).paliers)) {
+    return (aide as { paliers: unknown[] }).paliers.length;
+  }
+  return 1;
+}
+
+/** Réduit une aide VALIDÉE au palier `palier` (1-indexé) : annotations cumulées des paliers ≤ `palier`, légende du palier `palier`. */
+export function aideAuPalier(aide: AideAnnotationsFigure, palier: number): AideAnnotationsFigureServie {
+  const retenus = aide.paliers.slice(0, palier);
+  return {
+    type: "annotations_figure",
+    palier,
+    palierTotal: aide.paliers.length,
+    legende: (retenus[retenus.length - 1] as PalierAnnotations).legende,
+    annotations: retenus.flatMap((p) => p.annotations),
+  };
+}
 
 export const NB_SEGMENTS_MAX = 40;
 export const LONGUEUR_LATEX_MAX = 200;
@@ -96,7 +154,54 @@ export function validerAide(aide: unknown): string[] {
     return problemes;
   }
 
-  return [`aide typée : type inconnu « ${String(objet.type)} » (formule_coloree ou croquis_parabole)`];
+  if (objet.type === "annotations_figure") {
+    for (const k of clesInconnues(objet, ["type", "paliers"])) problemes.push(`annotations_figure : clé inconnue « ${k} »`);
+    if (!Array.isArray(objet.paliers) || objet.paliers.length === 0 || objet.paliers.length > PALIERS_MAX) {
+      problemes.push(`annotations_figure : \`paliers\` doit être un tableau de 1 à ${PALIERS_MAX} paliers`);
+      return problemes;
+    }
+    const nombre = (v: unknown): boolean => typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= COORDONNEE_MAX;
+    const couple = (v: unknown): boolean => Array.isArray(v) && v.length === 2 && v.every(nombre);
+    objet.paliers.forEach((palier: unknown, i: number) => {
+      const lieu = `annotations_figure : palier ${i + 1}`;
+      if (typeof palier !== "object" || palier === null || Array.isArray(palier)) {
+        problemes.push(`${lieu} : objet attendu`);
+        return;
+      }
+      const p = palier as Record<string, unknown>;
+      for (const k of clesInconnues(p, ["legende", "annotations"])) problemes.push(`${lieu} : clé inconnue « ${k} »`);
+      if (typeof p.legende !== "string" || p.legende.trim() === "") problemes.push(`${lieu} : \`legende\` doit être une chaîne non vide`);
+      else {
+        if (p.legende.length > LONGUEUR_LATEX_MAX) problemes.push(`${lieu} : légende de ${p.legende.length} caractères (maximum ${LONGUEUR_LATEX_MAX})`);
+        for (const c of commandesInterditesDans(p.legende)) problemes.push(`${lieu} : commande interdite \\${c}`);
+      }
+      if (!Array.isArray(p.annotations) || p.annotations.length === 0 || p.annotations.length > ANNOTATIONS_PAR_PALIER_MAX) {
+        problemes.push(`${lieu} : \`annotations\` doit contenir de 1 à ${ANNOTATIONS_PAR_PALIER_MAX} annotations`);
+        return;
+      }
+      p.annotations.forEach((a: unknown, j: number) => {
+        const ou = `${lieu}, annotation ${j + 1}`;
+        if (typeof a !== "object" || a === null || Array.isArray(a)) {
+          problemes.push(`${ou} : objet attendu`);
+          return;
+        }
+        const an = a as Record<string, unknown>;
+        if (an.genre === "point") {
+          for (const k of clesInconnues(an, ["genre", "x", "y", "etiquette"])) problemes.push(`${ou} : clé inconnue « ${k} »`);
+          if (!nombre(an.x) || !nombre(an.y)) problemes.push(`${ou} : x et y doivent être des nombres finis (|v| ≤ ${COORDONNEE_MAX})`);
+        } else if (an.genre === "vecteur") {
+          for (const k of clesInconnues(an, ["genre", "de", "vers", "etiquette"])) problemes.push(`${ou} : clé inconnue « ${k} »`);
+          if (!couple(an.de) || !couple(an.vers)) problemes.push(`${ou} : de et vers doivent être des couples de nombres finis`);
+        } else problemes.push(`${ou} : genre « ${String(an.genre)} » inconnu (point ou vecteur)`);
+        if (typeof an.etiquette !== "string" || an.etiquette.trim() === "" || an.etiquette.length > ETIQUETTE_LONGUEUR_MAX || /[$\\]/.test(an.etiquette)) {
+          problemes.push(`${ou} : \`etiquette\` doit être un texte brut non vide (≤ ${ETIQUETTE_LONGUEUR_MAX} caractères, sans « $ » ni « \\ »)`);
+        }
+      });
+    });
+    return problemes;
+  }
+
+  return [`aide typée : type inconnu « ${String(objet.type)} » (formule_coloree, croquis_parabole ou annotations_figure)`];
 }
 
 /** Une aide est « présente » (donc `aide_disponible`) si c'est une chaîne non vide ou un objet ; sa VALIDITÉ n'est contrôlée qu'à la livraison. */
