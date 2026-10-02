@@ -26,5 +26,11 @@ export const gererCatalogueGenerateurs = avecGestionErreurs(async function handl
     return;
   }
 
-  res.status(200).json(CATALOGUE_GENERATEURS.map((entree) => ({ ...entree, executable: chercherGenerateur(entree.variante_id) !== null })));
+  res.status(200).json(
+    CATALOGUE_GENERATEURS.map((entree) => {
+      const generateur = chercherGenerateur(entree.variante_id);
+      // `configuration` (RAPPORT §55) : descripteur des cases que le professeur coche PAR LIGNE de composition ; absent pour un générateur sans configuration (gen7). Dérivé du registre, jamais d'une liste à part.
+      return { ...entree, executable: generateur !== null, ...(generateur?.configuration ? { configuration: generateur.configuration } : {}) };
+    }),
+  );
 });

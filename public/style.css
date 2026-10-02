@@ -1458,6 +1458,95 @@ input.stepper-valeur::-webkit-outer-spin-button {
 }
 
 /*
+ * Configuration PAR LIGNE de composition (RAPPORT §55) — variante dont le générateur déclare des cases (ex. les transformations de gen8) : un bloc de LIGNES (cases + nombre + durée)
+ * que le professeur ajoute et retire. Tokens du design system uniquement ; aucune valeur en dur hors 0/1/2px.
+ */
+#composition-dynamique .ligne-configurable {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+#composition-dynamique .lignes-config {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+}
+
+#composition-dynamique .ligne-config {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+  padding: var(--espace-2) var(--espace-3);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+#composition-dynamique .cases-config {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-2) var(--espace-3);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+#composition-dynamique .cases-config legend {
+  padding: 0;
+  margin-bottom: var(--espace-1);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+#composition-dynamique .case-config {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espace-1);
+  margin: 0;
+  min-height: var(--espace-5);
+  cursor: pointer;
+}
+
+#composition-dynamique .rangee-config {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--espace-2);
+}
+
+#composition-dynamique .message-config {
+  margin: 0;
+  color: var(--danger);
+  font-weight: 600;
+}
+
+#composition-dynamique .note-doublon-config {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.85em;
+}
+
+#composition-dynamique .message-config[hidden],
+#composition-dynamique .note-doublon-config[hidden] {
+  display: none;
+}
+
+#composition-dynamique .ajouter-ligne-config,
+#composition-dynamique .retirer-ligne-config {
+  width: auto;
+  align-self: flex-start;
+}
+
+/* Action destructive discrète : pas le bouton plein violet de l'action principale. */
+#composition-dynamique .retirer-ligne-config {
+  background: var(--surface);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  box-shadow: none;
+}
+
+/*
  * Onglets "Parcourir"/"Sélection" au-dessus de l'arbre — même pilule que `.chip-categorie` (tokens
  * de couleur), jamais une nouvelle palette : `--violet-vif` actif, `--surface-sunken` inactif.
  */

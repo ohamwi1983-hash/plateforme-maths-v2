@@ -41,7 +41,7 @@ export async function categorieTachePourEleve(admin: AdminClient, tacheId: strin
   // une tâche dont les champs avaient tous expiré restait « en cours » ici alors que le tableau de bord la disait terminée.
   const { data: exercices, error: erreurExercices } = await admin
     .from("exercices_assignes")
-    .select("id, champs_attendus, variante_id, remis_le")
+    .select("id, champs_attendus, variante_id, remis_le, composition_id")
     .eq("tache_id", tacheId)
     .eq("eleve_id", eleveId);
   if (erreurExercices) throw new Error(erreurExercices.message);
@@ -78,11 +78,13 @@ export async function categorieTachePourEleve(admin: AdminClient, tacheId: strin
       continue;
     }
     const varianteId = ex.variante_id as string;
-    if (!contextes.has(varianteId)) {
-      const contexte = await chargerContexteTache(admin, tacheId, varianteId);
-      contextes.set(varianteId, contexte ?? { tentativesMax: tentativesMaxEffectif(true, 0), aidePenalitePourcent: 0, chronoMode: "aucun", chronoDureeSecondes: null, retourArriere: false });
+    const compositionId = (ex.composition_id as string | null | undefined) ?? null;
+    const cleContexte = compositionId ?? varianteId; // contexte par LIGNE de composition (RAPPORT §55)
+    if (!contextes.has(cleContexte)) {
+      const contexte = await chargerContexteTache(admin, tacheId, varianteId, compositionId);
+      contextes.set(cleContexte, contexte ?? { tentativesMax: tentativesMaxEffectif(true, 0), aidePenalitePourcent: 0, chronoMode: "aucun", chronoDureeSecondes: null, retourArriere: false });
     }
-    const termines = champsTermines(champsAttendus, historiqueParExercice.get(ex.id as string) ?? new Map(), debutsParExercice.get(ex.id as string) ?? [], contextes.get(varianteId)!, maintenant, ex.remis_le != null);
+    const termines = champsTermines(champsAttendus, historiqueParExercice.get(ex.id as string) ?? new Map(), debutsParExercice.get(ex.id as string) ?? [], contextes.get(cleContexte)!, maintenant, ex.remis_le != null);
     completions.push(exerciceEstComplet(champsAttendus, termines));
   }
   const complete = tacheEstComplete(completions);

@@ -1,7 +1,7 @@
 import type { RequeteHttp, ReponseHttp } from "../../httpTypes";
 import { avecGestionErreurs } from "../../avecGestionErreurs";
 import { profAuthentifie, supabaseAdmin } from "../../supabaseAdmin";
-import { generateurIdPourVariante } from "../../catalogueGenerateurs";
+import { lignesDeComposition } from "../../lignesComposition";
 import { estCorpsValide, validerComposition } from "../../validationCorpsTaches";
 import { tacheEstAssignee } from "../../tacheAssignee";
 import { chargerTacheDuProf } from "../../tacheDuProf";
@@ -39,7 +39,7 @@ async function modifierTache(req: RequeteHttp, res: ReponseHttp, params: Record<
     return;
   }
 
-  const resultatComposition = validerComposition(req.body.composition);
+  const resultatComposition = validerComposition(req.body.composition, req.body.chrono_mode ?? "aucun");
   if (!resultatComposition.ok) {
     res.status(400).json({ erreur: resultatComposition.erreur });
     return;
@@ -72,16 +72,7 @@ async function modifierTache(req: RequeteHttp, res: ReponseHttp, params: Record<
     return;
   }
 
-  const lignes = composition.map((ligne) => ({
-    tache_id: tache.id,
-    generateur_id: generateurIdPourVariante(ligne.variante_id),
-    variante_id: ligne.variante_id,
-    nombre_exercices: ligne.nombre_exercices,
-    // Correctif "Chrono par variante" : même règle qu'à la création (POST /api/taches) — `null`
-    // si absente du corps, repli sur `taches.chrono_duree_secondes` (voir
-    // lib/resoudreChronoDureeSecondes.ts).
-    chrono_duree_secondes: ligne.chrono_duree_secondes ?? null,
-  }));
+  const lignes = lignesDeComposition(tache.id, composition);
   const { error: erreurInsertion } = await admin.from("taches_composition").insert(lignes);
   if (erreurInsertion) {
     res.status(500).json({ erreur: "Échec du remplacement de la composition", detail: erreurInsertion.message });

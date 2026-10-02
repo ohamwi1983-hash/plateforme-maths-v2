@@ -29,6 +29,7 @@
     "test-reponse-visible": "tsx scripts/test-reponse-visible.ts",
     "test-cascade-revelee": "tsx scripts/test-cascade-revelee.ts",
     "test-solution-structuree": "tsx scripts/test-solution-structuree.ts",
+    "test-configuration-ligne": "tsx scripts/test-configuration-ligne.ts",
     "test-exact-motif-delta": "tsx scripts/test-exact-motif-delta.ts",
     "test-generation-motif-delta": "tsx scripts/test-generation-motif-delta.ts",
     "test-croquis-reels": "tsx scripts/test-croquis-reels.ts",

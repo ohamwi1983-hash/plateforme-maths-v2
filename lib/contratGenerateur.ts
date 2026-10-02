@@ -304,9 +304,35 @@ export type ResultatVerification =
       messageErreur: string;
     };
 
+/**
+ * Configuration PAR LIGNE de composition de tâche (RAPPORT §55, `docs/AUDIT-config-par-ligne-composition.md`) : un générateur qui la déclare laisse le professeur choisir, ligne par
+ * ligne, parmi des CASES (ex. les transformations actives de gen8) — jamais une multiplication de `variante_id`. UNE seule forme (`cases`) : en ajouter une est une décision de contrat.
+ *  - La configuration est stockée sous sa forme CANONIQUE `{ actives: string[] }` (`lib/configurationLigne.ts`, seule autorité) : identifiants connus, sans doublon, dans l'ordre de `cases`.
+ *  - Une ligne SANS case cochée est REFUSÉE (400) : aucune configuration par défaut n'est jamais choisie à la place du professeur, une nouvelle ligne naît vide.
+ *  - `exclusifs` : groupes d'identifiants dont AU PLUS un peut être actif ensemble (ex. `["EV", "CV"]`).
+ *  - Elle est copiée sur chaque `exercices_assignes` à l'assignation (figée) : `generer(graine, configuration)` ne relit jamais la ligne de composition.
+ */
+export interface DescripteurConfigurationCases {
+  type: "cases";
+  /** Titre du bloc de cases (texte d'auteur). */
+  libelle: string;
+  cases: { id: string; libelle: string }[];
+  exclusifs?: string[][];
+}
+
+/** Forme canonique d'une configuration de ligne `cases`. */
+export interface ConfigurationCases {
+  actives: string[];
+}
+
 export interface Generateur<TExercice = unknown> {
   variante_id: string;
   generateur_id: string;
+  /**
+   * OPTIONNEL : ce générateur exige une configuration par ligne de composition. Absent (gen7, témoin) : toute configuration fournie est refusée, `generer` ne reçoit jamais de second
+   * argument et le comportement est strictement inchangé. Présent : une configuration valide et non vide est OBLIGATOIRE sur chaque ligne.
+   */
+  configuration?: DescripteurConfigurationCases;
   /**
    * `false` pour un générateur technique (témoin) : ses codes de compétence ne sont alors pas
    * contrôlés contre `lib/dictionnaireCompetences.ts`, et il ne doit JAMAIS figurer dans
@@ -322,9 +348,10 @@ export interface Generateur<TExercice = unknown> {
    * L'exercice n'est PAS stocké : il est régénéré à chaque appel depuis `exercices_assignes.graine`.
    * Conséquence : toute modification qui change ce que `generer` produit pour une graine donnée doit
    * s'accompagner d'un NOUVEAU `variante_id` (suffixe `_v2`…), sans quoi les exercices déjà assignés
-   * changeraient sous les pieds des élèves.
+   * changeraient sous les pieds des élèves. Même règle pour le couple `(graine, configuration)` : ajouter une case = compatible, changer le sens d'une case existante = nouveau `variante_id`.
+   * `configuration` n'est transmise que par `genererPourLigne` (`lib/genererPourLigne.ts`, SEUL appelant de `generer` en production) et seulement pour un générateur qui la déclare.
    */
-  generer(graine: number): TExercice;
+  generer(graine: number, configuration?: ConfigurationCases): TExercice;
   /** Écrans de l'exercice, dans l'ordre. Donnée pure : ne contient jamais la solution. */
   ecrans(exercice: TExercice): EcranDeclare[];
   /** Dérivé uniquement de `exercice` et des réponses confirmées — jamais d'une saisie en cours. */

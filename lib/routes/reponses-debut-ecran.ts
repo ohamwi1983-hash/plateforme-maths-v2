@@ -56,7 +56,7 @@ export const gererReponsesDebutEcran = avecGestionErreurs(async function handler
 
   const { data: exerciceAssigne, error } = await admin
     .from("exercices_assignes")
-    .select("tache_id, eleve_id, variante_id")
+    .select("tache_id, eleve_id, variante_id, composition_id")
     .eq("id", exercice_assigne_id)
     .maybeSingle();
   if (error || !exerciceAssigne || exerciceAssigne.eleve_id !== eleve.id) {
@@ -93,6 +93,7 @@ export const gererReponsesDebutEcran = avecGestionErreurs(async function handler
     exerciceAssigne.variante_id as string,
     chronoMode,
     tache.chrono_duree_secondes as number | null,
+    (exerciceAssigne.composition_id as string | null | undefined) ?? null,
   );
   if (chronoMode === "aucun" || chronoDureeSecondes === null) {
     res.status(200).json({ secondes_restantes: null });

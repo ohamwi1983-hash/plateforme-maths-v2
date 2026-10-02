@@ -1,14 +1,16 @@
 import type { RequeteHttp, ReponseHttp } from "../httpTypes";
 import { avecGestionErreurs } from "../avecGestionErreurs";
 import { profAuthentifie, supabaseAdmin } from "../supabaseAdmin";
-import { generateurIdPourVariante } from "../catalogueGenerateurs";
+import { lignesDeComposition } from "../lignesComposition";
 import { estCorpsValide, validerComposition } from "../validationCorpsTaches";
 
 interface LigneCompositionBrute {
+  id: string;
   tache_id: string;
   variante_id: string;
   nombre_exercices: number;
   chrono_duree_secondes: number | null;
+  configuration: unknown;
 }
 
 interface LigneAssignationBrute {
@@ -81,7 +83,7 @@ async function listerTaches(req: RequeteHttp, res: ReponseHttp): Promise<void> {
 
   const { data: compositions, error: erreurCompositions } = await admin
     .from("taches_composition")
-    .select("tache_id, variante_id, nombre_exercices, chrono_duree_secondes")
+    .select("id, tache_id, variante_id, nombre_exercices, chrono_duree_secondes, configuration")
     .in("tache_id", tacheIds)
     .returns<LigneCompositionBrute[]>();
   if (erreurCompositions) {
@@ -140,11 +142,14 @@ async function listerTaches(req: RequeteHttp, res: ReponseHttp): Promise<void> {
     for (const e of elevesAssignes ?? []) eleveNomParId.set(e.id as string, `${e.prenom as string} ${e.nom as string}`);
   }
 
-  const compositionParTache = new Map<string, { variante_id: string; nombre_exercices: number; chrono_duree_secondes: number | null }[]>();
+  const compositionParTache = new Map<string, { id: string; variante_id: string; nombre_exercices: number; chrono_duree_secondes: number | null; configuration: unknown }[]>();
   for (const ligne of compositions ?? []) {
     if (!compositionParTache.has(ligne.tache_id)) compositionParTache.set(ligne.tache_id, []);
     compositionParTache.get(ligne.tache_id)!.push({
+      id: ligne.id,
       variante_id: ligne.variante_id,
+      // Configuration canonique de la ligne (RAPPORT §55), `null` pour un générateur sans configuration : restaurée telle quelle par Modifier / Dupliquer.
+      configuration: ligne.configuration ?? null,
       nombre_exercices: ligne.nombre_exercices,
       // Correctif "Chrono par variante" : surcharge par ligne, exposée telle quelle au client —
       // `null` si aucune n'a été réglée pour cette ligne (repli sur le réglage de tâche).
@@ -228,7 +233,7 @@ async function creerTache(req: RequeteHttp, res: ReponseHttp): Promise<void> {
     return;
   }
 
-  const resultatComposition = validerComposition(req.body.composition);
+  const resultatComposition = validerComposition(req.body.composition, req.body.chrono_mode ?? "aucun");
   if (!resultatComposition.ok) {
     res.status(400).json({ erreur: resultatComposition.erreur });
     return;
@@ -259,15 +264,7 @@ async function creerTache(req: RequeteHttp, res: ReponseHttp): Promise<void> {
     return;
   }
 
-  const lignes = composition.map((ligne) => ({
-    tache_id: tache.id as string,
-    generateur_id: generateurIdPourVariante(ligne.variante_id),
-    variante_id: ligne.variante_id,
-    nombre_exercices: ligne.nombre_exercices,
-    // Correctif "Chrono par variante" : surcharge optionnelle, `null` si absente du corps —
-    // repli sur `taches.chrono_duree_secondes` (voir lib/resoudreChronoDureeSecondes.ts).
-    chrono_duree_secondes: ligne.chrono_duree_secondes ?? null,
-  }));
+  const lignes = lignesDeComposition(tache.id as string, composition);
   const { error: erreurComposition } = await admin.from("taches_composition").insert(lignes);
   if (erreurComposition) {
     res.status(500).json({ erreur: "Échec de création de la composition de la tâche", detail: erreurComposition.message });

@@ -89,7 +89,7 @@ export const gererReponses = avecGestionErreurs(async function handler(req: Requ
     return;
   }
 
-  const contexte = await chargerContexteTache(admin, ligne.tache_id as string, ligne.variante_id as string);
+  const contexte = await chargerContexteTache(admin, ligne.tache_id as string, ligne.variante_id as string, (ligne.composition_id as string | null | undefined) ?? null);
   if (!contexte) {
     res.status(404).json({ erreur: "Tâche associée introuvable" });
     return;

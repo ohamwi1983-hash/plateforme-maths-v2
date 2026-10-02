@@ -45,7 +45,7 @@ export const gererReponsesAide = avecGestionErreurs(async function handler(req: 
     res.status(400).json({ erreur: `Champ inconnu pour cet exercice : ${champ}` });
     return;
   }
-  const contexte = await chargerContexteTache(admin, ligne.tache_id as string, ligne.variante_id as string);
+  const contexte = await chargerContexteTache(admin, ligne.tache_id as string, ligne.variante_id as string, (ligne.composition_id as string | null | undefined) ?? null);
   if (!contexte || !contexte.aideActivee) {
     res.status(403).json({ erreur: "L'aide n'est pas activée pour cette tâche" });
     return;

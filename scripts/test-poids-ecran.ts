@@ -140,10 +140,10 @@ function blocPoidsDuChamp(): void {
   verifier(poidsDuChamp(temoin, ex, CHAMP_SOMME) === 1, "sans poids déclaré : 1");
   verifier(poidsDuChamp(null, ex, CHAMP_SOMME) === 1, "générateur absent : repli à 1");
   verifier(poidsDuChamp(temoin, ex, "champ_inconnu") === 1, "champ inconnu : repli à 1");
-  verifier(poidsDesChampsDeLigne({ variante_id: "variante_historique_inconnue", graine: 5 }).size === 0, "variante hors registre : map vide (poids 1)");
-  verifier(poidsDesChampsDeLigne({ variante_id: VARIANTE_TEMOIN, graine: null }).size === 0, "ligne sans graine : map vide (poids 1)");
-  verifier(poidsDesChampsDeLigne({ variante_id: VARIANTE_TEMOIN, graine: -3 }).size === 0, "graine invalide : map vide (poids 1)");
-  verifier(poidsDesChampsDeLigne({ variante_id: VARIANTE_TEMOIN, graine: 0 }).size > 0, "ligne exécutable : un poids par champ");
+  verifier(poidsDesChampsDeLigne({ variante_id: "variante_historique_inconnue", graine: 5, configuration: null }).size === 0, "variante hors registre : map vide (poids 1)");
+  verifier(poidsDesChampsDeLigne({ variante_id: VARIANTE_TEMOIN, graine: null, configuration: null }).size === 0, "ligne sans graine : map vide (poids 1)");
+  verifier(poidsDesChampsDeLigne({ variante_id: VARIANTE_TEMOIN, graine: -3, configuration: null }).size === 0, "graine invalide : map vide (poids 1)");
+  verifier(poidsDesChampsDeLigne({ variante_id: VARIANTE_TEMOIN, graine: 0, configuration: null }).size > 0, "ligne exécutable : un poids par champ");
   for (const v of [1, 2, 10]) verifier(validerPoids(v) === v, `poids ${v} valide`);
   for (const v of [0, -1, 1.5, NaN, Infinity, "2", null, undefined]) {
     let leve = false;

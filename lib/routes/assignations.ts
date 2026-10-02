@@ -6,6 +6,8 @@ import { classesDuProfPourEleve } from "../eleveDuProf";
 import { elevesDeLaClasse } from "../elevesDeLaClasse";
 import { chercherGenerateur } from "../registreGenerateurs";
 import { tirerGraine } from "../prng";
+import { genererPourLigne } from "../genererPourLigne";
+import { validerConfigurationDeLigne } from "../configurationLigne";
 
 /**
  * POST /api/assignations — assigne une tâche déjà créée à une classe (`classe_id`) OU à des élèves
@@ -109,7 +111,7 @@ export const gererAssignations = avecGestionErreurs(async function handler(req: 
     }
   }
 
-  const { data: composition, error: erreurComposition } = await admin.from("taches_composition").select("generateur_id, variante_id, nombre_exercices").eq("tache_id", corps.tache_id);
+  const { data: composition, error: erreurComposition } = await admin.from("taches_composition").select("id, generateur_id, variante_id, nombre_exercices, configuration").eq("tache_id", corps.tache_id);
   if (erreurComposition) throw new Error(erreurComposition.message);
   if (!composition || composition.length === 0) {
     res.status(400).json({ erreur: "Cette tâche n'a aucune composition" });
@@ -119,6 +121,17 @@ export const gererAssignations = avecGestionErreurs(async function handler(req: 
   if (sansGenerateur.length > 0) {
     res.status(409).json({ erreur: "Générateur pas encore disponible pour : " + sansGenerateur.join(", "), variantes_indisponibles: sansGenerateur });
     return;
+  }
+
+  // Configuration par ligne (RAPPORT §55) : re-validée AVANT de générer (une ligne altérée hors API ne doit jamais produire d'exercices vides ou d'une autre configuration).
+  const configurations = new Map<string, unknown>();
+  for (const ligne of composition) {
+    const lue = validerConfigurationDeLigne(chercherGenerateur(ligne.variante_id as string), ligne.configuration);
+    if (!lue.ok) {
+      res.status(409).json({ erreur: `Configuration invalide pour ${ligne.variante_id as string} : ${lue.erreur}` });
+      return;
+    }
+    configurations.set(ligne.id as string, lue.configuration);
   }
 
   const { data: dejaGeneres, error: erreurDeja } = await admin.from("exercices_assignes").select("eleve_id").eq("tache_id", corps.tache_id);
@@ -132,13 +145,17 @@ export const gererAssignations = avecGestionErreurs(async function handler(req: 
       const generateur = chercherGenerateur(ligne.variante_id as string)!;
       for (let i = 0; i < (ligne.nombre_exercices as number); i++) {
         const graine = tirerGraine();
-        const exercice = generateur.generer(graine);
+        const configuration = configurations.get(ligne.id as string) ?? null;
+        const exercice = genererPourLigne(generateur, graine, configuration);
         lignes.push({
           tache_id: corps.tache_id,
           eleve_id: eleveId,
           generateur_id: generateur.generateur_id,
           variante_id: generateur.variante_id,
           graine,
+          // Identité de la ligne de composition + configuration FIGÉE (RAPPORT §55) : jamais relues dynamiquement dans `taches_composition`.
+          composition_id: ligne.id,
+          configuration,
           champs_attendus: generateur.ecrans(exercice).map((e) => e.champ),
         });
       }

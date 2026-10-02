@@ -16,6 +16,7 @@ export {}; // module
 // Code exécuté DANS la page (fonctions passées à `locator.evaluate`) : le projet n'inclut pas la bibliothèque DOM.
 declare const getComputedStyle: (el: unknown) => Record<string, string>;
 
+import { injecterGenerateurConfigurable, VARIANTE_CONFIGURABLE } from "./support/generateurConfigurable";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { demarrerServeur, stubSupabase } from "./support/serveurChromium";
@@ -2148,6 +2149,103 @@ async function scenarioApercuRetour(navigateur: any, base: string, largeur: numb
   }
 }
 
+/**
+ * Configuration PAR LIGNE de composition (RAPPORT §55) dans le formulaire du professeur, avec le générateur de TEST à configuration (scripts/support/generateurConfigurable.ts) :
+ * il n'est ni dans le catalogue réel ni dans l'arbre JSON, donc injecté ici au registre/catalogue du serveur ET dans la page (arbre JSON + table de correspondance, par interception).
+ * Vérifie : lignes ajoutées/retirées, nouvelle ligne VIDE (jamais pré-cochée), message et bouton « Créer » désactivé, cases exclusives, doublons signalés, envoi et stockage de la
+ * configuration, restauration par liste ordonnée (Modifier / Dupliquer), aucun champ gen7 touché.
+ */
+async function scenarioConfigurationLigne(navigateur: any, base: string, largeur: number) {
+  const l = `${largeur} config ligne`;
+  const s: Scenario = creerScenario();
+  installerBase(s.base);
+  const retirer = injecterGenerateurConfigurable();
+  const { page, contexte, journal } = await preparerPage(navigateur, base, largeur, largeur < 600 ? 800 : 900, `prof:${s.profId}`, "p@x");
+  // Arbre JSON et correspondance : un générateur « 999 » de test au niveau 5e_4h, relié à la variante injectée.
+  await page.route("**/catalogue-generateurs-complet.json", async (route: any) => {
+    const reponse = await route.fetch();
+    const json = await reponse.json();
+    // Niveau « 5e_4h » : son regroupement suit le champ du JSON (le niveau « 4e » est rangé par une table de numéros qui ignorerait ce générateur de test).
+    json["5e_4h"].push({ ...json["5e_4h"][0], numero: 999, libelle: "999. Générateur configurable (test)", variantes: [{ axe: "variante", label: "Variante configurable (test)", exemple: "Exemple de test." }] });
+    await route.fulfill({ response: reponse, json });
+  });
+  await page.route("**/prof.html", async (route: any) => {
+    const reponse = await route.fetch();
+    const texte = (await reponse.text()).replace("const CORRESPONDANCE_JSON_VERS_PILOTE = {", `const CORRESPONDANCE_JSON_VERS_PILOTE = { "5e_4h:999": [{ index: 0, variante_id: "${VARIANTE_CONFIGURABLE}" }],`);
+    await route.fulfill({ response: reponse, body: texte });
+  });
+  await page.goto(base + "/prof.html");
+  await page.waitForSelector('button[data-onglet="taches"]:visible');
+  await page.locator('button[data-onglet="taches"]').click();
+  await page.locator("#bouton-accordeon-creer").click();
+  await page.waitForSelector("#composition-dynamique input.stepper-valeur", { state: "attached" });
+  await page.evaluate("document.querySelectorAll('#composition-dynamique details').forEach((d) => { d.open = true; })");
+  const bloc = `#composition-dynamique [data-config-variante-id="${VARIANTE_CONFIGURABLE}"]`;
+  verifier((await page.locator(bloc).count()) === 1 && (await page.locator(`${bloc} .ligne-config`).count()) === 0, `${l} : la variante à configuration est un BLOC de lignes, sans ligne au départ`);
+  verifier((await page.locator(`${bloc} input[data-variante-id]`).count()) === 0, `${l} : aucun champ « nombre d'exercices » unique pour cette variante`);
+  // gen7 : toujours un champ unique, non désactivé (discipline de câblage).
+  verifier((await page.locator('#composition-dynamique input[data-variante-id="af_motif_racine_nulle_rationnelle"]').count()) === 1, `${l} : gen7 garde son champ unique`);
+  await page.locator("#nom-tache").fill("Tâche configurée");
+
+  // Nouvelle ligne : VIDE, jamais pré-cochée ; « Créer » refusé tant qu'une ligne demandée est vide.
+  await page.locator(`${bloc} .ajouter-ligne-config`).click();
+  await page.locator(`${bloc} .ajouter-ligne-config`).click();
+  const lignes = page.locator(`${bloc} .ligne-config`);
+  verifier((await lignes.count()) === 2, `${l} : deux lignes ajoutées`);
+  verifier((await page.locator(`${bloc} input[data-case-id]:checked`).count()) === 0, `${l} : une nouvelle ligne naît VIDE (aucune case pré-cochée)`);
+  verifier((await lignes.nth(0).locator("input[data-variante-id]").inputValue()) === "1", `${l} : une nouvelle ligne demande 1 exercice`);
+  verifier((await page.locator(`${bloc} .message-config:visible`).count()) === 2 && (await page.locator(`${bloc} .message-config`).first().innerText()).trim() === "Sélectionnez au moins une case pour cette ligne.", `${l} : message explicite sous chaque ligne vide`);
+  verifier(await page.locator("#btn-creer-tache").isDisabled(), `${l} : « Créer » désactivé tant qu'une ligne demandée n'a aucune case`);
+
+  const cocher = async (ligne: number, id: string) => lignes.nth(ligne).locator(`.case-config:has(input[data-case-id="${id}"])`).click();
+  await cocher(0, "A");
+  await cocher(0, "B");
+  verifier((await page.locator(`${bloc} .message-config:visible`).count()) === 1, `${l} : le message disparaît quand une case est cochée (reste sur l'autre ligne)`);
+  // Cases exclusives B / C : cocher C décoche B.
+  await cocher(1, "B");
+  await cocher(1, "C");
+  verifier(!(await lignes.nth(1).locator('input[data-case-id="B"]').isChecked()) && (await lignes.nth(1).locator('input[data-case-id="C"]').isChecked()), `${l} : cases exclusives (cocher C décoche B)`);
+  verifier(await page.locator("#btn-creer-tache").isEnabled(), `${l} : « Créer » actif quand chaque ligne demandée a une case`);
+  // Doublon signalé : ligne 2 devient A + C ... puis identique à la ligne 1 (A + B).
+  await cocher(1, "A");
+  await cocher(1, "B");
+  verifier((await page.locator(`${bloc} .note-doublon-config:visible`).count()) === 2, `${l} : deux lignes identiques : note de fusion sur les deux`);
+  await cocher(1, "C");
+  verifier((await page.locator(`${bloc} .note-doublon-config:visible`).count()) === 0, `${l} : lignes différentes : plus de note`);
+  // Libellé de sélection (onglet « Sélection ») : la configuration y figure.
+  await page.locator('.onglet-composition[data-vue-composition="selection"]').click();
+  const selection = await page.locator("#composition-selection-contenu").innerText();
+  verifier(selection.includes("[Case A, Case B]") && selection.includes("[Case A, Case C]"), `${l} : la vue Sélection distingue les deux lignes par leur configuration (${selection.replace(/\n/g, " | ").slice(0, 160)})`);
+  await page.locator('.onglet-composition[data-vue-composition="parcourir"]').click();
+  await lignes.nth(1).locator("input[data-variante-id]").fill("3");
+  await page.screenshot({ path: join(CAPTURES, `${largeur}-config-ligne-formulaire.png`), fullPage: false });
+  verifier(!(await page.evaluate("document.documentElement.scrollWidth > window.innerWidth")), `${l} : pas de défilement horizontal de la page`);
+
+  // Envoi : la configuration part avec chaque ligne, stockée CANONIQUE.
+  await page.locator("#btn-creer-tache").click();
+  await page.waitForFunction(`document.getElementById("nom-tache").value === ""`);
+  const composition = s.base.table("taches_composition");
+  verifier(composition.length === 2 && composition.every((c) => c.variante_id === VARIANTE_CONFIGURABLE), `${l} : deux lignes de composition créées (${composition.length})`);
+  verifier(JSON.stringify(composition.map((c) => c.configuration)) === '[{"actives":["A","B"]},{"actives":["A","C"]}]' && JSON.stringify(composition.map((c) => c.nombre_exercices)) === "[1,3]", `${l} : configurations et nombres stockés (${JSON.stringify(composition.map((c) => [c.configuration, c.nombre_exercices]))})`);
+  verifier((await page.locator(`${bloc} .ligne-config`).count()) === 0, `${l} : après création le formulaire repart SANS ligne`);
+
+  // Restauration (Modifier / Dupliquer) par liste ordonnée, depuis ce que renvoie GET /api/taches.
+  const restaure = composition.map((c) => ({ variante_id: c.variante_id, nombre_exercices: c.nombre_exercices, chrono_duree_secondes: c.chrono_duree_secondes ?? null, configuration: c.configuration, id: c.id }));
+  await page.evaluate(`remplirFormulaireComposition(${JSON.stringify(restaure)})`);
+  const etat = await page.evaluate(`[...document.querySelectorAll('#composition-dynamique .ligne-config')].map((l) => ({ cases: [...l.querySelectorAll('input[data-case-id]:checked')].map((c) => c.dataset.caseId), n: l.querySelector('input[data-variante-id]').value }))`);
+  verifier(JSON.stringify(etat) === '[{"cases":["A","B"],"n":"1"},{"cases":["A","C"],"n":"3"}]', `${l} : restauration des deux lignes dans l'ordre (${JSON.stringify(etat)})`);
+  await page.evaluate("remplirFormulaireComposition([])");
+  verifier((await page.locator(`${bloc} .ligne-config`).count()) === 0, `${l} : restaurer une composition vide retire les lignes`);
+  // Retirer une ligne.
+  await page.locator(`${bloc} .ajouter-ligne-config`).click();
+  await page.locator(`${bloc} .retirer-ligne-config`).click();
+  verifier((await page.locator(`${bloc} .ligne-config`).count()) === 0, `${l} : « Retirer la ligne »`);
+
+  verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+  retirer();
+  await contexte.close();
+}
+
 /** Le professeur COMPOSE une tâche gen7 dans prof.html (champs actifs, création réelle), puis l'assigne ; l'élève la reçoit. */
 async function scenarioGen7Prof(navigateur: any, base: string, largeur: number) {
   const l = `${largeur}`;
@@ -2524,6 +2622,8 @@ async function main() {
       controlerReponsesHttp(`${largeur} gen7 coupé`);
       await scenarioGen7Prof(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} gen7 prof`);
+      await scenarioConfigurationLigne(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} config ligne`);
       await scenarioPartiesFausses(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} parties fausses`);
       await scenarioPartiesFaussesTemoin(navigateur, url, largeur);
