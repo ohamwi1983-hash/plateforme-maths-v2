@@ -958,6 +958,7 @@ async function main(): Promise<void> {
       comparer(e, "numéro d'étape", REF["numero"]!, await app(page, ".moteur-chaine-numero"), [...TXT, "letterSpacing", "textTransform"]);
       // « ? » GLOBAL (RAPPORT §58) : à droite de la question, légende en dessous ; mêmes gabarits que le « ? » et la légende de l'étape.
       await page.locator(`${C} .moteur-question-ligne .moteur-chaine-aide`).click();
+      await page.mouse.move(0, 0); // le style au survol (violet vif) n'est pas l'état au repos que la référence décrit
       const PASTILLE = ["backgroundColor", "color", "borderTopWidth", "borderTopLeftRadius", "fontFamily", "fontSize", "fontWeight", "lineHeight", "width", "height", "minHeight", "boxShadow", "marginTop", "marginLeft", ...PADDING];
       comparer(e, "bloc de la question", REF["bloc-question"]!, await app(page, ".moteur-question-bloc"), ["display", "flexDirection", "gap"]);
       comparer(e, "ligne de la question", REF["ligne-question"]!, await app(page, ".moteur-question-ligne"), ["display", "alignItems", "justifyContent", "gap"]);
