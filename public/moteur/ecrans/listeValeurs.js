@@ -1,4 +1,5 @@
 import { rendreTexte } from "../rendreTexte.js";
+import { aDesParties, creerMarquage, fausse } from "./marquage.js";
 
 /**
  * Composant d'écran « liste_valeurs » : liste à taille variable (ajout/retrait de lignes). Les lignes
@@ -126,8 +127,22 @@ export default {
     }
     majMode();
 
+    // Parties fausses (RAPPORT §52) : `ligne:<i>` = i-ième valeur NON VIDE de la liste soumise ; `mode:aucune` = le bouton « pas de valeur » (aucune ligne n'a été proposée). Modifier la ligne
+    // (ou changer de mode) retire la marque.
+    const marquage = creerMarquage((id) => {
+      if (id === "mode:aucune") {
+        const bouton = boutonsMode.get("aucune");
+        return bouton ? { elements: [bouton], declencheurs: [...boutonsMode.values()].map((b) => [b, "click"]) } : null;
+      }
+      const m = /^ligne:(\d+)$/.exec(id);
+      if (!m) return null;
+      const entree = entrees.filter((e) => e.value.trim() !== "")[Number(m[1])];
+      return entree ? { elements: [entree], declencheurs: [[entree, "input"]] } : null;
+    });
+
     return {
       element,
+      marquer: (ids) => marquage.marquer(ids),
       lireReponse() {
         if (mode === null) return null;
         if (mode === "aucune") return "[]";
@@ -147,12 +162,19 @@ export default {
     };
   },
 
-  resumer(ecran, valeurSaisie) {
+  resumer(ecran, valeurSaisie, partiesFausses) {
     try {
       const valeurs = JSON.parse(valeurSaisie);
       if (!Array.isArray(valeurs)) return valeurSaisie;
       // « aucune valeur » est un choix d'AUTEUR (étiquette déclarée), les valeurs sont du texte d'élève.
-      if (valeurs.length === 0 && ecran.permetAucune) return [{ texte: ecran.etiquetteAucune || "Aucune valeur", auteur: true }];
+      if (valeurs.length === 0 && ecran.permetAucune) {
+        const piece = { texte: ecran.etiquetteAucune || "Aucune valeur", auteur: true };
+        return [aDesParties(partiesFausses) && partiesFausses.includes("mode:aucune") ? fausse(piece) : piece];
+      }
+      if (aDesParties(partiesFausses)) {
+        // Une pièce par valeur : seules les lignes désignées sont surlignées.
+        return valeurs.flatMap((v, i) => [...(i > 0 ? [{ texte: ", " }] : []), partiesFausses.includes(`ligne:${i}`) ? fausse({ texte: String(v) }) : { texte: String(v) }]);
+      }
       return valeurs.join(", ");
     } catch {
       return valeurSaisie;

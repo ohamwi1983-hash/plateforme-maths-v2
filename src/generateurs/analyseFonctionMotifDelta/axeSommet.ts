@@ -39,5 +39,6 @@ export function verifierAxeSommetMD(f: Pick<FonctionExacte, "xS" | "yS">, repons
   const comparaisons: Comparaison[] = [comparerValeur(f.xS, axe.lu), comparerValeur(f.xS, xS.lu), comparerValeur(f.yS, yS.lu)];
   const s = synthese(comparaisons);
   if (s === "correct") return { statut: "correct", codesCompetence: [] };
-  return { statut: "not_equivalent", codesCompetence: s === "non_simplifie" ? [CODE_RACINE_NON_SIMPLIFIEE] : [] };
+  const partiesFausses = (["axeTexte", "xS", "yS"] as const).filter((_, i) => comparaisons[i] !== "juste"); // une valeur juste mais non simplifiée est aussi à reprendre
+  return { statut: "not_equivalent", codesCompetence: s === "non_simplifie" ? [CODE_RACINE_NON_SIMPLIFIEE] : [], partiesFausses };
 }

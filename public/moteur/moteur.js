@@ -76,7 +76,7 @@ function creer(balise, classe, texte, options) {
   return element;
 }
 
-/** Résumé d'un composant : `string` (texte d'élève) ou pièces `{ texte, auteur? }[]` (voir ecrans/index.js). */
+/** Résumé d'un composant : `string` (texte d'élève) ou pièces `{ texte, auteur?, fausse? }[]` (voir ecrans/index.js). `fausse` : partie désignée fausse par le serveur (RAPPORT §52). */
 function rendrePieces(element, resume) {
   if (typeof resume === "string") {
     rendreTexte(element, resume);
@@ -86,6 +86,7 @@ function rendrePieces(element, resume) {
   for (const piece of resume) {
     const morceau = document.createElement("span");
     rendreTexte(morceau, piece.texte, { math: piece.auteur === true });
+    if (piece.fausse === true) morceau.className = "moteur-piece-fausse";
     element.appendChild(morceau);
   }
 }
@@ -319,7 +320,7 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
     libelle.append(" :");
     corps.appendChild(libelle);
     const valeur = creer("span", "moteur-rappel-valeur moteur-valeur");
-    if (info.valeur_saisie !== null && ecran) rendrePieces(valeur, composantPour(ecran).resumer(ecran, info.valeur_saisie));
+    if (info.valeur_saisie !== null && ecran) rendrePieces(valeur, composantPour(ecran).resumer(ecran, info.valeur_saisie, info.parties_fausses));
     else rendreTexte(valeur, "pas de réponse");
     corps.appendChild(valeur);
     // Une réponse juste n'a pas besoin de « Réponse attendue » (elle lui est identique) : la solution n'est rappelée que pour un écran non réussi.
@@ -382,7 +383,7 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
     if (info.valeur_saisie !== null) {
       const reponse = creer("p", "moteur-reponse-eleve");
       const valeur = creer("span", "moteur-valeur");
-      rendrePieces(valeur, composantPour(ecran).resumer(ecran, info.valeur_saisie));
+      rendrePieces(valeur, composantPour(ecran).resumer(ecran, info.valeur_saisie, info.parties_fausses));
       reponse.append(creer("span", "moteur-etiquette", "Ta réponse : "), valeur);
       if (crayon) {
         const ligne = creer("div", "moteur-ligne-reponse");
@@ -444,6 +445,8 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
         retourServeur.appendChild(creer("p", "moteur-statut moteur-statut-neutre", "Réponse enregistrée."));
       }
       if (resultat.message_erreur) retourServeur.appendChild(creer("p", "moteur-message-syntaxe", resultat.message_erreur, { math: true }));
+      // Parties fausses (RAPPORT §52) : le serveur ne les envoie que sous correction immédiate ; le composant les surligne en rouge (retirées dès que l'élève modifie la partie).
+      if (typeof vue.marquer === "function") vue.marquer(resultat.parties_fausses);
       if (resultat.solution_attendue) retourServeur.appendChild(creer("p", "moteur-solution", "Réponse attendue : " + resultat.solution_attendue, { math: true }));
       if (resultat.modifiable !== undefined) {
         // Retour en arrière : la réponse est enregistrée mais l'écran reste modifiable ; rien n'est corrigé avant la remise.

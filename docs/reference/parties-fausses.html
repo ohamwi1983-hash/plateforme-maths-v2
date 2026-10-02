@@ -1,0 +1,39 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Référence — parties fausses surlignées en rouge (RAPPORT §52)</title>
+<!-- RÉFÉRENCE du SURLIGNAGE ROUGE d'une partie fausse d'une réponse : un champ de saisie, une option de choix, un bouton (crochet, mode, case de tableau) et un morceau de « Ta réponse » (rappel gris,
+     écran récapitulatif). Exprimée UNIQUEMENT avec les valeurs des tokens de `:root` (public/style.css) : aucune valeur nouvelle. scripts/chromium-fidelite-design.ts rend ce fichier et
+     l'application à 390 et 1280 px et compare les styles CALCULÉS.
+     Règles de fond (CLAUDE.md « Parties fausses ») :
+       - sous correction IMMÉDIATE seulement (le serveur n'envoie rien sinon) ; avec ou sans « Afficher la réponse attendue », avec ou sans essais supplémentaires ;
+       - la carte entière est déjà teintée (--danger-clair) par le verdict : la partie fausse se DÉTACHE par un fond blanc, un filet de 2 px --danger, un texte --danger en gras et un ✕ ;
+       - la couleur ne suffit jamais : filet épaissi + ✕ (options, boutons, cases) ou soulignement ondulé (morceaux de réponse), et `aria-invalid` / `aria-description` côté composant ;
+       - une marque disparaît dès que l'élève modifie SA partie (jamais de marquage pendant la frappe). -->
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #FAF9FC; font-family: 'Inter', sans-serif; color: #1C1730; line-height: 1.5; }
+  .env { max-width: 688px; display: flex; flex-direction: column; gap: 16px; }
+  .carte-faux { background: #FBEAE8; border: 1px solid #B3261E; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 12px; }
+  .champ { box-sizing: border-box; width: 100%; min-height: 44px; padding: 10px 12px; font-family: 'Inter', sans-serif; font-size: 15.2px; color: #1C1730; background: #F6F3FB; border: 1px solid #E9E4F3; border-radius: 13px; }
+  .champ.faux { color: #B3261E; font-weight: 600; background: #FFFFFF; border: 2px solid #B3261E; padding: 9px 11px; }
+  .choix { position: relative; display: flex; align-items: center; gap: 16px; min-height: 44px; padding: 10px 14px; color: #3B1470; font-weight: 600; background: #F1EBFC; border: 2px solid #7C3AED; border-radius: 13px; box-sizing: border-box; }
+  .choix.faux { color: #B3261E; background: #FFFFFF; border: 2px solid #B3261E; }
+  .choix.faux::after { content: "✕" / ""; margin-left: auto; font-weight: 700; }
+  .bouton { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 9px 18px; font-family: 'Inter', sans-serif; font-size: 16px; font-weight: 700; color: #7C3AED; background: #FFFFFF; border: 2px solid #7C3AED; border-radius: 13px; box-sizing: border-box; }
+  .bouton.faux { color: #B3261E; background: #FFFFFF; border: 2px solid #B3261E; }
+  .bouton.faux::after { content: "✕" / ""; margin-left: 6px; font-weight: 700; }
+  .reponse { background: #FFFFFF; border: 1px solid #E9E4F3; border-radius: 13px; padding: 10px 14px; font-size: 14.4px; }
+  .piece-fausse { color: #B3261E; font-weight: 700; text-decoration: underline wavy #B3261E; text-underline-offset: 3px; }
+</style>
+<body>
+<div class="env">
+  <div class="carte-faux">
+    <input data-ref="champ" class="champ" value="2">
+    <input data-ref="champ-faux" class="champ faux" value="997" aria-invalid="true">
+    <label data-ref="choix" class="choix" style="color:#3B1470;">Vers le haut</label>
+    <label data-ref="choix-faux" class="choix faux">Vers le bas</label>
+    <div><button data-ref="bouton" class="bouton">[</button> <button data-ref="bouton-faux" class="bouton faux">]</button></div>
+    <p data-ref="reponse" class="reponse">Ta réponse : a = 1 ; b = <span data-ref="piece-fausse" class="piece-fausse">997</span> ; c = -4</p>
+  </div>
+</div>
+</body>

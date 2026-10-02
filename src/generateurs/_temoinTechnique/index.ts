@@ -662,13 +662,13 @@ export const generateurTemoinTechnique: Generateur<ExerciceTemoin> = {
       if (!lu.ok) return { statut: "parse_error", codesCompetence: [], messageErreur: lu.message };
       if (lu.valeur === ex.a + ex.b) return resultat("correct");
       const confondOperation = lu.valeur === ex.a - ex.b || lu.valeur === ex.a * ex.b;
-      return resultat("not_equivalent", confondOperation ? [CODE_ERREUR_CALCUL] : []);
+      return { statut: "not_equivalent", codesCompetence: confondOperation ? [CODE_ERREUR_CALCUL] : [], partiesFausses: ["champ"] }; // champ_expression : l'unique champ (RAPPORT §52)
     }
     if (champ === CHAMP_PARITE) {
       if (!CHOIX_PARITE.some((c) => c.id === reponseBrute)) return { statut: "parse_error", codesCompetence: [], messageErreur: "Ce choix n'existe pas : sélectionne l'une des propositions." };
       const attendu = (ex.a + ex.b) % 2 === 0 ? "pair" : "impair";
       if (reponseBrute === attendu) return resultat("correct");
-      return resultat("not_equivalent", reponseBrute === "ni" ? [CODE_MAUVAIS_CHOIX] : []);
+      return { statut: "not_equivalent", codesCompetence: reponseBrute === "ni" ? [CODE_MAUVAIS_CHOIX] : [], partiesFausses: [reponseBrute] }; // qcm : le choix COCHÉ (RAPPORT §52)
     }
     if (champ === CHAMP_DIVISEURS) {
       const liste = decoderListeValeurs(reponseBrute);

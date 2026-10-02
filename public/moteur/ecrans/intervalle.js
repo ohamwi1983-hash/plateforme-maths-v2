@@ -1,4 +1,5 @@
 import { rendreTexte } from "../rendreTexte.js";
+import { aDesParties, creerMarquage, fausse } from "./marquage.js";
 
 /**
  * Composant d'écran « intervalle » : un seul intervalle `[borne ; borne]` que l'élève construit — crochet
@@ -147,8 +148,25 @@ export default {
     }
     rafraichir();
 
+    // Parties fausses (RAPPORT §52) : chaque crochet et chaque borne ; une borne « infinie » est surlignée sur son bouton −∞ / +∞. Modifier la partie retire sa marque.
+    const marquage = creerMarquage((id) => {
+      switch (id) {
+        case "crochetGauche":
+          return { elements: [crochetG], declencheurs: [[crochetG, "click"]] };
+        case "crochetDroit":
+          return { elements: [crochetD], declencheurs: [[crochetD, "click"]] };
+        case "borneGauche":
+          return { elements: [etat.infG ? infG : borneG], declencheurs: [[borneG, "input"], [infG, "click"]] };
+        case "borneDroite":
+          return { elements: [etat.infD ? infD : borneD], declencheurs: [[borneD, "input"], [infD, "click"]] };
+        default:
+          return null;
+      }
+    });
+
     return {
       element,
+      marquer: (ids) => marquage.marquer(ids),
       lireReponse() {
         if (etat.crochetG === null || etat.crochetD === null) return null;
         const g = etat.infG ? "-inf" : borneG.value.trim();
@@ -173,10 +191,15 @@ export default {
   },
 
   /** Texte d'élève : crochets et bornes qu'il a choisis (les sentinelles deviennent −∞ / +∞). */
-  resumer(_ecran, valeurSaisie) {
+  resumer(_ecran, valeurSaisie, partiesFausses) {
     try {
       const v = JSON.parse(valeurSaisie);
       const borne = (b) => (b === "-inf" ? "−∞" : b === "+inf" ? "+∞" : b);
+      if (aDesParties(partiesFausses)) {
+        // Un morceau par partie : seuls les morceaux désignés sont surlignés.
+        const morceau = (id, texte) => (partiesFausses.includes(id) ? fausse({ texte }) : { texte });
+        return [morceau("crochetGauche", String(v.crochetGauche)), morceau("borneGauche", borne(v.borneGauche)), { texte: " ; " }, morceau("borneDroite", borne(v.borneDroite)), morceau("crochetDroit", String(v.crochetDroit))];
+      }
       return `${v.crochetGauche}${borne(v.borneGauche)} ; ${borne(v.borneDroite)}${v.crochetDroit}`;
     } catch {
       return valeurSaisie;

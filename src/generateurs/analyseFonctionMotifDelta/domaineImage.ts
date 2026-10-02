@@ -27,14 +27,20 @@ export function verifierDomaineImageMD(f: { aPositif: boolean; yImage: Exact }, 
   const attendu = f.aPositif
     ? { crochetGauche: "[", borneGauche: f.yImage as Borne | Exact, crochetDroit: "[", borneDroite: "+inf" as const }
     : { crochetGauche: "]", borneGauche: "-inf" as const, crochetDroit: "]", borneDroite: f.yImage as Borne | Exact };
-  if (d.valeur.crochetGauche !== attendu.crochetGauche || d.valeur.crochetDroit !== attendu.crochetDroit) return { statut: "not_equivalent", codesCompetence: [] };
-
   const comparer = (saisi: Borne, att: unknown): Comparaison => {
     if (typeof saisi === "string" || typeof att === "string") return saisi === att ? "juste" : "faux";
     return comparerValeur(att as Exact, saisi);
   };
   const resultats: Comparaison[] = [comparer(gauche.borne, attendu.borneGauche), comparer(droite.borne, attendu.borneDroite)];
-  if (resultats.includes("faux")) return { statut: "not_equivalent", codesCompetence: [] };
-  if (resultats.includes("juste_non_simplifie")) return { statut: "not_equivalent", codesCompetence: [CODE_RACINE_NON_SIMPLIFIEE] };
+  const crochetsFaux = d.valeur.crochetGauche !== attendu.crochetGauche || d.valeur.crochetDroit !== attendu.crochetDroit;
+  // Parties à surligner (RAPPORT §52) : chaque crochet et chaque borne jugés séparément ; une borne juste mais non simplifiée est aussi à reprendre.
+  const partiesFausses = [
+    ...(d.valeur.crochetGauche !== attendu.crochetGauche ? ["crochetGauche"] : []),
+    ...(resultats[0] !== "juste" ? ["borneGauche"] : []),
+    ...(resultats[1] !== "juste" ? ["borneDroite"] : []),
+    ...(d.valeur.crochetDroit !== attendu.crochetDroit ? ["crochetDroit"] : []),
+  ];
+  if (crochetsFaux || resultats.includes("faux")) return { statut: "not_equivalent", codesCompetence: [], partiesFausses };
+  if (resultats.includes("juste_non_simplifie")) return { statut: "not_equivalent", codesCompetence: [CODE_RACINE_NON_SIMPLIFIEE], partiesFausses };
   return { statut: "correct", codesCompetence: [] };
 }

@@ -1,5 +1,6 @@
 import { rendreTexte } from "../rendreTexte.js";
 import { versTexteBrut } from "../texteMath.js";
+import { aDesParties, creerMarquage, fausse } from "./marquage.js";
 
 /**
  * Composant d'écran « tableau_signes » : une case par cellule résolue, chacune parcourant SES valeurs au toucher.
@@ -281,8 +282,16 @@ export default {
       }
     }
 
+    // Parties fausses (RAPPORT §52) : `<ligne>:<ancre>` = une CASE (clés d'ancrage de la réponse) ; la changer (clic) retire sa marque. Carte, jamais un objet indexé par la clé reçue.
+    const marquage = creerMarquage((id) => {
+      const i = id.indexOf(":");
+      const etat = i > 0 ? cases.get(`${id.slice(0, i)}|${id.slice(i + 1)}`) : undefined;
+      return etat ? { elements: [etat.bouton], declencheurs: [[etat.bouton, "click"]] } : null;
+    });
+
     return {
       element: racine,
+      marquer: (ids) => marquage.marquer(ids),
       lireReponse() {
         const resultat = {};
         for (const rangee of ecran.rangees) {
@@ -304,10 +313,26 @@ export default {
     };
   },
 
-  resumer(ecran, valeurSaisie) {
+  resumer(ecran, valeurSaisie, partiesFausses) {
     try {
       const tableau = JSON.parse(valeurSaisie);
       const symboles = (ligne) => ligne.nature === "variation" || ligne.rendu === "symboles_variation";
+      if (aDesParties(partiesFausses)) {
+        // Une pièce par case : seules les cases désignées sont surlignées.
+        return ecran.rangees.flatMap((rangee, r) => {
+          const ligne = ecran.lignes.find((l) => l.id === rangee.ligne);
+          const saisies = tableau !== null && typeof tableau === "object" && Object.hasOwn(tableau, rangee.ligne) ? tableau[rangee.ligne] : {};
+          return [
+            ...(r > 0 ? [{ texte: " ; " }] : []),
+            { texte: `${versTexteBrut(ligne.libelle)} : ` },
+            ...rangee.cellules.flatMap((c, k) => {
+              const v = saisies !== null && typeof saisies === "object" && Object.hasOwn(saisies, c.ancre) ? saisies[c.ancre] : "?";
+              const texte = symboles(ligne) ? nomValeur(v) : v;
+              return [...(k > 0 ? [{ texte: " " }] : []), partiesFausses.includes(`${rangee.ligne}:${c.ancre}`) ? fausse({ texte }) : { texte }];
+            }),
+          ];
+        });
+      }
       return ecran.rangees
         .map((rangee) => {
           const ligne = ecran.lignes.find((l) => l.id === rangee.ligne);
