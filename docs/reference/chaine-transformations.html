@@ -1,10 +1,14 @@
 <!doctype html>
 <meta charset="utf-8">
 <title>Référence — chaîne de transformations</title>
-<!-- RÉFÉRENCE de l'écran « chaîne d'étapes » (RAPPORT §56) : expression de départ, puis des étapes répétables (numéro, expression libre, transformation choisie parmi cinq), et les deux
-     boutons « Ajouter une étape » / « Retirer la dernière étape ». Le champ de saisie, les choix et les boutons secondaires sont CEUX des composants existants (`composants-ecran.html`) :
-     seuls l'encadré de départ, l'enveloppe d'une étape et son numéro sont nouveaux. Valeurs = tokens du design system. `chromium-design` compare les styles CALCULÉS de
-     public/moteur/ecrans/chaineTransformations.js à ce fichier (390 et 1280 px). Exemple : x² -> (x − 2)² -> 3(x − 2)² -> 3(x − 2)² + 1. -->
+<!-- RÉFÉRENCE de l'écran « chaîne d'étapes » (RAPPORT §56, REFAITE en §58 sur demande du propriétaire) : expression de départ, puis des étapes répétables. Une étape =
+       1. l'en-tête : « Étape k » à gauche, le bouton « ? » à DROITE (il dévoile en dessous la signification des abréviations des transformations : un rappel de vocabulaire, jamais une
+          aide pénalisée, donc de style NEUTRE — pas d'ambre) ;
+       2. la ligne de la transformation : « f_k(x) », une LISTE DÉROULANTE des cinq transformations, « : » et un champ libre pour la VALEUR (décalage, facteur…) — le champ n'existe PAS
+          quand la transformation choisie n'en a pas (symétrie d'axe Ox) ;
+       3. la ligne de la fonction obtenue : « f_k(x) = » suivi du champ libre.
+     Le champ est celui de `composants-ecran.html` ; la liste déroulante a son aspect (fond creusé, filet, rayon moyen, hauteur tactile de 44 px). Valeurs = tokens du design system.
+     `chromium-design` compare les styles CALCULÉS de public/moteur/ecrans/chaineTransformations.js à ce fichier (390 et 1280 px). Exemple : x² -> (x − 2)² -> −(x − 2)². -->
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
   body { margin: 0; padding: 16px; background: #FAF9FC; font-family: 'Inter', sans-serif; font-size: 16px; color: #1C1730; }
@@ -12,11 +16,18 @@
   .depart { margin: 0; padding: 8px 16px; background: #F6F3FB; border: 1px solid #E9E4F3; border-radius: 13px; color: #1C1730; }
   .etapes { display: flex; flex-direction: column; gap: 16px; margin: 0; padding: 0; list-style: none; }
   .etape { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 16px; background: #FFFFFF; border: 1px solid #E9E4F3; border-radius: 13px; }
+  .entete { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; }
   .numero { color: #3B1470; font-size: 0.8em; font-weight: 700; letter-spacing: 0.03em; }
-  .champ { box-sizing: border-box; width: 100%; min-height: 44px; padding: 10px 12px; font-family: 'Inter', sans-serif; font-size: 15.2px; color: #1C1730; background: #F6F3FB; border: 1px solid #E9E4F3; border-radius: 13px; }
-  .choix { display: flex; flex-wrap: wrap; gap: 8px; }
-  .option { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 14px; box-sizing: border-box; color: #1C1730; background: #FFFFFF; border: 1px solid #E9E4F3; border-radius: 13px; }
-  .option.retenue { color: #3B1470; font-weight: 600; background: #F1EBFC; border: 2px solid #7C3AED; }
+  /* Pastille « ? » : 32 px, ronde, fond violet clair, signe violet vif (même gabarit que le crayon « Modifier ma réponse »). */
+  .aide { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 50%; background: #F1EBFC; color: #7C3AED; box-shadow: none; font-family: 'Inter', sans-serif; font-size: 16px; font-weight: 700; line-height: 1; cursor: pointer; }
+  .legende { margin: 0; padding: 8px 16px; background: #F6F3FB; border: 1px solid #E9E4F3; border-radius: 13px; color: #6E6785; font-size: 0.9em; line-height: 1.5; }
+  .ligne { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .nom { font-weight: 600; color: #1C1730; }
+  .separateur { font-weight: 600; color: #6E6785; }
+  .select { box-sizing: border-box; flex: none; min-height: 44px; padding: 10px 12px; font-family: 'Inter', sans-serif; font-size: 15.2px; color: #1C1730; background: #F6F3FB; border: 1px solid #E9E4F3; border-radius: 13px; }
+  .champ { box-sizing: border-box; min-height: 44px; padding: 10px 12px; font-family: 'Inter', sans-serif; font-size: 15.2px; color: #1C1730; background: #F6F3FB; border: 1px solid #E9E4F3; border-radius: 13px; }
+  .valeur { flex: 1 1 120px; min-width: 0; }
+  .expression { flex: 1 1 160px; min-width: 0; }
   .actions { display: flex; flex-wrap: wrap; gap: 8px; }
   /* Bouton secondaire du site (style.css) : fond transparent, 16 px, mêmes que « Ajouter une valeur » des listes — pas un style propre à cet écran. */
   .secondaire { font-family: 'Inter', sans-serif; font-weight: 600; font-size: 16px; min-height: 44px; padding: 9px 16px; color: #7C3AED; background: transparent; border: 2px solid #7C3AED; border-radius: 13px; }
@@ -25,25 +36,34 @@
   <p class="depart" data-ref="depart">f₀(x) = x²</p>
   <ol class="etapes">
     <li class="etape" data-ref="etape">
-      <span class="numero" data-ref="numero">Étape 1</span>
-      <input class="champ" data-ref="champ" value="(x-2)^2">
-      <div class="choix">
-        <label class="option retenue" data-ref="option-retenue">TH</label>
-        <label class="option" data-ref="option">TV</label>
-        <label class="option">EV</label>
-        <label class="option">CV</label>
-        <label class="option">SOX</label>
+      <div class="entete" data-ref="entete">
+        <span class="numero" data-ref="numero">Étape 1</span>
+        <button class="aide" data-ref="aide" aria-label="Signification des abréviations">?</button>
+      </div>
+      <p class="legende" data-ref="legende">TH : translation horizontale · TV : translation verticale · EV : étirement vertical · CV : compression verticale · SOX : symétrie d'axe Ox.</p>
+      <div class="ligne" data-ref="ligne-transformation">
+        <span class="nom" data-ref="nom">f₁(x)</span>
+        <select class="select" data-ref="select"><option>TH</option><option>TV</option><option>EV</option><option>CV</option><option>SOX</option></select>
+        <span class="separateur" data-ref="separateur">:</span>
+        <input class="champ valeur" data-ref="valeur" value="2">
+      </div>
+      <div class="ligne" data-ref="ligne-expression">
+        <span class="nom" data-ref="nom-expression">f₁(x) =</span>
+        <input class="champ expression" data-ref="champ" value="(x-2)^2">
       </div>
     </li>
     <li class="etape">
-      <span class="numero">Étape 2</span>
-      <input class="champ" value="3(x-2)^2">
-      <div class="choix">
-        <label class="option">TH</label>
-        <label class="option">TV</label>
-        <label class="option retenue">EV</label>
-        <label class="option">CV</label>
-        <label class="option">SOX</label>
+      <div class="entete">
+        <span class="numero">Étape 2</span>
+        <button class="aide" aria-label="Signification des abréviations">?</button>
+      </div>
+      <div class="ligne" data-ref="ligne-transformation-sox">
+        <span class="nom">f₂(x)</span>
+        <select class="select" data-ref="select-sox"><option>TH</option><option>TV</option><option>EV</option><option>CV</option><option selected>SOX</option></select>
+      </div>
+      <div class="ligne">
+        <span class="nom">f₂(x) =</span>
+        <input class="champ expression" value="-(x-2)^2">
       </div>
     </li>
   </ol>

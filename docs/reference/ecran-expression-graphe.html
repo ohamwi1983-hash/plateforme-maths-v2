@@ -1,0 +1,27 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Référence — écran d'expression avec graphique : question sous le graphique et aperçu LaTeX de la saisie</title>
+<!-- RÉFÉRENCE de l'écran 1 de gen8 (RAPPORT §58, demande du propriétaire) : l'énoncé GLOBAL en haut, le graphique, puis la QUESTION SPÉCIFIQUE de l'écran SOUS le graphique, puis un APERÇU
+     LaTeX dynamique de ce que l'élève tape (« f(x) = » suivi de sa saisie mise en forme), puis le champ libre. La question a le style de l'énoncé (`.moteur-consigne`) ; l'aperçu est un encadré
+     discret de la famille des encadrés du design system (fond creusé, filet, rayon moyen), de hauteur minimale fixe (pas de saut de mise en page quand la saisie s'allonge) ; le champ est celui
+     de `composants-ecran.html`. L'aperçu est un AFFICHAGE : il n'est jamais un verdict (aucune couleur d'état, aucun marquage d'erreur pendant la frappe). Valeurs = tokens du design system.
+     `chromium-design` compare les styles CALCULÉS de l'application à ce fichier (390 et 1280 px). -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; padding: 16px; background: #FAF9FC; font-family: 'Inter', sans-serif; font-size: 16px; color: #1C1730; }
+  .carte { max-width: 560px; background: #FFFFFF; border: 1px solid #E9E4F3; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 16px; box-sizing: border-box; }
+  .enonce { margin: 0; font-weight: 600; color: #1C1730; line-height: 1.4; }
+  .figure { height: 160px; border: 1px solid #E9E4F3; border-radius: 13px; background: #FFFFFF; display: flex; align-items: center; justify-content: center; color: #6E6785; }
+  .saisie { display: flex; flex-direction: column; gap: 8px; }
+  .apercu { box-sizing: border-box; display: flex; align-items: center; min-height: 48px; padding: 8px 16px; overflow-x: auto; background: #F6F3FB; border: 1px solid #E9E4F3; border-radius: 13px; color: #1C1730; }
+  .champ { box-sizing: border-box; width: 100%; min-height: 44px; padding: 10px 12px; font-family: 'Inter', sans-serif; font-size: 15.2px; color: #1C1730; background: #F6F3FB; border: 1px solid #E9E4F3; border-radius: 13px; }
+</style>
+<div class="carte" data-ref="carte">
+  <p class="enonce" data-ref="consigne">Détermine l'expression analytique de la parabole ci-dessous.</p>
+  <div class="figure" data-ref="figure">graphique</div>
+  <p class="enonce" data-ref="question">Écris f(x) sous la forme canonique a(x − p)² + q.</p>
+  <div class="saisie">
+    <div class="apercu" data-ref="apercu">f(x) = 2(x − 3)² + 1</div>
+    <input class="champ" data-ref="champ" value="2(x-3)^2+1">
+  </div>
+</div>
