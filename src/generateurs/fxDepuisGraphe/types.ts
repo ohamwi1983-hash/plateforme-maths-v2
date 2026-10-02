@@ -26,6 +26,34 @@ export interface ExerciceFx {
   sox: boolean;
   /** Côté du second point `A` : `x_A = p + signeEcart · d`. Indifférent pour l'élève. */
   signeEcart: 1 | -1;
+  /**
+   * Fonction de REPLI de l'écran 2 (RAPPORT §57) : tirée APRÈS les quatre tirages ci-dessus, atteignable avec la même configuration, JAMAIS égale à la vraie. Ne sert que lorsqu'aucune
+   * réponse n'a été confirmée à l'écran 1 (chrono expiré) et que la solution n'a pas été montrée : la vraie fonction ne doit alors pas fuiter par l'énoncé de l'écran 2.
+   */
+  repli: RepliFx;
+  /**
+   * Fonction EFFECTIVE de l'écran 2 (cascade, RAPPORT §18), posée par `projeter` seulement : la fonction CONFIRMÉE par l'élève à l'écran 1 (même fausse), re-sérialisée ; la vraie fonction si
+   * la solution a été montrée ; le repli si aucune réponse n'existe. Absente de l'exercice BRUT : l'écran 2 ne s'écrit ni ne se juge jamais sur la vraie fonction par oubli de projection.
+   */
+  effectif?: ParametresJson;
+}
+
+export interface RepliFx {
+  th: number;
+  tv: number;
+  facteurN: number;
+  facteurD: number;
+  sox: boolean;
+}
+
+/** Paramètres `(a, p, q)` d'une fonction, sous forme JSON (fractions irréductibles) : la forme stockée dans l'exercice projeté. */
+export interface ParametresJson {
+  an: number;
+  ad: number;
+  pn: number;
+  pd: number;
+  qn: number;
+  qd: number;
 }
 
 export const estActive = (ex: Pick<ExerciceFx, "actives">, t: Transformation): boolean => ex.actives.includes(t);
@@ -35,6 +63,15 @@ export interface Parametres {
   a: Rat;
   p: Rat;
   q: Rat;
+}
+
+export const versJson = ({ a, p, q }: Parametres): ParametresJson => ({ an: a.n, ad: a.d, pn: p.n, pd: p.d, qn: q.n, qd: q.d });
+export const depuisJson = (j: ParametresJson): Parametres => ({ a: rat(j.an, j.ad), p: rat(j.pn, j.pd), q: rat(j.qn, j.qd) });
+
+/** Les paramètres du repli (même construction que `parametres`, sur les champs `repli`). */
+export function parametresRepli(ex: Pick<ExerciceFx, "repli">): Parametres {
+  const m = rat(ex.repli.facteurN, ex.repli.facteurD);
+  return { a: ex.repli.sox ? oppR(m) : m, p: rat(ex.repli.th), q: rat(ex.repli.tv) };
 }
 
 export const facteur = (ex: Pick<ExerciceFx, "facteurN" | "facteurD">): Rat => rat(ex.facteurN, ex.facteurD);

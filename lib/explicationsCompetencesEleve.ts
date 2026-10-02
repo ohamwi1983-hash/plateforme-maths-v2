@@ -61,4 +61,5 @@ export const EXPLICATIONS_COMPETENCES_ELEVE: Record<string, string> = {
   Q_INCORRECT: "Ton coefficient et ton décalage horizontal sont bons — relis seulement la hauteur du sommet (la constante à la fin).",
   A_INCORRECT: "Ton sommet est bon, mais pas le coefficient devant la parenthèse : utilise un second point de la courbe pour le retrouver.",
   P_MAGNITUDE_INCORRECTE: "Ton coefficient et la hauteur du sommet sont bons — relis la position horizontale du sommet sur l'axe.",
+  TRANSFORMATION_HORS_SUJET: "Une de tes étapes est bien calculée, mais elle utilise une transformation qui n'est pas nécessaire pour passer de x² à cette fonction — cherche un chemin plus direct.",
 };

@@ -264,4 +264,9 @@ export const EXPLICATIONS_COMPETENCES: Record<string, ExplicationCompetence> = {
     explication: "a et q sont justes mais l'abscisse du sommet est fausse sans être l'opposée de la vraie : lecture erronée de la valeur de p sur l'axe des abscisses.",
     exemple: "Sommet en (3 ; 1), a = 2 : attendu 2(x − 3)² + 1. L'élève écrit 2(x − 4)² + 1.",
   },
+  TRANSFORMATION_HORS_SUJET: {
+    explication:
+      "Une étape de la chaîne est algébriquement correcte pour la transformation choisie, mais cette transformation ne fait pas partie de celles que la ligne de la tâche travaille ni de celles que la fonction visée exige. Le détail compte : deux étapes hors sujet qui s'annulent (par exemple +3 puis −3) restent chacune hors sujet, même si la chaîne retombe sur la bonne expression.",
+    exemple: "Seules TH et EV sont travaillées et la fonction visée est 2(x − 3)². L'élève ajoute +1 (TV) puis retranche 1 (TV) : chaque étape est bien formée, mais TV n'est pas une transformation du sujet.",
+  },
 };

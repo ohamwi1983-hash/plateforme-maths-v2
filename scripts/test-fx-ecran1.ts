@@ -16,7 +16,7 @@ import { ordonneeSurLaCourbe } from "../lib/figureParabole";
 import { creerPrng } from "../lib/prng";
 import { generateurFxDepuisGraphe as G } from "../src/generateurs/fxDepuisGraphe/generateur";
 import { POOL_CV, POOL_EV, POOL_TRANSLATION, genererExerciceFx } from "../src/generateurs/fxDepuisGraphe/generation";
-import { CODES_FX_ECRAN_EXPRESSION } from "../src/generateurs/fxDepuisGraphe/codes";
+import { CODES_FX, CODES_FX_ECRAN_EXPRESSION } from "../src/generateurs/fxDepuisGraphe/codes";
 import { coefficientsDe } from "../src/generateurs/fxDepuisGraphe/diagnostic";
 import { aideExpression, CHAMP_EXPRESSION, figureEtPoints } from "../src/generateurs/fxDepuisGraphe/ecrans";
 import { latexFonction } from "../src/generateurs/fxDepuisGraphe/formatage";
@@ -104,9 +104,9 @@ for (const actives of CONFIGURATIONS) {
 
     // L'écran : un seul, avec figure, aide à deux paliers valide, poids 2, sans solution ni coordonnée dans l'écran servi.
     const ecrans = G.ecrans(ex);
-    verifier(ecrans.length === 1 && ecrans[0]!.champ === CHAMP_EXPRESSION && ecrans[0]!.type === "champ_expression", `${nom} : un écran champ_expression`);
+    verifier(ecrans.length === 2 && ecrans[0]!.champ === CHAMP_EXPRESSION && ecrans[0]!.type === "champ_expression", `${nom} : écran 1 champ_expression (puis l'écran 2)`);
     const e0 = ecrans[0]!;
-    verifier(e0.poids === 2 && e0.figure !== undefined && e0.aide !== undefined && e0.dependDe === undefined, `${nom} : poids 2, figure, aide, indépendant`);
+    verifier(e0.poids === 3 && e0.figure !== undefined && e0.aide !== undefined && e0.dependDe === undefined, `${nom} : poids 3 (inversé : décision du propriétaire), figure, aide, indépendant`);
     verifier(e0.consigne.startsWith("Détermine l'expression analytique de la parabole ci-dessous."), `${nom} : consigne globale`);
     verifier(JSON.stringify(e0.figure) === JSON.stringify(figure), `${nom} : figure de l'écran = figure de l'exercice`);
     const aide = e0.aide as AideAnnotationsFigure;
@@ -164,13 +164,13 @@ for (const graine of GRAINES) {
 
 // ── 3bis. Épinglage (règle `_v2`) : quelques tirages EXACTS. Ce test casse si un changement fait produire à `generer` autre chose pour la même (graine, configuration) : il faudrait alors un NOUVEAU variante_id. ──
 const EPINGLES: [string[], number, ExerciceFx][] = [
-  [["TH", "TV", "EV", "SOX"], 1, { actives: ["TH", "TV", "EV", "SOX"], th: 2, tv: -5, facteurN: 7, facteurD: 2, sox: true, signeEcart: 1 }],
-  [["TH", "TV", "EV", "SOX"], 123456789, { actives: ["TH", "TV", "EV", "SOX"], th: -3, tv: 5, facteurN: 11, facteurD: 4, sox: true, signeEcart: -1 }],
-  [["TV", "CV"], 42, { actives: ["TV", "CV"], th: 0, tv: 2, facteurN: 1, facteurD: 4, sox: false, signeEcart: 1 }],
-  [["TH"], 4294967295, { actives: ["TH"], th: 4, tv: 0, facteurN: 1, facteurD: 1, sox: false, signeEcart: -1 }],
-  [["SOX"], 0, { actives: ["SOX"], th: 0, tv: 0, facteurN: 1, facteurD: 1, sox: true, signeEcart: -1 }],
-  [["EV"], 7777, { actives: ["EV"], th: 0, tv: 0, facteurN: 2, facteurD: 1, sox: false, signeEcart: 1 }],
-  [["TH", "TV", "CV", "SOX"], 2024, { actives: ["TH", "TV", "CV", "SOX"], th: 4, tv: 3, facteurN: 1, facteurD: 5, sox: true, signeEcart: 1 }],
+  [["TH", "TV", "EV", "SOX"], 1, { actives: ["TH", "TV", "EV", "SOX"], th: 2, tv: -5, facteurN: 7, facteurD: 2, sox: true, signeEcart: 1, repli: { th: 5, tv: -3, facteurN: 5, facteurD: 4, sox: true } }],
+  [["TH", "TV", "EV", "SOX"], 123456789, { actives: ["TH", "TV", "EV", "SOX"], th: -3, tv: 5, facteurN: 11, facteurD: 4, sox: true, signeEcart: -1, repli: { th: -2, tv: 3, facteurN: 11, facteurD: 4, sox: false } }],
+  [["TV", "CV"], 42, { actives: ["TV", "CV"], th: 0, tv: 2, facteurN: 1, facteurD: 4, sox: false, signeEcart: 1, repli: { th: 0, tv: 2, facteurN: 1, facteurD: 3, sox: false } }],
+  [["TH"], 4294967295, { actives: ["TH"], th: 4, tv: 0, facteurN: 1, facteurD: 1, sox: false, signeEcart: -1, repli: { th: 3, tv: 0, facteurN: 1, facteurD: 1, sox: false } }],
+  [["SOX"], 0, { actives: ["SOX"], th: 0, tv: 0, facteurN: 1, facteurD: 1, sox: true, signeEcart: -1, repli: { th: 0, tv: 0, facteurN: 1, facteurD: 1, sox: false } }],
+  [["EV"], 7777, { actives: ["EV"], th: 0, tv: 0, facteurN: 2, facteurD: 1, sox: false, signeEcart: 1, repli: { th: 0, tv: 0, facteurN: 7, facteurD: 2, sox: false } }],
+  [["TH", "TV", "CV", "SOX"], 2024, { actives: ["TH", "TV", "CV", "SOX"], th: 4, tv: 3, facteurN: 1, facteurD: 5, sox: true, signeEcart: 1, repli: { th: 1, tv: 2, facteurN: 1, facteurD: 4, sox: false } }],
 ];
 for (const [actives, graine, attendu] of EPINGLES) verifier(JSON.stringify(genererExerciceFx(graine, cfg(actives))) === JSON.stringify(attendu), `épinglage ${actives.join("+")} g=${graine}`);
 
@@ -289,6 +289,17 @@ for (const graine of GRAINES) {
     if (r.statut === "parse_error" && t.trim() !== "") verifier(!r.messageErreur.includes(t) || t.length < 2, `saisie « ${t} » : message sans recopie`);
   }
   verifier(G.verifier(ex, CHAMP_EXPRESSION, "x^2-2x+1+x^3-x^3").statut !== "parse_error", "x³ qui s'annule : degré 2, lisible");
+  // Valeurs démesurées (entiers sûrs au maximum) : jamais d'exception ni d'erreur 500, une réponse fausse sans diagnostic.
+  for (const t of ["9007199254740991x^2+9007199254740991x+9007199254740991", "9007199254740991x^2-9007199254740991x", "x^2+9007199254740991x", "0.000000001x^2+x", "9007199254740991/3x^2+x"]) {
+    let r;
+    try {
+      r = G.verifier(ex, CHAMP_EXPRESSION, t);
+    } catch (e) {
+      r = null;
+      verifier(false, `saisie démesurée « ${t} » : exception ${(e as Error).message}`);
+    }
+    verifier(r === null || r.statut === "not_equivalent" || r.statut === "parse_error", `saisie démesurée « ${t} » : verdict sans exception`);
+  }
   let leve = 0;
   const prng = creerPrng(99);
   const alphabet = "x^2+-*/()0123456789., =fy²³ ";
@@ -305,7 +316,7 @@ for (const graine of GRAINES) {
 }
 
 // ── 8. Codes : déclarés, au dictionnaire, expliqués, catégorisés ──
-verifier(JSON.stringify([...G.codesCompetenceDeclares].sort()) === JSON.stringify([...CODES_FX_ECRAN_EXPRESSION].sort()) && G.codesCompetenceDeclares.length === 4, "quatre codes déclarés");
+verifier(JSON.stringify([...G.codesCompetenceDeclares].sort()) === JSON.stringify([...CODES_FX].sort()) && G.codesCompetenceDeclares.length === 5, "cinq codes déclarés (quatre de l'écran 1 + TRANSFORMATION_HORS_SUJET)");
 for (const code of CODES_FX_ECRAN_EXPRESSION) {
   verifier(Object.hasOwn(DICTIONNAIRE_COMPETENCES, code), `${code} : dictionnaire`);
   verifier(Object.hasOwn(EXPLICATIONS_COMPETENCES, code) && EXPLICATIONS_COMPETENCES[code]!.explication.length > 20 && EXPLICATIONS_COMPETENCES[code]!.exemple.length > 10, `${code} : explication professeur`);

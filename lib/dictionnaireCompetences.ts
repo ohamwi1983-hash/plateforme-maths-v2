@@ -306,4 +306,8 @@ export const DICTIONNAIRE_COMPETENCES: Record<string, { libelle: string; descrip
     libelle: "Abscisse du sommet incorrecte",
     description: "Expression canonique avec a et q corrects mais une abscisse p fausse qui n'est pas l'opposée de la vraie (valeur absolue mal lue)",
   },
+  TRANSFORMATION_HORS_SUJET: {
+    libelle: "Transformation hors sujet",
+    description: "Étape de la chaîne bien formée algébriquement, mais utilisant une transformation que ni la ligne de la tâche ni la fonction visée ne justifient",
+  },
 };
