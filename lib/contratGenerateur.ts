@@ -93,6 +93,11 @@ interface EcranCommun {
   /** Texte de l'énoncé de CET écran (texte d'auteur, balisage `$…$` admis ; le rendu passe par `public/moteur/rendreTexte.js`). */
   consigne: string;
   /**
+   * QUESTION de l'écran (RAPPORT §58), texte d'auteur (balisage `$…$` admis) affiché SOUS la figure quand il y en a une (sinon à la suite de la consigne) : la consigne pose le cadre
+   * au-dessus du graphique, la question dit ce qu'il faut faire en le regardant. Absente : rien (comportement inchangé). Mêmes règles que la consigne (aucune information sur la réponse).
+   */
+  question?: string;
+  /**
    * Nom COURT de l'écran (« Coefficients », « Allure »…), texte d'auteur : libellé de sa ligne dans le « Ce qu'on sait déjà » de l'enveloppe
    * d'exercice (RAPPORT §43). Absent : « Question n ». Aucune information sur la réponse : identique pour tous les élèves.
    */
@@ -126,6 +131,11 @@ interface EcranCommun {
 export interface EcranChampExpression extends EcranCommun {
   type: "champ_expression";
   placeholder?: string;
+  /**
+   * Aperçu LaTeX DYNAMIQUE de la saisie (RAPPORT §58), AU-DESSUS du champ : `libelle` (texte d'AUTEUR, LaTeX sans `$`, ex. « f(x) = ») suivi de ce que l'élève tape, mis en forme par
+   * `public/moteur/apercuLatex.js`. Pur affichage : la saisie n'est jamais interprétée comme du LaTeX et ne quitte pas le composant ; l'aperçu ne juge rien. Absent : pas d'aperçu.
+   */
+  apercu?: { libelle: string };
 }
 
 export interface EcranQcm extends EcranCommun {
@@ -263,14 +273,20 @@ export interface EcranIntervalle extends EcranCommun {
 /**
  * `chaine_transformations` (RAPPORT §56) : une CHAÎNE d'étapes, de `etapesMin` à `etapesMax`, chacune une paire (expression libre, transformation choisie parmi `choix`). L'élève part de
  * `depart` et écrit, à chaque étape, l'expression obtenue et le nom de la transformation appliquée. `choix` est TOUJOURS la même liste, quelle que soit la configuration de la ligne de
- * composition (le menu ne trahit pas les transformations actives). Réponse envoyée : UNE chaîne JSON `{"etapes":[{"expression":"…","transformation":"<id>"}, …]}` (décodeur
+ * composition (le menu ne trahit pas les transformations actives). Réponse envoyée : UNE chaîne JSON `{"etapes":[{"expression":"…","transformation":"<id>","valeur":"…"}, …]}` (`valeur` : la valeur déclarée de TH / TV / EV / CV, `""` pour une transformation sans valeur ; décodeur
  * `decoderChaineTransformations`) ; étapes ajoutées, texte tapé et choix non confirmés restent dans le composant. Parties fausses : `etape:<i>` (0-indexé) désigne une étape entière.
  */
 export interface EcranChaineTransformations extends EcranCommun {
   type: "chaine_transformations";
   /** Expression de départ (texte d'auteur, balisage `$…$` admis) : « $f_0(x) = x^2$ ». */
   depart: string;
-  choix: { id: string; libelle: string }[];
+  /**
+   * Les transformations du menu. `valeur` (RAPPORT §58) : cette transformation prend une VALEUR (TH, TV, EV, CV) que l'élève écrit dans un champ libre à la suite du menu ; son
+   * `placeholder` en donne la convention (texte brut). Absente : aucune valeur (SOX) — le champ n'est pas affiché et la réponse porte `valeur: ""`.
+   */
+  choix: { id: string; libelle: string; valeur?: { placeholder: string } }[];
+  /** Légende des abréviations (texte d'auteur), dévoilée par le bouton « ? » de chaque étape (RAPPORT §58) ; jamais affichée d'office. Absente : pas de bouton « ? ». */
+  legende?: string;
   etapesMin: number;
   etapesMax: number;
   placeholder?: string;

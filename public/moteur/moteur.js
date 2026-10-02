@@ -193,6 +193,7 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
       carte.appendChild(creer("p", "moteur-consigne", ecranCourant.consigne, { math: true }));
       const figure = creerFigure(ecranCourant);
       if (figure) carte.appendChild(figure.element);
+      if (ecranCourant.question) carte.appendChild(creer("p", "moteur-question", ecranCourant.question, { math: true })); // la question de l'écran est SOUS le graphique (RAPPORT §58)
       carteCourante = { carte, ecran: ecranCourant, info: infosParChamp.get(ecranCourant.champ), modification: edition !== null, figure };
       racine.appendChild(carte);
     } else {
@@ -205,6 +206,7 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
         carte.appendChild(creer("p", "moteur-consigne", ecran.consigne, { math: true }));
         const figureRelecture = creerFigure(ecran); // le graphique reste sous l'énoncé en relecture (sans annotations)
         if (figureRelecture) carte.appendChild(figureRelecture.element);
+        if (ecran.question) carte.appendChild(creer("p", "moteur-question", ecran.question, { math: true }));
         // Écran déjà répondu mais encore modifiable : le crayon, à droite de « Ta réponse », rouvre l'écran (RAPPORT §48).
         const crayon = info.modifiable === true ? creerCrayon(nomDe(ecran, exercice.ecrans.indexOf(ecran) + 1), () => afficher(exercice, { edition: ecran.champ })) : null;
         carte.appendChild(resumeTermine(ecran, info, crayon));

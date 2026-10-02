@@ -34,7 +34,7 @@ import { projeterMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta
 import { champsMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/ecrans";
 import { fonctionEffective, fonctionVraie, type ExerciceMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/types";
 import { genererExerciceFx } from "../src/generateurs/fxDepuisGraphe/generation";
-import { chaineCanonique, transformationsAdmises, POLYNOME_DEPART } from "../src/generateurs/fxDepuisGraphe/chaine";
+import { chaineCanonique, parametreEtape, transformationsAdmises, POLYNOME_DEPART } from "../src/generateurs/fxDepuisGraphe/chaine";
 import { latexFonction } from "../src/generateurs/fxDepuisGraphe/formatage";
 import { parametres as parametresFx, polynomeDe as polynomeDeFx, type Parametres as ParametresFx, type Transformation as TransformationFx } from "../src/generateurs/fxDepuisGraphe/types";
 import { constante as constanteFx, plusP as plusPFx } from "../src/generateurs/fxDepuisGraphe/polynome";
@@ -1474,6 +1474,20 @@ async function scenarioPoids(navigateur: any, base: string, largeur: number) {
 
 const NOMS_SYMBOLES_GEN7: Record<string, string> = { "⌣": "minimum (en creux)", "⌢": "maximum (en bosse)", "↗": "croissante", "↘": "décroissante" };
 
+/** Énoncé de l'écran courant (consigne + question, RAPPORT §58) en une chaîne : change dès qu'on passe à l'écran suivant, même quand la consigne globale reste identique. */
+const ENONCE_COURANT_JS = `[...document.querySelectorAll(".moteur-ecran-courant .moteur-consigne, .moteur-ecran-courant .moteur-question")].map((e) => e.textContent).join("|")`;
+
+/** Question de l'écran courant (sous le graphique), KaTeX remplacé par sa source LaTeX, comme `lireConsigneGen7`. */
+async function lireQuestionGen7(page: any): Promise<string> {
+  return (await page.evaluate(`(() => {
+    const el = document.querySelector(".moteur-ecran-courant .moteur-question");
+    if (!el) return "";
+    const copie = el.cloneNode(true);
+    for (const k of copie.querySelectorAll(".katex")) k.replaceWith("$" + (k.querySelector("annotation")?.textContent ?? "") + "$");
+    return copie.textContent;
+  })()`)) as string;
+}
+
 /** Consigne de l'écran courant, KaTeX remplacé par sa source LaTeX (`$…$`) : comparable au texte d'auteur (l'innerText de KaTeX répète chaque formule en MathML). */
 async function lireConsigneGen7(page: any): Promise<string> {
   return (await page.evaluate(`(() => {
@@ -1486,13 +1500,13 @@ async function lireConsigneGen7(page: any): Promise<string> {
 
 /** Clique « Valider », attend l'apparition du bouton de suite, le clique et attend l'écran suivant (sauf à la fin de l'exercice). */
 async function validerEtSuivreGen7(page: any, options: { verdict?: boolean; entre?: () => Promise<void> } = {}): Promise<void> {
-  const avant = (await page.evaluate(`document.querySelector(".moteur-ecran-courant .moteur-consigne").textContent`)) as string;
+  const avant = (await page.evaluate(`${ENONCE_COURANT_JS}`)) as string;
   await page.locator(".moteur-ecran-courant").getByRole("button", { name: "Valider", exact: true }).click();
   if (options.verdict !== false) await page.waitForSelector(".moteur-statut-correct");
   else await page.waitForSelector(".moteur-statut");
   if (options.entre) await options.entre();
   await page.getByRole("button", { name: /Question suivante|Voir la fin/ }).click();
-  await page.waitForFunction(`(() => { const c = document.querySelector(".moteur-ecran-courant .moteur-consigne"); return document.querySelector(".moteur-fin") !== null || (c !== null && c.textContent !== ${JSON.stringify(avant)}); })()`);
+  await page.waitForFunction(`(() => { const c = ${ENONCE_COURANT_JS}; return document.querySelector(".moteur-fin") !== null || (c !== "" && c !== ${JSON.stringify(avant)}); })()`);
 }
 
 /** Ouvre la première tâche de l'élève et rend le moteur prêt. */
@@ -1600,12 +1614,12 @@ async function scenarioGen7Cascade(navigateur: any, base: string, largeur: numbe
     const courant = page.locator(".moteur-ecran-courant");
     /** « Valider », attend le retour serveur, puis renvoie le geste « suite » (à appeler pour passer à l'écran suivant). */
     const valider = async () => {
-      const avant = (await page.evaluate(`document.querySelector(".moteur-ecran-courant .moteur-consigne").textContent`)) as string;
+      const avant = (await page.evaluate(`${ENONCE_COURANT_JS}`)) as string;
       await courant.getByRole("button", { name: "Valider", exact: true }).click();
       await page.waitForSelector(".moteur-ecran-courant .moteur-retour .moteur-statut");
       return async () => {
         await page.getByRole("button", { name: /Question suivante|Voir la fin/ }).click();
-        await page.waitForFunction(`(() => { const c = document.querySelector(".moteur-ecran-courant .moteur-consigne"); return document.querySelector(".moteur-fin") !== null || (c !== null && c.textContent !== ${JSON.stringify(avant)}); })()`);
+        await page.waitForFunction(`(() => { const c = ${ENONCE_COURANT_JS}; return document.querySelector(".moteur-fin") !== null || (c !== "" && c !== ${JSON.stringify(avant)}); })()`);
       };
     };
     // 1. coefficients FAUX
@@ -1849,9 +1863,9 @@ async function scenarioPartiesFausses(navigateur: any, base: string, largeur: nu
     await page.waitForSelector(".moteur-ecran-courant .moteur-retour .moteur-statut");
   };
   const suite = async () => {
-    const avant = (await page.evaluate(`document.querySelector(".moteur-ecran-courant .moteur-consigne").textContent`)) as string;
+    const avant = (await page.evaluate(`${ENONCE_COURANT_JS}`)) as string;
     await page.getByRole("button", { name: /Question suivante|Voir la fin/ }).click();
-    await page.waitForFunction(`(() => { const c = document.querySelector(".moteur-ecran-courant .moteur-consigne"); return document.querySelector(".moteur-fin") !== null || (c !== null && c.textContent !== ${JSON.stringify(avant)}); })()`);
+    await page.waitForFunction(`(() => { const c = ${ENONCE_COURANT_JS}; return document.querySelector(".moteur-fin") !== null || (c !== "" && c !== ${JSON.stringify(avant)}); })()`);
   };
   const nbMarques = () => courant.locator(FAUSSE).count();
 
@@ -2007,9 +2021,9 @@ async function scenarioPartiesFaussesTemoin(navigateur: any, base: string, large
       await page.waitForSelector(".moteur-ecran-courant .moteur-retour .moteur-statut");
     };
     const suivante = async () => {
-      const avant = (await page.evaluate(`document.querySelector(".moteur-ecran-courant .moteur-consigne").textContent`)) as string;
+      const avant = (await page.evaluate(`${ENONCE_COURANT_JS}`)) as string;
       await page.getByRole("button", { name: /Question suivante/ }).click();
-      await page.waitForFunction(`document.querySelector(".moteur-ecran-courant .moteur-consigne").textContent !== ${JSON.stringify(avant)}`);
+      await page.waitForFunction(`${ENONCE_COURANT_JS} !== ${JSON.stringify(avant)}`);
     };
     const e = `${l} (${tentatives} essai${tentatives > 1 ? "s" : ""} en plus)`;
 
@@ -2182,43 +2196,64 @@ async function scenarioChaineTransformations(navigateur: any, base: string, larg
     const ajouter = courant.getByRole("button", { name: "Ajouter une étape" });
     const retirer = courant.getByRole("button", { name: "Retirer la dernière étape" });
     verifier((await etapes.count()) === 1 && (await retirer.isDisabled()) && (await valider.isDisabled()), `${l} : une étape au départ ; ni retrait ni validation possibles`);
-    verifier((await courant.locator(".moteur-chaine-choix").first().locator(".moteur-choix").count()) === 5, `${l} : le menu a toujours cinq transformations`);
+    verifier((await etapes.first().locator(".moteur-select option:not([disabled])").allInnerTexts()).join() === "TH,TV,EV,CV,SOX", `${l} : le menu a toujours cinq transformations`);
+    // Étape (RAPPORT §58) : « ? » à droite de « Étape k », légende dévoilée par le « ? » seulement ; valeur après le menu, absente pour SOX ; « f_k(x) = » avant la fonction.
+    const premiere = etapes.first();
+    verifier((await premiere.locator(".moteur-chaine-legende").isHidden()) && (await premiere.locator(".moteur-chaine-aide").getAttribute("aria-expanded")) === "false", `${l} : la légende est cachée tant qu'on n'a pas appuyé sur « ? »`);
+    const boite = async (loc: any) => loc.boundingBox();
+    const [numero, aide] = [await boite(premiere.locator(".moteur-chaine-numero")), await boite(premiere.locator(".moteur-chaine-aide"))];
+    verifier(aide.x > numero.x + numero.width && Math.abs(aide.y + aide.height / 2 - (numero.y + numero.height / 2)) <= 2, `${l} : le « ? » est à DROITE de « Étape 1 », sur la même ligne`);
+    await premiere.locator(".moteur-chaine-aide").click();
+    verifier((await premiere.locator(".moteur-chaine-legende").isVisible()) && (await premiere.locator(".moteur-chaine-legende").innerText()) === "TH : translation horizontale · TV : translation verticale · EV : étirement vertical · CV : compression verticale · SOX : symétrie d'axe Ox." && (await premiere.locator(".moteur-chaine-aide").getAttribute("aria-expanded")) === "true", `${l} : « ? » dévoile la légende des abréviations, en dessous`);
+    const [legende, ligne1] = [await boite(premiere.locator(".moteur-chaine-legende")), await boite(premiere.locator(".moteur-chaine-ligne").first())];
+    verifier(legende.y >= aide.y + aide.height && ligne1.y >= legende.y + legende.height, `${l} : la légende est sous l'en-tête et AU-DESSUS de la ligne de transformation`);
+    await premiere.locator(".moteur-chaine-aide").click();
+    verifier(await premiere.locator(".moteur-chaine-legende").isHidden(), `${l} : un second appui sur « ? » la referme`);
+    verifier((await etapes.nth(1).locator(".moteur-chaine-legende").isHidden()), `${l} : la légende de l'étape 2 reste fermée (chaque étape a son « ? »)`);
+    await premiere.locator(".moteur-select").selectOption("SOX");
+    verifier((await premiere.locator(".moteur-chaine-valeur").isHidden()) && (await premiere.locator(".moteur-chaine-separateur").isHidden()), `${l} : SOX : ni « : » ni champ de valeur`);
+    await premiere.locator(".moteur-select").selectOption("TH");
+    verifier((await premiere.locator(".moteur-chaine-valeur").isVisible()) && (await premiere.locator(".moteur-chaine-separateur").innerText()) === ":", `${l} : TH : « : » et un champ pour la valeur`);
+    const [champValeur, champSelect] = [await boite(premiere.locator(".moteur-chaine-valeur")), await boite(premiere.locator(".moteur-select"))];
+    verifier(champValeur.x > champSelect.x + champSelect.width, `${l} : la valeur est à droite du menu`);
+    verifier((await premiere.locator(".moteur-chaine-ligne").nth(1).innerText()).replace(/\s+/g, " ").includes("f1(x)=") || (await premiere.locator(".moteur-chaine-ligne").nth(1).locator("annotation").first().textContent()) === "f_{1}(x) =", `${l} : la seconde ligne commence par « f_1(x) = »`);
     for (let k = 0; k < 4; k++) await ajouter.click();
     verifier((await etapes.count()) === 5 && (await ajouter.isDisabled()), `${l} : cinq étapes au plus (« Ajouter » désactivé)`);
     for (let k = 0; k < 3; k++) await retirer.click();
     verifier((await etapes.count()) === 2 && (await ajouter.isEnabled()), `${l} : retrait de la dernière étape`);
     // Étape incomplète : pas de validation.
-    await etapes.nth(0).locator(".moteur-champ").fill("(x-1)^2");
-    await etapes.nth(0).locator('.moteur-choix:has(input[value="TH"])').click();
-    await etapes.nth(1).locator(".moteur-champ").fill("(x-1)^2+1");
+    await remplirEtapeChaine(etapes.nth(0), { expression: "(x-1)^2", t: "TH" });
+    await etapes.nth(1).locator(".moteur-chaine-expression").fill("(x-1)^2+1");
     verifier(await valider.isDisabled(), `${l} : une étape sans transformation : « Valider » reste inactif`);
-    await etapes.nth(1).locator('.moteur-choix:has(input[value="EV"])').click(); // fausse : TV attendue
+    await etapes.nth(1).locator(".moteur-select").selectOption("EV"); // fausse : TV attendue
+    verifier(await valider.isDisabled(), `${l} : transformation à valeur sans valeur : « Valider » reste inactif`);
+    await etapes.nth(1).locator(".moteur-chaine-valeur").fill("1");
     verifier(await valider.isEnabled(), `${l} : toutes les étapes complètes : « Valider » actif`);
     const avantEnvoi = reponsesEnvoyees(journal);
     await valider.click();
     await page.waitForSelector(".moteur-retour .moteur-statut");
     verifier(reponsesEnvoyees(journal) === avantEnvoi + 1, `${l} : une seule requête pour la validation (étapes et frappes restent locales)`);
     const envoye = JSON.parse(journal.requetes.filter((r: any) => r.methode === "POST" && r.url.endsWith("/api/reponses")).slice(-1)[0].corps ?? "{}");
-    verifier(Object.keys(envoye).sort().join() === "champ,exercice_assigne_id,reponse_brute" && envoye.reponse_brute === '{"etapes":[{"expression":"(x-1)^2","transformation":"TH"},{"expression":"(x-1)^2+1","transformation":"EV"}]}', `${l} : réponse envoyée = UNE chaîne JSON exacte (${envoye.reponse_brute})`);
+    verifier(Object.keys(envoye).sort().join() === "champ,exercice_assigne_id,reponse_brute" && envoye.reponse_brute === '{"etapes":[{"expression":"(x-1)^2","transformation":"TH","valeur":"1"},{"expression":"(x-1)^2+1","transformation":"EV","valeur":"1"}]}', `${l} : réponse envoyée = UNE chaîne JSON exacte (${envoye.reponse_brute})`);
     verifier((await courant.locator(".moteur-statut-not_equivalent").count()) === 1, `${l} : verdict négatif`);
     // Restauration sans altération (retour en arrière) : le composant relit sa propre réponse et la reproduit à l'identique.
-    const restaure = await page.evaluate(`(async () => { const { COMPOSANTS_ECRAN } = await import("/moteur/ecrans/index.js"); const ecran = { champ: "chaine", type: "chaine_transformations", choix: ${JSON.stringify(["TH", "TV", "EV", "CV", "SOX"].map((id) => ({ id, libelle: id })))}, etapesMin: 1, etapesMax: 5, depart: "x", consigne: "c" }; const brute = ${JSON.stringify(envoye.reponse_brute)}; const v = COMPOSANTS_ECRAN.chaine_transformations.creer(ecran, { surSoumission() {}, surChangement() {}, valeurInitiale: brute }); return v.lireReponse() === brute; })()`);
+    const restaure = await page.evaluate(`(async () => { const { COMPOSANTS_ECRAN } = await import("/moteur/ecrans/index.js"); const ecran = { champ: "chaine", type: "chaine_transformations", choix: ${JSON.stringify(["TH", "TV", "EV", "CV", "SOX"].map((id) => (id === "SOX" ? { id, libelle: id } : { id, libelle: id, valeur: { placeholder: "valeur" } })))}, etapesMin: 1, etapesMax: 5, depart: "x", consigne: "c" }; const brute = ${JSON.stringify(envoye.reponse_brute)}; const v = COMPOSANTS_ECRAN.chaine_transformations.creer(ecran, { surSoumission() {}, surChangement() {}, valeurInitiale: brute }); return v.lireReponse() === brute; })()`);
     verifier(restaure === true, `${l} : valeurInitiale restaurée SANS altération`);
     if (tentatives > 0) {
-      verifier((await courant.locator(".moteur-chaine-etape input.moteur-partie-fausse").count()) === 1 && (await etapes.nth(1).locator("input.moteur-champ").getAttribute("aria-invalid")) === "true" && (await etapes.nth(0).locator("input.moteur-champ").getAttribute("aria-invalid")) === null, `${l} : seule l'étape 2 est marquée fausse (aria-invalid)`);
-      verifier((await etapes.nth(1).locator(".moteur-choix.moteur-partie-fausse").count()) === 1 && (await etapes.nth(0).locator(".moteur-choix.moteur-partie-fausse").count()) === 0, `${l} : la transformation choisie à l'étape 2 est marquée`);
-      await etapes.nth(1).locator('.moteur-choix:has(input[value="TV"])').click();
+      verifier((await courant.locator(".moteur-chaine-etape .moteur-partie-fausse").count()) === 3 && (await etapes.nth(1).locator(".moteur-chaine-expression").getAttribute("aria-invalid")) === "true" && (await etapes.nth(0).locator(".moteur-chaine-expression").getAttribute("aria-invalid")) === null, `${l} : seule l'étape 2 est marquée fausse : fonction, valeur et transformation (aria-invalid)`);
+      verifier((await etapes.nth(1).locator(".moteur-select.moteur-partie-fausse").count()) === 1 && (await etapes.nth(0).locator(".moteur-select.moteur-partie-fausse").count()) === 0, `${l} : la transformation choisie à l'étape 2 est marquée`);
+      await etapes.nth(1).locator(".moteur-select").selectOption("TV");
       verifier((await courant.locator(".moteur-partie-fausse").count()) === 0, `${l} : modifier l'étape retire sa marque`);
       await valider.click();
       await page.waitForSelector(".moteur-statut-correct");
-      verifier((await courant.locator(".moteur-chaine-etape input").first().isDisabled()) && (await ajouter.isDisabled()) && (await retirer.isDisabled()), `${l} : après la réussite, tout est verrouillé`);
+      verifier((await courant.locator(".moteur-chaine-etape input").first().isDisabled()) && (await courant.locator(".moteur-chaine-etape select").first().isDisabled()) && (await ajouter.isDisabled()) && (await retirer.isDisabled()), `${l} : après la réussite, tout est verrouillé`);
     } else {
       // Plus d'essai : verrouillé, relecture avec l'étape fausse surlignée.
       await page.getByRole("button", { name: /Voir la fin/ }).click();
       await page.waitForSelector(".moteur-ecran-termine");
       const pieces: string[] = await page.locator(".moteur-ecran-termine .moteur-piece-fausse").allInnerTexts();
-      verifier(pieces.length === 1 && pieces[0] === "(x-1)^2+1 (EV)", `${l} : relecture : l'étape 2 est surlignée (${JSON.stringify(pieces)})`);
-      verifier((await page.locator(".moteur-ecran-termine .moteur-reponse-eleve").last().innerText()).includes("(x-1)^2 (TH) ; (x-1)^2+1 (EV)"), `${l} : relecture : « Ta réponse » en texte d'élève`);
+      verifier(pieces.length === 1 && pieces[0] === "(x-1)^2+1 (EV 1)", `${l} : relecture : l'étape 2 est surlignée (${JSON.stringify(pieces)})`);
+      verifier((await page.locator(".moteur-ecran-termine .moteur-reponse-eleve").last().innerText()).includes("(x-1)^2 (TH 1) ; (x-1)^2+1 (EV 1)"), `${l} : relecture : « Ta réponse » en texte d'élève`);
     }
     await page.screenshot({ path: join(CAPTURES, `${l.replace(/[ ()]/g, "-")}.png`), fullPage: true });
     verifier(!(await page.evaluate("document.documentElement.scrollWidth > window.innerWidth")), `${l} : pas de défilement horizontal`);
@@ -2281,10 +2316,8 @@ async function scenarioFigureAidePaliers(navigateur: any, base: string, largeur:
   verifier((await page.locator(`${SVG}`).count()) === 1 && (await page.locator(`${SVG} .figure-annotations > *`).count()) === 0, `${l} : écran suivant : même graphique, sans annotation`);
   const etapes = courant.locator(".moteur-chaine-etape");
   await courant.getByRole("button", { name: "Ajouter une étape" }).click();
-  await etapes.nth(0).locator(".moteur-champ").fill("(x-1)^2");
-  await etapes.nth(0).locator('.moteur-choix:has(input[value="TH"])').click();
-  await etapes.nth(1).locator(".moteur-champ").fill("(x-1)^2+1");
-  await etapes.nth(1).locator('.moteur-choix:has(input[value="TV"])').click();
+  await remplirEtapeChaine(etapes.nth(0), { expression: "(x-1)^2", t: "TH" });
+  await remplirEtapeChaine(etapes.nth(1), { expression: "(x-1)^2+1", t: "TV" });
   await courant.getByRole("button", { name: "Valider", exact: true }).click();
   await page.waitForSelector(".moteur-statut-correct");
   await page.getByRole("button", { name: /Voir la fin/ }).click();
@@ -2490,22 +2523,33 @@ async function ecrireExpressionFx(page: any, texte: string): Promise<void> {
   await courant.getByRole("button", { name: "Valider", exact: true }).click();
 }
 
-/** Écran 2 : compose la chaîne (étapes `[expression, transformation]`) et valide. */
-async function composerChaineFx(page: any, etapes: { expression: string; t: string }[]): Promise<void> {
+/** Une étape de la chaîne (RAPPORT §58) : la transformation au menu déroulant, sa valeur (sauf SOX), puis la fonction obtenue. */
+async function remplirEtapeChaine(etape: any, e: { expression: string; t: string; valeur?: string }): Promise<void> {
+  await etape.locator(".moteur-select").selectOption(e.t);
+  if (e.t !== "SOX") await etape.locator(".moteur-chaine-valeur").fill(e.valeur ?? "1");
+  await etape.locator(".moteur-chaine-expression").fill(e.expression);
+}
+
+/** Écran 2 : compose la chaîne (étapes `{ expression, t, valeur }`) et valide. */
+async function composerChaineFx(page: any, etapes: { expression: string; t: string; valeur?: string }[]): Promise<void> {
   const courant = page.locator(".moteur-ecran-courant");
   await page.waitForSelector(".moteur-chaine");
   for (let k = 1; k < etapes.length; k++) await courant.getByRole("button", { name: "Ajouter une étape" }).click();
   const lignes = courant.locator(".moteur-chaine-etape");
-  for (let k = 0; k < etapes.length; k++) {
-    await lignes.nth(k).locator(".moteur-champ").fill(etapes[k]!.expression);
-    await lignes.nth(k).locator(`.moteur-choix:has(input[value="${etapes[k]!.t}"])`).click();
-  }
+  for (let k = 0; k < etapes.length; k++) await remplirEtapeChaine(lignes.nth(k), etapes[k]!);
   await courant.getByRole("button", { name: "Valider", exact: true }).click();
 }
 
 /** La chaîne canonique (étapes écrites comme un élève) qui atteint `g` avec les transformations ADMISES de `actives` pour cet élève. */
-const chaineEleveFx = (g: ParametresFx, actives: TransformationFx[]): { expression: string; t: string }[] =>
-  (chaineCanonique(g, transformationsAdmises(actives, g)) ?? []).map((e) => ({ expression: ecritureFx(e.apres), t: e.transformation }));
+function chaineEleveFx(g: ParametresFx, actives: TransformationFx[]): { expression: string; t: string; valeur: string }[] {
+  let avant = POLYNOME_DEPART;
+  return (chaineCanonique(g, transformationsAdmises(actives, g)) ?? []).map((e) => {
+    const apres = polynomeDeFx(e.apres);
+    const p = parametreEtape(e.transformation, avant, apres);
+    avant = apres;
+    return { expression: ecritureFx(e.apres), t: e.transformation, valeur: p === null || e.transformation === "SOX" ? "" : p.d === 1 ? String(p.n) : `${p.n}/${p.d}` };
+  });
+}
 
 /**
  * Parcours gen8 complet dans le navigateur : (1) CHAQUE transformation seule puis plusieurs combinées, de la figure à la relecture, avec le score aux DEUX écrans (3 + 2 points) ;
@@ -2533,14 +2577,41 @@ async function scenarioGen8Eleve(navigateur: any, base: string, largeur: number)
     await page.waitForSelector(".moteur-ecran-courant .figure-svg");
     verifier((await page.locator(".moteur-ecran-courant .figure-annotations > *").count()) === 0, `${l} : le graphique est servi SANS annotation`);
     const consigne1 = await lireConsigneGen7(page);
-    verifier(consigne1.startsWith("Détermine l'expression analytique de la parabole ci-dessous.") && /forme canonique/.test(consigne1), `${l} : consigne de l'écran 1`);
+    const question1 = await lireQuestionGen7(page);
+    verifier(consigne1.startsWith("Détermine l'expression analytique de la parabole ci-dessous.") && !/forme canonique/.test(consigne1) && /forme canonique/.test(question1) && question1.includes("$a(x - p)^2 + q$"), `${l} : consigne de l'écran 1 ; la question « forme canonique » en est séparée`);
+    // Ordre des blocs : consigne, graphique, QUESTION (sous le graphique), puis l'aperçu LaTeX, puis le champ.
+    const ordre1: string[] = await page.evaluate(`[...document.querySelector(".moteur-ecran-courant").children].map((e) => e.className.split(" ").filter((c) => /^(moteur-consigne|moteur-question|moteur-figure|moteur-champ-expression)$/.test(c))[0] ?? "").filter(Boolean)`);
+    verifier(ordre1.join() === "moteur-consigne,moteur-figure,moteur-question,moteur-champ-expression", `${l} : ordre consigne / graphique / question / saisie (${ordre1.join()})`);
+    const posQ = await page.locator(".moteur-ecran-courant .moteur-question").boundingBox();
+    const posF = await page.locator(".moteur-ecran-courant .moteur-figure").boundingBox();
+    const posA = await page.locator(".moteur-ecran-courant .moteur-apercu-expression").boundingBox();
+    const posC = await page.locator(".moteur-ecran-courant .moteur-champ").boundingBox();
+    verifier(posQ.y >= posF.y + posF.height - 0.5 && posA.y >= posQ.y + posQ.height - 0.5 && posC.y >= posA.y + posA.height - 0.5, `${l} : la question est SOUS le graphique, l'aperçu sous la question, le champ SOUS l'aperçu`);
+    // Aperçu LaTeX dynamique : « f(x) = » seul au départ, puis la saisie mise en forme à chaque frappe ; un « $ » tapé reste littéral.
+    const apercu = async () => ((await page.evaluate(`document.querySelector(".moteur-ecran-courant .moteur-apercu-expression annotation")?.textContent ?? ""`)) as string);
+    verifier((await apercu()) === "f(x) =", `${l} : aperçu vide au départ : le libellé seul (« ${await apercu()} »)`);
+    const champ1 = page.locator(".moteur-ecran-courant .moteur-champ");
+    await champ1.pressSequentially("2(x-3)^2+1");
+    verifier((await apercu()) === "f(x) =\\,2\\left(x-3\\right)^{2}+1", `${l} : l'aperçu suit la frappe (« ${await apercu()} »)`);
+    await page.screenshot({ path: join(CAPTURES, `${largeur}-gen8-apercu-${cas.nom.replace(/[^A-Za-z0-9]+/g, "-")}.png`), fullPage: true });
+    verifier((await page.locator(".moteur-ecran-courant .moteur-apercu-expression .katex").count()) === 1 && (await page.locator(".moteur-math-source").count()) === 0 && (await page.locator(".moteur-apercu-expression").getAttribute("aria-hidden")) === "true", `${l} : l'aperçu est rendu par KaTeX (jamais en source), masqué aux lecteurs d'écran`);
+    await champ1.fill("1/2(x-1");
+    verifier((await apercu()) === "f(x) =\\,\\dfrac{1}{2}\\left(x-1\\right.", `${l} : saisie incomplète : l'aperçu reste compilable (« ${await apercu()} »)`);
+    await champ1.fill("a$\\textcolor{red}{b}");
+    verifier((await page.locator(".moteur-apercu-expression [style*='color']").count()) === 0 && (await page.locator(".moteur-apercu-expression .katex-error").count()) === 0, `${l} : aucune couleur dans l'aperçu (ni erreur KaTeX) pour une saisie hostile`);
+    await champ1.fill("");
+    verifier((await apercu()) === "f(x) =", `${l} : champ vidé : l'aperçu revient au libellé seul`);
     await ecrireExpressionFx(page, ecritureFx(f));
     await page.waitForSelector(".moteur-statut-correct");
     await page.getByRole("button", { name: /Question suivante/ }).click();
     await page.waitForSelector(".moteur-chaine");
     const consigne2 = await lireConsigneGen7(page);
-    verifier(consigne2.includes(`$f(x) = ${latexFonction(f)}$`) && consigne2.startsWith("Détermine l'expression analytique de la parabole ci-dessous."), `${l} : l'écran 2 rappelle la consigne globale et reprend la fonction (« ${consigne2.slice(0, 120)} »)`);
-    verifier((await courant.locator(".moteur-chaine-choix").first().locator(".moteur-choix").count()) === 5 && (await courant.locator(".moteur-aide button").count()) === 0, `${l} : cinq transformations au menu quelle que soit la ligne ; aucun bouton d'aide`);
+    const question2 = await lireQuestionGen7(page);
+    verifier(question2.includes(`$f(x) = ${latexFonction(f)}$`) && consigne2.startsWith("Détermine l'expression analytique de la parabole ci-dessous.") && !consigne2.includes("$f(x)"), `${l} : l'écran 2 rappelle la consigne globale, et sa QUESTION (sous le graphique) reprend la fonction (« ${question2.slice(0, 120)} »)`);
+    const ordre2: string[] = await page.evaluate(`[...document.querySelector(".moteur-ecran-courant").children].map((e) => e.className.split(" ").filter((c) => /^(moteur-consigne|moteur-question|moteur-figure|moteur-chaine)$/.test(c))[0] ?? "").filter(Boolean)`);
+    verifier(ordre2.join() === "moteur-consigne,moteur-figure,moteur-question,moteur-chaine", `${l} : écran 2 : consigne / graphique / question / chaîne (${ordre2.join()})`);
+    verifier(!(await page.locator("body").innerText()).includes("TH : translation horizontale") , `${l} : la légende des abréviations n'est PAS affichée d'office`);
+    verifier((await courant.locator(".moteur-chaine-etape").first().locator(".moteur-select option:not([disabled])").count()) === 5 && (await courant.locator(".moteur-aide button").count()) === 0, `${l} : cinq transformations au menu quelle que soit la ligne ; aucun bouton d'aide`);
     await composerChaineFx(page, chaineEleveFx(f, cas.actives));
     await page.waitForSelector(".moteur-statut-correct");
     verifier((await page.locator(".moteur-rappel-score").allInnerTexts()).join("|") === "3 / 3 pts", `${l} : score de l'écran 1 dans le rappel (${JSON.stringify(await page.locator(".moteur-rappel-score").allInnerTexts())})`);
@@ -2567,7 +2638,7 @@ async function scenarioGen8Eleve(navigateur: any, base: string, largeur: number)
     await page.waitForSelector(".moteur-statut-correct");
     await page.getByRole("button", { name: /Question suivante/ }).click();
     const canonique = chaineEleveFx(f, ["TH"]);
-    const paire = [{ expression: "x^2+3", t: "TV" }, { expression: "x^2", t: "TV" }];
+    const paire = [{ expression: "x^2+3", t: "TV", valeur: "3" }, { expression: "x^2", t: "TV", valeur: "-3" }];
     await composerChaineFx(page, [...paire, ...canonique]);
     await page.waitForSelector(".moteur-statut-not_equivalent");
     verifier((await page.locator(".moteur-ecran-courant .moteur-piece-fausse, .moteur-ecran-courant input.moteur-partie-fausse").count()) >= 2, `${l} : les deux étapes hors sujet sont surlignées alors que la chaîne arrive à f`);
@@ -2640,7 +2711,7 @@ async function scenarioGen8Eleve(navigateur: any, base: string, largeur: number)
     else verifier((await page.locator(".moteur-solution").count()) === 0, `${l} : la solution de l'écran 1 n'est PAS montrée`);
     await page.getByRole("button", { name: /Question suivante/ }).click();
     await page.waitForSelector(".moteur-chaine");
-    const consigne = await lireConsigneGen7(page);
+    const consigne = await lireQuestionGen7(page);
     const affichee = regime.montree ? f : gEleve;
     verifier(consigne.includes(`$f(x) = ${latexFonction(affichee)}$`), `${l} : l'énoncé de l'écran 2 affiche ${regime.montree ? "la VRAIE fonction (§45)" : "la fonction confirmée par l'élève"} (« ${consigne.slice(0, 150)} »)`);
     if (!regime.montree) verifier(!consigne.includes(`$f(x) = ${latexFonction(f)}$`), `${l} : la vraie fonction ne fuit pas`);
@@ -3028,6 +3099,10 @@ async function main() {
         controlerReponsesHttp(`${largeur} gen8 prof`);
         await scenarioGen8Eleve(navigateur, url, largeur);
         controlerReponsesHttp(`${largeur} gen8 élève`);
+        await scenarioChaineTransformations(navigateur, url, largeur);
+        controlerReponsesHttp(`${largeur} chaîne`);
+        await scenarioFigureAidePaliers(navigateur, url, largeur);
+        controlerReponsesHttp(`${largeur} figure aide paliers`);
         continue;
       }
       // Chaque scénario est suivi du contrôle de ses réponses HTTP >= 400 (attendus déclarés à part, s'il y en a).

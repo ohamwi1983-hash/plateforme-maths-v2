@@ -12,7 +12,7 @@ import { verifierBalisageMath } from "./support/texteMath";
 import { CATALOGUE_GENERATEURS } from "../lib/catalogueGenerateurs";
 import { chercherGenerateur } from "../lib/registreGenerateurs";
 import { genererExerciceFx } from "../src/generateurs/fxDepuisGraphe/generation";
-import { chaineCanonique, transformationsAdmises } from "../src/generateurs/fxDepuisGraphe/chaine";
+import { chaineCanonique, parametreEtape, transformationsAdmises } from "../src/generateurs/fxDepuisGraphe/chaine";
 import { latexFonction } from "../src/generateurs/fxDepuisGraphe/formatage";
 import { coefficient, constante, plusP, type Polynome } from "../src/generateurs/fxDepuisGraphe/polynome";
 import { TRANSFORMATIONS, parametres, polynomeDe, type Parametres, type Transformation } from "../src/generateurs/fxDepuisGraphe/types";
@@ -39,7 +39,17 @@ function saisie(p: Polynome): string {
   }
   return termes.join("+") || "0";
 }
-const chaineBrute = (etapes: { t: string; e: Polynome }[]): string => JSON.stringify({ etapes: etapes.map(({ t, e }) => ({ expression: saisie(e), transformation: t })) });
+// Valeur déclarée (RAPPORT §58) : la vraie valeur de l'étape (`parametreEtape`), « 1 » si sa règle est fausse, aucune pour SOX.
+function chaineBrute(etapes: { t: string; e: Polynome }[]): string {
+  let avant: Polynome = POLYNOME_DEPART;
+  return JSON.stringify({
+    etapes: etapes.map(({ t, e }) => {
+      const parametre = (TRANSFORMATIONS as readonly string[]).includes(t) ? parametreEtape(t as Transformation, avant, e) : null;
+      avant = e;
+      return { expression: saisie(e), transformation: t, valeur: t === "SOX" ? "" : parametre === null ? "1" : parametre.d === 1 ? String(parametre.n) : `${parametre.n}/${parametre.d}` };
+    }),
+  });
+}
 const chainePour = (g: Parametres, actives: readonly Transformation[]): { t: string; e: Polynome }[] =>
   (chaineCanonique(g, transformationsAdmises(actives, g)) ?? []).map((c) => ({ t: c.transformation, e: polynomeDe(c.apres) }));
 
@@ -149,7 +159,7 @@ async function main(): Promise<void> {
     verifier(g.champs.length === 2 && g.champs[0].poids === 3 && g.champs[1].poids === 2, `${actives.join("+")} : poids 3 et 2 servis pour les deux champs`);
     const brut = JSON.stringify(g);
     verifier(!brut.includes('"annotations"') && !brut.includes("annotations_figure") && !brut.includes("S(") && !brut.includes("A(") && !/"aide":/.test(brut), `${actives.join("+")} : ni aide ni coordonnée de S/A dans l'exercice servi`);
-    verifier(g.ecrans.every((e: any) => verifierBalisageMath(e.consigne).length === 0) && g.ecrans[0].figure?.type === "graphe_parabole" && g.ecrans[0].aide_paliers === 2, `${actives.join("+")} : figure servie, deux paliers d'aide annoncés`);
+    verifier(g.ecrans.every((e: any) => verifierBalisageMath(e.consigne).length === 0 && verifierBalisageMath(e.question ?? "").length === 0) && g.ecrans[0].figure?.type === "graphe_parabole" && g.ecrans[0].aide_paliers === 2, `${actives.join("+")} : figure servie, deux paliers d'aide annoncés`);
     verifier(g.champs.every((c: any) => c.solution_attendue === null && c.score === null), `${actives.join("+")} : aucune solution servie au départ`);
   }
 
@@ -173,7 +183,7 @@ async function main(): Promise<void> {
         const g = await x.lire();
         verifier(g.ecrans.map((e: any) => e.champ).join() === "expression,chaine" && g.champ_courant === "chaine", `${lieu} : l'écran 2 est servi après l'écran 1`);
         const e2 = g.ecrans.find((e: any) => e.champ === "chaine");
-        verifier(e2.consigne.includes(`$f(x) = ${latexFonction(x.f)}$`), `${lieu} : l'énoncé reprend la fonction (vraie, confirmée juste)`);
+        verifier((e2.question ?? "").includes(`$f(x) = ${latexFonction(x.f)}$`), `${lieu} : l'énoncé reprend la fonction (vraie, confirmée juste)`);
         verifier(e2.type === "chaine_transformations" && e2.choix.length === 5 && e2.aide_disponible !== true && JSON.stringify(e2.figure) === JSON.stringify(g.ecrans[0].figure), `${lieu} : écran 2 sans aide, menu à 5 choix, même figure`);
         const r2 = await x.poster("chaine", chaineBrute(chainePour(x.f, cas.actives)));
         verifier(r2.statut === 200 && x.lignesReponses("chaine")[0]?.statut === "correct", `${lieu} : chaîne juste → correct en base`);
@@ -190,8 +200,8 @@ async function main(): Promise<void> {
         const g = await x.lire();
         const e2 = g.ecrans.find((e: any) => e.champ === "chaine");
         const attendu = regime.montree ? x.f : gEleve;
-        verifier(!!e2 && e2.consigne.includes(`$f(x) = ${latexFonction(attendu)}$`), `${lieu} : l'énoncé affiche ${regime.montree ? "la VRAIE fonction (révélée, §45)" : "la fonction confirmée par l'élève, sans substitut"}`);
-        if (!regime.montree) verifier(!e2.consigne.includes(`$f(x) = ${latexFonction(x.f)}$`), `${lieu} : la vraie fonction ne fuit pas dans l'énoncé`);
+        verifier(!!e2 && (e2.question ?? "").includes(`$f(x) = ${latexFonction(attendu)}$`), `${lieu} : l'énoncé affiche ${regime.montree ? "la VRAIE fonction (révélée, §45)" : "la fonction confirmée par l'élève, sans substitut"}`);
+        if (!regime.montree) verifier(!(e2.question ?? "").includes(`$f(x) = ${latexFonction(x.f)}$`) && !e2.consigne.includes("$f(x) ="), `${lieu} : la vraie fonction ne fuit pas dans l'énoncé`);
         // La chaîne vers la fonction affichée est juste — même si sa fonction exige des transformations que la ligne n'active pas (option 4).
         const r2 = await x.poster("chaine", chaineBrute(chainePour(attendu, cas.actives)));
         verifier(r2.statut === 200 && x.lignesReponses("chaine")[0]?.statut === "correct", `${lieu} : chaîne vers la fonction affichée → correct en base (option 4)`);

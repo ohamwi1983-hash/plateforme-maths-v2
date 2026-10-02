@@ -165,12 +165,15 @@ export function lireNombreOuFraction(texte: string): number | null {
 export interface EtapeChaine {
   expression: string;
   transformation: string;
+  /** Valeur déclarée (TH, TV, EV, CV), texte d'élève NON lu ici ; `""` pour une transformation sans valeur. */
+  valeur: string;
 }
 
 export const EXPRESSION_ETAPE_LONGUEUR_MAX = 120;
+export const VALEUR_ETAPE_LONGUEUR_MAX = 40;
 
 /**
- * `chaine_transformations` : structure SEULEMENT (RAPPORT §56). `{"etapes":[{"expression","transformation"}…]}` : de `etapesMin` à `etapesMax` étapes, clés exactes, `transformation` ∈ ids de
+ * `chaine_transformations` : structure SEULEMENT (RAPPORT §56). `{"etapes":[{"expression","transformation","valeur"}…]}` : de `etapesMin` à `etapesMax` étapes, clés exactes, `transformation` ∈ ids de
  * `choix`, `expression` non vide (après `trim`) et d'au plus 120 caractères. Ne juge JAMAIS la justesse, ne lit PAS l'expression (c'est le générateur qui l'interprète). Tableaux et
  * clés fixes uniquement : aucune clé venue de l'élève n'indexe un objet.
  */
@@ -195,14 +198,20 @@ export function decoderChaineTransformations(reponseBrute: string, ecran: Pick<E
     const e: unknown = etapes[i];
     if (typeof e !== "object" || e === null || Array.isArray(e)) return illisible;
     const k = Object.keys(e);
-    if (k.length !== 2 || !k.includes("expression") || !k.includes("transformation")) return illisible;
-    const { expression, transformation } = e as { expression: unknown; transformation: unknown };
-    if (typeof expression !== "string" || typeof transformation !== "string") return illisible;
+    if (k.length !== 3 || !k.includes("expression") || !k.includes("transformation") || !k.includes("valeur")) return illisible;
+    const { expression, transformation, valeur } = e as { expression: unknown; transformation: unknown; valeur: unknown };
+    if (typeof expression !== "string" || typeof transformation !== "string" || typeof valeur !== "string") return illisible;
     const nettoyee = expression.trim();
     if (nettoyee === "") return { ok: false, message: `L'étape ${i + 1} n'a pas d'expression : écris-la avant de valider.` };
     if (nettoyee.length > EXPRESSION_ETAPE_LONGUEUR_MAX) return { ok: false, message: `L'expression de l'étape ${i + 1} est trop longue.` };
-    if (!ecran.choix.some((c) => c.id === transformation)) return { ok: false, message: `La transformation de l'étape ${i + 1} n'existe pas.` };
-    sortie.push({ expression: nettoyee, transformation });
+    const choix = ecran.choix.find((c) => c.id === transformation);
+    if (choix === undefined) return { ok: false, message: `La transformation de l'étape ${i + 1} n'existe pas.` };
+    const valeurNettoyee = valeur.trim();
+    // Une transformation à valeur exige une valeur écrite ; une transformation sans valeur (SOX) n'en porte jamais (la réponse reste canonique, donc re-validable sans changer).
+    if (choix.valeur !== undefined && valeurNettoyee === "") return { ok: false, message: `L'étape ${i + 1} n'a pas de valeur : écris la valeur de la transformation avant de valider.` };
+    if (choix.valeur === undefined && valeurNettoyee !== "") return illisible;
+    if (valeurNettoyee.length > VALEUR_ETAPE_LONGUEUR_MAX) return { ok: false, message: `La valeur de l'étape ${i + 1} est trop longue.` };
+    sortie.push({ expression: nettoyee, transformation, valeur: valeurNettoyee });
   }
   return { ok: true, valeur: sortie };
 }

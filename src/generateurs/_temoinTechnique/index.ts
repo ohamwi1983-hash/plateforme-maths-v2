@@ -639,12 +639,14 @@ const NOMS_ECRANS: Readonly<Record<string, string>> = {
 
 /** Les cinq transformations de la chaîne (toujours les cinq : le menu ne trahit rien). Le témoin ne juge que la STRUCTURE de la chaîne attendue, jamais ses expressions. */
 const CHOIX_CHAINE = [
-  { id: "TH", libelle: "TH" },
-  { id: "TV", libelle: "TV" },
-  { id: "EV", libelle: "EV" },
-  { id: "CV", libelle: "CV" },
+  { id: "TH", libelle: "TH", valeur: { placeholder: "h (+ : vers la droite)" } },
+  { id: "TV", libelle: "TV", valeur: { placeholder: "k (+ : vers le haut)" } },
+  { id: "EV", libelle: "EV", valeur: { placeholder: "facteur > 1" } },
+  { id: "CV", libelle: "CV", valeur: { placeholder: "facteur entre 0 et 1" } },
   { id: "SOX", libelle: "SOX" },
 ];
+/** Légende des abréviations, dévoilée par le « ? » de chaque étape. */
+const LEGENDE_CHAINE = "TH : translation horizontale · TV : translation verticale · EV : étirement vertical · CV : compression verticale · SOX : symétrie d'axe Ox.";
 const CHAINE_ATTENDUE = ["TH", "TV"];
 const ECRAN_CHAINE_BORNES = { etapesMin: 1, etapesMax: 5 };
 
@@ -655,8 +657,10 @@ function ecransGraphe(g: ExerciceGraphe): EcranDeclare[] {
     {
       type: "champ_expression",
       champ: CHAMP_COURBE,
-      consigne: "On a tracé la parabole d'équation $y = a(x - p)^2 + q$. Quelle est la valeur de $a$ ?",
+      consigne: "On a tracé la parabole d'équation $y = a(x - p)^2 + q$.",
       figure,
+      question: "Quelle est la valeur de $a$ ?", // la question est SOUS le graphique (RAPPORT §58)
+      apercu: { libelle: "a =" }, // aperçu LaTeX de la saisie, au-dessus du champ
       aide: {
         type: "annotations_figure",
         paliers: [
@@ -677,6 +681,8 @@ function ecransGraphe(g: ExerciceGraphe): EcranDeclare[] {
       type: "chaine_transformations",
       champ: CHAMP_CHAINE,
       consigne: "Écris une chaîne de deux étapes : une translation horizontale (TH), puis une translation verticale (TV). Le témoin ne vérifie que l'ordre des transformations.",
+      question: "Quelles transformations conduisent de $x^2$ à $(x-1)^2 + 1$ ?",
+      legende: LEGENDE_CHAINE,
       depart: "$f_0(x) = x^2$",
       choix: CHOIX_CHAINE,
       ...ECRAN_CHAINE_BORNES,
@@ -821,7 +827,7 @@ export const generateurTemoinTechnique: Generateur<ExerciceTemoin> = {
 export function reponseBruteCorrecte(ex: ExerciceTemoin, champ: string): string {
   if (CHAMPS_ETENDUS.includes(champ)) return reponseBruteCorrecteEtendue(etenduDe(ex, champ), champ);
   if (champ === CHAMP_COURBE) return String(grapheDe(ex).a);
-  if (champ === CHAMP_CHAINE) return JSON.stringify({ etapes: CHAINE_ATTENDUE.map((transformation, i) => ({ expression: i === 0 ? "(x-1)^2" : "(x-1)^2+1", transformation })) });
+  if (champ === CHAMP_CHAINE) return JSON.stringify({ etapes: CHAINE_ATTENDUE.map((transformation, i) => ({ expression: i === 0 ? "(x-1)^2" : "(x-1)^2+1", transformation, valeur: "1" })) });
   if (champ === CHAMP_SOMME) return String(ex.a + ex.b);
   if (champ === CHAMP_PARITE) return (ex.a + ex.b) % 2 === 0 ? "pair" : "impair";
   if (champ === CHAMP_DIVISEURS) return JSON.stringify(diviseursPositifs(ex.n).map(String));

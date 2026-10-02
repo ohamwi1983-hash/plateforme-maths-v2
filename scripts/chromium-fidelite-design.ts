@@ -892,7 +892,39 @@ async function main(): Promise<void> {
     }
   }
 
-  // ── Chaîne de transformations (RAPPORT §56) : docs/reference/chaine-transformations.html, à 390 ET 1280 px ──
+  // ── Écran d'expression avec graphique (RAPPORT §58) : docs/reference/ecran-expression-graphe.html, à 390 ET 1280 px ──
+  // La question est SOUS le graphique (style de l'énoncé) ; l'aperçu LaTeX, un encadré discret, est entre la question et le champ.
+  {
+    const refEx = readFileSync(join(RACINE, "docs/reference/ecran-expression-graphe.html"), "utf8");
+    for (const largeur of [390, 1280]) {
+      const e = `écran d'expression ${largeur} px`;
+      const ctxR = await navigateur.newContext({ viewport: { width: largeur, height: 1000 } });
+      const pR = await ctxR.newPage();
+      await pR.route("**/fonts.googleapis.com/**", (r: any) => r.fulfill({ contentType: "text/css", body: "" }));
+      await pR.setContent(refEx);
+      const REF: Record<string, Element | null> = {};
+      for (const ref of ["consigne", "question", "apercu", "champ"]) REF[ref] = await mesurer(pR, `[data-ref="${ref}"]`);
+      await pR.screenshot({ path: join(CAPTURES, `fidelite-ref-expression-${largeur}.png`), fullPage: true });
+      await ctxR.close();
+
+      const { page, ctx } = await ouvrir("graphe", [], ".moteur-champ-expression", largeur);
+      await page.locator(`${C} .moteur-champ`).fill("2");
+      await flou(page);
+      await page.screenshot({ path: join(CAPTURES, `fidelite-app-expression-${largeur}.png`), fullPage: true });
+      const TEXTE = ["color", "fontWeight", "fontSize", "lineHeight", "marginTop", "marginBottom"];
+      comparer(e, "consigne", REF["consigne"]!, await app(page, ".moteur-consigne"), TEXTE);
+      comparer(e, "question (style de l'énoncé)", REF["question"]!, await app(page, ".moteur-question"), TEXTE);
+      comparer(e, "aperçu LaTeX", REF["apercu"]!, await app(page, ".moteur-apercu-expression"), ["backgroundColor", "color", "borderTopColor", "borderTopWidth", "borderTopStyle", "borderTopLeftRadius", ...PADDING, "display", "alignItems", "minHeight", "overflowX", "boxSizing"]);
+      comparer(e, "champ", REF["champ"]!, await app(page, ".moteur-champ"), [...P_CHAMP, "minHeight"]);
+      const ordre = (await page.evaluate(`(() => { const ys = (s) => { const el = document.querySelector("${C} " + s); return el ? el.getBoundingClientRect() : null; }; const f = ys(".moteur-figure"), q = ys(".moteur-question"), a = ys(".moteur-apercu-expression"), c = ys(".moteur-champ"); return f && q && a && c ? { figureAvantQuestion: q.top >= f.bottom - 0.5, questionAvantApercu: a.top >= q.bottom - 0.5, apercuAvantChamp: c.top >= a.bottom - 0.5, ecart: Math.round((c.top - a.bottom) * 10) / 10 } : null; })()`)) as { figureAvantQuestion: boolean; questionAvantApercu: boolean; apercuAvantChamp: boolean; ecart: number } | null;
+      verifier(ordre !== null && ordre.figureAvantQuestion && ordre.questionAvantApercu && ordre.apercuAvantChamp, `${e} : graphique, question, aperçu puis champ, dans cet ordre (${JSON.stringify(ordre)})`);
+      verifier(ordre !== null && Math.abs(ordre.ecart - 8) <= 0.6, `${e} : 8 px entre l'aperçu et le champ (${ordre?.ecart})`);
+      verifier(!(await page.evaluate("document.documentElement.scrollWidth > window.innerWidth")), `${e} : pas de défilement horizontal`);
+      await ctx.close();
+    }
+  }
+
+  // ── Chaîne de transformations (RAPPORT §56, refaite en §58) : docs/reference/chaine-transformations.html, à 390 ET 1280 px ──
   {
     const refCh = readFileSync(join(RACINE, "docs/reference/chaine-transformations.html"), "utf8");
     for (const largeur of [390, 1280]) {
@@ -902,25 +934,46 @@ async function main(): Promise<void> {
       await pR.route("**/fonts.googleapis.com/**", (r: any) => r.fulfill({ contentType: "text/css", body: "" }));
       await pR.setContent(refCh);
       const REF: Record<string, Element | null> = {};
-      for (const ref of ["depart", "etape", "numero", "champ", "option", "option-retenue", "secondaire"]) REF[ref] = await mesurer(pR, `[data-ref="${ref}"]`);
+      for (const ref of ["depart", "etape", "entete", "numero", "aide", "legende", "ligne-transformation", "nom", "select", "separateur", "valeur", "ligne-expression", "nom-expression", "champ", "ligne-transformation-sox", "select-sox", "secondaire"]) REF[ref] = await mesurer(pR, `[data-ref="${ref}"]`);
       await pR.screenshot({ path: join(CAPTURES, `fidelite-ref-chaine-${largeur}.png`), fullPage: true });
       await ctxR.close();
 
       const { page, ctx } = await ouvrir("graphe", [CHAMP_COURBE], ".moteur-chaine", largeur);
-      await page.locator(`${C} .moteur-chaine-etape .moteur-champ`).first().fill("(x-1)^2");
-      await page.locator(`${C} .moteur-chaine-etape`).first().locator('.moteur-choix:has(input[value="TH"])').click();
+      const premiere = `${C} .moteur-chaine-etape:first-child`;
+      await page.locator(`${premiere} .moteur-select`).selectOption("TH");
+      await page.locator(`${premiere} .moteur-chaine-valeur`).fill("2");
+      await page.locator(`${premiere} .moteur-chaine-expression`).fill("(x-2)^2");
+      await page.locator(`${premiere} .moteur-chaine-aide`).click(); // légende dévoilée, comme dans la référence
+      await page.getByRole("button", { name: "Ajouter une étape" }).click();
+      await page.locator(`${C} .moteur-chaine-etape:nth-child(2) .moteur-select`).selectOption("SOX");
+      await page.locator(`${C} .moteur-chaine-etape:nth-child(2) .moteur-chaine-expression`).fill("-(x-2)^2");
       await flou(page);
       await page.screenshot({ path: join(CAPTURES, `fidelite-app-chaine-${largeur}.png`), fullPage: true });
       const BORD = ["backgroundColor", "borderTopColor", "borderTopWidth", "borderTopStyle", "borderTopLeftRadius", ...PADDING];
+      const TXT = ["color", "fontSize", "fontWeight"];
+      const FLEX = [...P_FLEX, "flexWrap", "justifyContent", "minHeight"];
       comparer(e, "expression de départ", REF["depart"]!, await app(page, ".moteur-chaine-depart"), [...BORD, "color"]);
       comparer(e, "étape", REF["etape"]!, await app(page, ".moteur-chaine-etape"), [...BORD, "display", "flexDirection", "gap"]);
-      comparer(e, "numéro d'étape", REF["numero"]!, await app(page, ".moteur-chaine-numero"), ["color", "fontSize", "fontWeight", "letterSpacing", "textTransform"]);
-      comparer(e, "champ d'expression", REF["champ"]!, await app(page, ".moteur-chaine-etape .moteur-champ"), P_CHAMP);
-      comparer(e, "transformation non retenue", REF["option"]!, await app(page, ".moteur-chaine-choix .moteur-choix:not(:has(input:checked))"), P_OPTION);
-      comparer(e, "transformation retenue", REF["option-retenue"]!, await app(page, ".moteur-chaine-choix .moteur-choix:has(input:checked)"), P_OPTION);
+      comparer(e, "en-tête", REF["entete"]!, await app(page, ".moteur-chaine-entete"), FLEX);
+      comparer(e, "numéro d'étape", REF["numero"]!, await app(page, ".moteur-chaine-numero"), [...TXT, "letterSpacing", "textTransform"]);
+      comparer(e, "bouton « ? »", REF["aide"]!, await app(page, ".moteur-chaine-aide"), ["backgroundColor", "color", "borderTopWidth", "borderTopLeftRadius", "fontFamily", "fontSize", "fontWeight", "lineHeight", "width", "height", "minHeight", "boxShadow", "marginTop", "marginLeft", ...PADDING]);
+      comparer(e, "légende des abréviations", REF["legende"]!, await app(page, ".moteur-chaine-legende"), [...BORD, ...TXT, "lineHeight"]);
+      comparer(e, "ligne de transformation", REF["ligne-transformation"]!, await app(page, ".moteur-chaine-etape:first-child > div:nth-of-type(2)"), FLEX);
+      comparer(e, "nom f_k(x)", REF["nom"]!, await app(page, ".moteur-chaine-etape:first-child > div:nth-of-type(2) .moteur-chaine-nom"), [...TXT]);
+      comparer(e, "liste déroulante", REF["select"]!, await app(page, ".moteur-chaine-etape:first-child .moteur-select"), [...P_CHAMP, "minHeight", "marginTop", "flexGrow"]);
+      comparer(e, "séparateur « : »", REF["separateur"]!, await app(page, ".moteur-chaine-etape:first-child .moteur-chaine-separateur"), TXT);
+      comparer(e, "champ de valeur", REF["valeur"]!, await app(page, ".moteur-chaine-etape:first-child .moteur-chaine-valeur"), [...P_CHAMP, "minHeight", "flexGrow", "flexShrink", "flexBasis", "minWidth"]);
+      comparer(e, "ligne de la fonction obtenue", REF["ligne-expression"]!, await app(page, ".moteur-chaine-etape:first-child > div:nth-of-type(3)"), FLEX);
+      comparer(e, "nom f_k(x) =", REF["nom-expression"]!, await app(page, ".moteur-chaine-etape:first-child > div:nth-of-type(3) .moteur-chaine-nom"), TXT);
+      comparer(e, "champ de la fonction obtenue", REF["champ"]!, await app(page, ".moteur-chaine-etape:first-child .moteur-chaine-expression"), [...P_CHAMP, "minHeight", "flexGrow", "flexShrink", "flexBasis", "minWidth"]);
+      comparer(e, "SOX : ligne de transformation", REF["ligne-transformation-sox"]!, await app(page, ".moteur-chaine-etape:nth-child(2) > div:nth-of-type(2)"), FLEX);
+      comparer(e, "SOX : liste déroulante", REF["select-sox"]!, await app(page, ".moteur-chaine-etape:nth-child(2) .moteur-select"), [...P_CHAMP, "minHeight"]);
       comparer(e, "bouton secondaire", REF["secondaire"]!, await app(page, ".moteur-chaine-actions .moteur-bouton-secondaire"), P_SECONDAIRE);
-      const geo = (await page.evaluate(`(() => { const c = document.querySelector("${C} .moteur-chaine"); const r = c.getBoundingClientRect(); const carte = c.closest(".moteur-ecran-courant").getBoundingClientRect(); const chips = [...c.querySelectorAll(".moteur-chaine-choix .moteur-choix")].map((x) => x.getBoundingClientRect()); return { dedans: r.left >= carte.left - 0.5 && r.right <= carte.right + 0.5, debord: document.documentElement.scrollWidth > window.innerWidth, tactile: Math.min(...chips.map((k) => k.height)) }; })()`)) as { dedans: boolean; debord: boolean; tactile: number };
+      // Géométrie : le « ? » est à droite du numéro, SOX n'a ni séparateur ni champ de valeur, tout tient dans la carte, cibles tactiles >= 44 px (la pastille « ? » fait 32 px, comme le crayon).
+      const geo = (await page.evaluate(`(() => { const c = document.querySelector("${C} .moteur-chaine"); const r = c.getBoundingClientRect(); const carte = c.closest(".moteur-ecran-courant").getBoundingClientRect(); const etape1 = c.querySelector(".moteur-chaine-etape:first-child"); const etape2 = c.querySelector(".moteur-chaine-etape:nth-child(2)"); const n = etape1.querySelector(".moteur-chaine-numero").getBoundingClientRect(); const a = etape1.querySelector(".moteur-chaine-aide").getBoundingClientRect(); const cibles = [...c.querySelectorAll(".moteur-select, .moteur-chaine-expression, .moteur-chaine-valeur")].filter((x) => x.offsetParent !== null).map((x) => x.getBoundingClientRect().height); return { dedans: r.left >= carte.left - 0.5 && r.right <= carte.right + 0.5, debord: document.documentElement.scrollWidth > window.innerWidth, droite: a.left >= n.right, memeLigne: Math.abs((a.top + a.bottom) / 2 - (n.top + n.bottom) / 2) <= 1, soxSansValeur: etape2.querySelector(".moteur-chaine-valeur").offsetParent === null && etape2.querySelector(".moteur-chaine-separateur").offsetParent === null, tactile: Math.min(...cibles) }; })()`)) as { dedans: boolean; debord: boolean; droite: boolean; memeLigne: boolean; soxSansValeur: boolean; tactile: number };
       verifier(geo.dedans && !geo.debord, `${e} : la chaîne tient dans la carte, sans défilement horizontal`);
+      verifier(geo.droite && geo.memeLigne, `${e} : le « ? » est à droite de « Étape k », sur la même ligne`);
+      verifier(geo.soxSansValeur, `${e} : SOX : ni séparateur ni champ de valeur`);
       verifier(geo.tactile >= 44, `${e} : cibles tactiles >= 44 px (${geo.tactile})`);
       await ctx.close();
     }
