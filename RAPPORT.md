@@ -1903,3 +1903,5 @@ L'écran `courbe` du profil `graphe` porte une `question` et un `apercu` (`_temo
 3. **« ? » par étape = LE « ? »** demandé ; le « ? » global de l'écran (point 3 du message) **n'est pas construit** : l'emplacement n'est pas encore précisé.
 4. Pas d'aperçu LaTeX sur les champs `f_k(x) =` de la chaîne (non demandé). Parties fausses : toujours l'étape entière.
 5. `<select>` natif (le menu s'ouvre avec le sélecteur du système, accessible au clavier) plutôt qu'un menu dessiné.
+
+**§58-H. Validation sur export propre** : `npm ci`, `tsc -b`, tous les `scripts/test-*.ts`, `npm run chromium-temoin` (3 677 vérifications) et `npm run chromium-design` (1 719) passent. Un seul test avait échoué : `test-aide-paliers` cherchait « legende » dans toute la vue pour détecter une fuite d'aide et trouvait la légende des abréviations de la chaîne (servie volontairement avec l'écran) ; il l'écarte désormais (`test-aide-paliers.ts:106`) et vérifie qu'elle est bien servie. Aucun code de production touché par cette correction.
