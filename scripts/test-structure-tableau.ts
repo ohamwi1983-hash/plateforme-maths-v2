@@ -45,13 +45,13 @@ const leve = (f: () => unknown): string | null => {
 };
 
 // ── 1. Les trois configurations de gen7 ──
-// Aucune racine réelle (af_irreductible) : 3 colonnes, TOUTES à 2 valeurs — jamais de « 0 » sur xS.
+// Aucune racine réelle : 3 colonnes, TOUTES à 2 valeurs — jamais de « 0 » sur xS.
 const aucune = ecran([intervalle("c0"), valeur("c1", { sommet: true }), intervalle("c2")], [signe, variation]);
 verifier(JSON.stringify(alphabets(aucune)) === JSON.stringify([[S2, S2, S2], [V_INTERVALLE, V_SOMMET, V_INTERVALLE]]), `aucune racine : ${JSON.stringify(alphabets(aucune))}`);
-// Racine double (af_produit_remarquable) : la colonne centrale est une vraie racine (3 valeurs), les intervalles restent à 2.
+// Racine double : la colonne centrale est une vraie racine (3 valeurs), les intervalles restent à 2.
 const double = ecran([intervalle("c0"), valeur("c1", { racine: true, sommet: true }), intervalle("c2")], [signe, variation]);
 verifier(JSON.stringify(alphabets(double)) === JSON.stringify([[S2, S3, S2], [V_INTERVALLE, V_SOMMET, V_INTERVALLE]]), `racine double : ${JSON.stringify(alphabets(double))}`);
-// Deux racines (af_mise_en_evidence, af_binome_conjugue) : x₁ et x₂ à 3 valeurs, xS et les intervalles à 2 ; variations fusionnées 3 | 1 | 3.
+// Deux racines : x₁ et x₂ à 3 valeurs, xS et les intervalles à 2 ; variations fusionnées 3 | 1 | 3.
 const deux = ecran(
   [intervalle("c0"), valeur("c1", { racine: true }), intervalle("c2"), valeur("c3", { sommet: true }), intervalle("c4"), valeur("c5", { racine: true }), intervalle("c6")],
   [signe, variation],

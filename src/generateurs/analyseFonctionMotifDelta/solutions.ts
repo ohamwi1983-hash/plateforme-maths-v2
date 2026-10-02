@@ -1,8 +1,7 @@
-import { CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE, CHAMP_TABLEAU_SIGNES } from "../analyseFonction/types";
 import { solutionTableauMD, solutionTableauTexte } from "./tableauSignes";
 import { allureAttendue } from "./allure";
 import { latexExact, texteSaisieExact, type Exact } from "./exact/nombreExact";
-import { CHAMP_RACINES, coefVersExact, fonctionEffective, type ExerciceMotifDelta } from "./types";
+import { CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE, CHAMP_RACINES, CHAMP_TABLEAU_SIGNES, coefVersExact, fonctionEffective, type ExerciceMotifDelta } from "./types";
 import { reponseBruteRacines, solutionRacines } from "./racinesEcran";
 
 /**

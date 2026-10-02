@@ -20,7 +20,7 @@ import { verifierMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta
 import { reponseBruteCorrecteMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/solutions";
 import { enonceEffectif } from "../src/generateurs/analyseFonctionMotifDelta/ecrans";
 import { approx, egaux, texteSaisieExact } from "../src/generateurs/analyseFonctionMotifDelta/exact/nombreExact";
-import { CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE, CHAMP_TABLEAU_SIGNES } from "../src/generateurs/analyseFonction/types";
+import { CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE, CHAMP_TABLEAU_SIGNES } from "../src/generateurs/analyseFonctionMotifDelta/types";
 import { CHAMP_RACINES } from "../src/generateurs/analyseFonctionMotifDelta/types";
 
 const echecs: string[] = [];

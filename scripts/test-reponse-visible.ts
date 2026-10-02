@@ -19,7 +19,9 @@ import { construireChampVue, REGLAGES_FORCEES_ANTERIEURES } from "../lib/tableau
 import { calculerEtatChampTentatives } from "../lib/moteurTentatives";
 import { CHAMPS_BASE, CHAMP_SOMME, reponseBruteCorrecte as reponseBrutecorrecteTemoin } from "../src/generateurs/_temoinTechnique";
 import type { EcranDeclare } from "../lib/contratGenerateur";
-import { factorisationVersLatex, genererExercice, projeterAnalyseFonction, reponseBruteCorrecteAnalyseFonction } from "../src/generateurs/analyseFonction";
+import { genererExerciceMD } from "../src/generateurs/analyseFonctionMotifDelta/exercice";
+import { projeterMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/cascade";
+import { reponseBruteCorrecteMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/solutions";
 
 const echecs: string[] = [];
 let nb = 0;
@@ -140,26 +142,25 @@ async function main(): Promise<void> {
     verifier(noms.length === 1 && noms[0].reponse_visible === visible && noms[0].correction_immediate === true, `2f tableau de bord : reponse_visible=${visible} exposé (${JSON.stringify(noms.map((n) => [n.correction_immediate, n.reponse_visible]))})`);
   }
 
-  // ── 3. gen7 : « la vraie valeur a été montrée » suit la MÊME règle (repli de la cascade, tableau aux valeurs vraies) ──
+  // ── 3. gen7 « motif / delta » : « la vraie valeur a été montrée » suit la MÊME règle (tableau aux valeurs vraies) ──
   {
-    const brut = genererExercice("mise_en_evidence", 12345); // f = 4x² + 8x, racines 0 et −2
-    const inexploitable = [{ champ: "racinesChamp1", reponseBrute: "??", statut: "parse_error" as const }];
-    const cas: { nom: string; correctionImmediate: boolean; solutionMontree: boolean; tableau: "vraies" | "symboliques"; repli: "solution" | "enonce" }[] = [
-      { nom: "immédiate + case cochée", correctionImmediate: true, solutionMontree: true, tableau: "vraies", repli: "solution" },
-      { nom: "immédiate + case décochée", correctionImmediate: true, solutionMontree: false, tableau: "symboliques", repli: "enonce" },
-      { nom: "coupée", correctionImmediate: false, solutionMontree: false, tableau: "symboliques", repli: "enonce" },
+    const brut = genererExerciceMD("af_delta_racines_rationnelles", 4242); // f = x² + 3x − 4, racines −4 et 1
+    const inexploitable = [{ champ: "coefficients", reponseBrute: "??", statut: "parse_error" as const }];
+    const cas: { nom: string; correctionImmediate: boolean; solutionMontree: boolean; tableau: "vraies" | "symboliques" }[] = [
+      { nom: "immédiate + case cochée", correctionImmediate: true, solutionMontree: true, tableau: "vraies" },
+      { nom: "immédiate + case décochée", correctionImmediate: true, solutionMontree: false, tableau: "symboliques" },
+      { nom: "coupée", correctionImmediate: false, solutionMontree: false, tableau: "symboliques" },
     ];
     for (const c of cas) {
-      const p = projeterAnalyseFonction(brut, inexploitable, { correctionImmediate: c.correctionImmediate, solutionMontree: c.solutionMontree });
+      const p = projeterMotifDelta(brut, inexploitable, { correctionImmediate: c.correctionImmediate, solutionMontree: c.solutionMontree });
       verifier(p.affichageTableau === c.tableau, `gen7 (${c.nom}) : tableau « ${c.tableau} » (obtenu ${p.affichageTableau})`);
-      verifier(p.zeros?.origine === c.repli, `gen7 (${c.nom}) : repli de racinesChamp2 « ${c.repli} » (obtenu ${p.zeros?.origine})`);
     }
 
-    // De bout en bout : ce que le navigateur reçoit (énoncé de racinesChamp2, colonnes du tableau).
+    // De bout en bout : ce que le navigateur reçoit (colonnes du tableau).
     for (const c of cas) {
-      const tache = creerTache(s, { nom: `gen7 ${c.nom}`, variantes: [{ variante_id: "af_mise_en_evidence", nombre_exercices: 1 }], feedback_immediat: c.correctionImmediate, reponse_visible: c.solutionMontree });
+      const tache = creerTache(s, { nom: `gen7 ${c.nom}`, variantes: [{ variante_id: "af_delta_racines_rationnelles", nombre_exercices: 1 }], feedback_immediat: c.correctionImmediate, reponse_visible: c.solutionMontree });
       const o = Math.random;
-      Math.random = () => 12345 / 2 ** 32;
+      Math.random = () => 4242 / 2 ** 32;
       try {
         await appeler("assignations", "POST", { jeton: jetonProf, corps: { tache_id: tache, eleve_ids: ["eleve-1"] } });
       } finally {
@@ -167,27 +168,16 @@ async function main(): Promise<void> {
       }
       const ligne = s.base.table("exercices_assignes").find((l) => l.tache_id === tache)!;
       const id = ligne.id as string;
-      const brutLigne = genererExercice("mise_en_evidence", Number(ligne.graine));
-      const vraieFactorisationLigne = factorisationVersLatex(brutLigne.formeFactorisee as never) as string;
+      const brutLigne = genererExerciceMD("af_delta_racines_rationnelles", Number(ligne.graine));
       const poster = (champ: string, b: string) => appeler("reponses", "POST", { jeton: "eleve:eleve-1", corps: { exercice_assigne_id: id, champ, reponse_brute: b } });
       const lire = async () => (await appeler(`exercices/${id}`, "GET", { jeton: "eleve:eleve-1" })).corps as { ecrans: EcranDeclare[] };
-      await poster("coefficients", JSON.stringify({ a: "4", b: "8", c: "0" }));
-      await poster("allure", JSON.stringify({ signeA: "+", signeAB: "+" }));
-      await poster("axeSommet", JSON.stringify({ axeTexte: "x = -1", xS: "-1", yS: "-4" }));
-      await poster("domaineImage", JSON.stringify({ crochetGauche: "[", borneGauche: "-4", crochetDroit: "[", borneDroite: "+inf" }));
-      await poster("racinesReconnaissance", reponseBruteCorrecteAnalyseFonction(brutLigne, "racinesReconnaissance"));
-      await poster("racinesChamp1", "??"); // inexploitable : le repli de racinesChamp2 dépend du réglage
-      const g = await lire();
-      const champ2 = g.ecrans.find((e) => e.champ === "racinesChamp2") as any;
-      verifier(champ2 !== undefined, `gen7 (${c.nom}) : racinesChamp2 est servi une fois racinesChamp1 terminé`);
-      if (champ2 !== undefined) {
-        verifier(champ2.consigne.includes(vraieFactorisationLigne) === (c.repli === "solution"), `gen7 (${c.nom}) : la vraie factorisation ${c.repli === "solution" ? "figure" : "ne figure PAS"} dans l'énoncé de racinesChamp2`);
-      }
-      await poster("racinesChamp2", reponseBruteCorrecteAnalyseFonction(brutLigne, "racinesChamp2"));
+      for (const champ of ["coefficients", "allure", "axeSommet", "domaineImage", "racines"]) await poster(champ, reponseBruteCorrecteMotifDelta(brutLigne, champ));
       const t = (await lire()).ecrans.find((e) => e.champ === "tableauSignes") as any;
+      verifier(t !== undefined, `gen7 (${c.nom}) : le tableau est servi une fois coefficients, sommet et racines terminés`);
       if (t !== undefined) {
-        const numerique = t.colonnes.some((col: any) => typeof col.symbole === "string");
-        verifier(numerique === (c.tableau === "vraies"), `gen7 (${c.nom}) : colonnes ${c.tableau === "vraies" ? "avec valeurs numériques + symboles" : "symboliques seulement"}`);
+        const valeurs: string[] = t.colonnes.filter((col: any) => col.genre === "valeur").map((col: any) => col.valeur as string);
+        const symboliques = valeurs.every((v) => /^\$x_(1|2|S)\$$/.test(v));
+        verifier(symboliques === (c.tableau === "symboliques"), `gen7 (${c.nom}) : colonnes ${c.tableau === "vraies" ? "avec les valeurs numériques" : "symboliques seulement"} (${valeurs.join(" ; ")})`);
       }
     }
   }

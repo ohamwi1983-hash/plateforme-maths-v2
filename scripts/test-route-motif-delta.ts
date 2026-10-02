@@ -206,22 +206,19 @@ async function main(): Promise<void> {
     verifier(cle.statut === 400, `clé inconnue dans le corps → 400 (${cle.statut})`);
   }
 
-  // ── 8. Variantes retirées : exécutables, absentes du catalogue affiché, refusées à la composition ──
+  // ── 8. Anciennes variantes : supprimées (registre, catalogue, composition) ──
   {
-    const retirees = ["af_mise_en_evidence", "af_binome_conjugue", "af_produit_remarquable", "af_irreductible"];
-    for (const v of retirees) {
-      verifier(chercherGenerateur(v)?.retire === true, `${v} : au registre, marquée retirée`);
+    const anciennes = ["af_mise_en_evidence", "af_binome_conjugue", "af_produit_remarquable", "af_irreductible"];
+    for (const v of anciennes) {
+      verifier(chercherGenerateur(v) === null, `${v} : plus au registre`);
       verifier(!CATALOGUE_GENERATEURS.some((e) => e.variante_id === v), `${v} : absente du catalogue affiché`);
     }
-    for (const fam of FAMILLES) verifier(CATALOGUE_GENERATEURS.some((e) => e.variante_id === fam.id) && chercherGenerateur(fam.id)?.retire !== true, `${fam.id} : au catalogue, non retirée`);
+    for (const fam of FAMILLES) verifier(CATALOGUE_GENERATEURS.some((e) => e.variante_id === fam.id) && chercherGenerateur(fam.id) !== null, `${fam.id} : au catalogue et au registre`);
     const rep = await appeler("taches", "POST", {
       jeton: jetonProf,
-      corps: { nom: "retirée", feedback_immediat: true, tentatives_supplementaires: 0, reponse_visible: false, aide_activee: false, aide_penalite_pourcent: 0, chrono_mode: "aucun", afficher_recapitulatif: false, composition: [{ variante_id: "af_mise_en_evidence", nombre_exercices: 1 }] },
+      corps: { nom: "ancienne", feedback_immediat: true, tentatives_supplementaires: 0, reponse_visible: false, aide_activee: false, aide_penalite_pourcent: 0, chrono_mode: "aucun", afficher_recapitulatif: false, composition: [{ variante_id: "af_mise_en_evidence", nombre_exercices: 1 }] },
     });
-    verifier(rep.statut === 400, `composition d'une variante retirée refusée (${rep.statut})`);
-    // une tâche ancienne (déjà assignée) reste exécutable
-    const ancien = await nouveau("af_mise_en_evidence", 12345);
-    verifier((await ancien.lire()).champ_courant === "coefficients", "ancien af_mise_en_evidence : toujours servi");
+    verifier(rep.statut === 400, `composition d'une ancienne variante refusée (${rep.statut})`);
   }
 
   if (echecs.length > 0) {
@@ -229,7 +226,7 @@ async function main(): Promise<void> {
     for (const e of echecs.slice(0, 40)) console.error(` - ${e}`);
     process.exit(1);
   }
-  console.log(`OK : ${nb} vérifications (gen7 motif/delta réel dans le vrai routeur : assignation ×10, parcours complet ×10, filtrage de la cascade, codes stockés, aide combinée, trois régimes, forgeries, variantes retirées)`);
+  console.log(`OK : ${nb} vérifications (gen7 motif/delta réel dans le vrai routeur : assignation ×10, parcours complet ×10, filtrage de la cascade, codes stockés, aide combinée, trois régimes, forgeries, anciennes variantes supprimées)`);
 }
 
 main().catch((e) => {

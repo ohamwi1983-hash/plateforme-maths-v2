@@ -17,7 +17,7 @@ import { verifierMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta
 import { reponseBruteCorrecteMotifDelta, solutionAttendueMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/solutions";
 import { ecransMotifDelta, NOMS_ECRANS_MD } from "../src/generateurs/analyseFonctionMotifDelta/ecrans";
 import { approx, estRationnel, texteSaisieExact, type Exact } from "../src/generateurs/analyseFonctionMotifDelta/exact/nombreExact";
-import { CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE, CHAMP_TABLEAU_SIGNES } from "../src/generateurs/analyseFonction/types";
+import { CHAMP_ALLURE, CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS, CHAMP_DOMAINE_IMAGE, CHAMP_TABLEAU_SIGNES } from "../src/generateurs/analyseFonctionMotifDelta/types";
 import { colonnesTableauMD, rangeesTableauMD, solutionTableauMD } from "../src/generateurs/analyseFonctionMotifDelta/tableauSignes";
 import { CHAMP_RACINES } from "../src/generateurs/analyseFonctionMotifDelta/types";
 

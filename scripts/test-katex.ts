@@ -4,8 +4,8 @@
 //  2. réglages de rendu (`reglagesKatex`, public/moteur/rendreTexte.js) : `trust` refuse toute commande de confiance hors `roles`, et pour
 //     `roles` n'accepte que `\htmlClass{moteur-coef-a|b|c}` ;
 //  3. assemblage de `formule_coloree` en UNE chaîne : exactement une classe par rôle, aucune classe ne vient d'un segment ;
-//  4. GARDE : tout texte d'auteur de gen7 (consignes, libellés, aides, solutions, messages d'erreur) compile avec `throwOnError: true`,
-//     sans commande refusée, sur N graines et les quatre catégories ; les commandes de couleur restent arrêtées par le serveur.
+//  4. GARDE : tout texte d'auteur de gen7 « motif / delta » (consignes, libellés, aperçu « im f = », aides, solutions, messages d'erreur) compile avec `throwOnError: true`,
+//     sans commande refusée, sur N graines et les dix sous-variantes ; les commandes de couleur restent arrêtées par le serveur.
 
 export {}; // module
 
@@ -17,17 +17,14 @@ import { validerAide } from "../lib/aideTypee";
 import type { EcranDeclare } from "../lib/contratGenerateur";
 import { assemblerFormuleColoree, decouperTexteMath, verifierBalisageMath } from "./support/texteMath";
 import { textesAuteurDe } from "./support/textesAuteur";
-import {
-  aideFormuleColoree,
-  champsAnalyseFonction,
-  ecransAnalyseFonction,
-  genererExercice,
-  projeterAnalyseFonction,
-  reponseBruteCorrecteAnalyseFonction,
-  solutionAttendueAnalyseFonction,
-  verifierAnalyseFonction,
-  type CategorieAnalyseFonction,
-} from "../src/generateurs/analyseFonction";
+import { genererExerciceMD } from "../src/generateurs/analyseFonctionMotifDelta/exercice";
+import { champsMotifDelta, ecransMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/ecrans";
+import { projeterMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/cascade";
+import { reponseBruteCorrecteMotifDelta, solutionAttendueMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/solutions";
+import { verifierMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/verification";
+import { FAMILLES } from "../src/generateurs/analyseFonctionMotifDelta/familles";
+import { aideFormuleColoreeMD } from "../src/generateurs/analyseFonctionMotifDelta/aides";
+import { coefRacine, coefRat } from "../src/generateurs/analyseFonctionMotifDelta/types";
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const DOSSIER = join(__dirname, "..", "public", "vendor", "katex-0.18.9");
@@ -115,8 +112,15 @@ for (const [nom, empreinte] of Object.entries(EMPREINTES)) verifier(sha(join(DOS
 
 // ── 3. Assemblage de formule_coloree ──
 {
-  for (const f of [{ a: 3, b: -5, c: 7 }, { a: -1, b: 1, c: -2 }, { a: 1, b: 0, c: 4 }, { a: -4, b: 16, c: -16 }]) {
-    const aide = aideFormuleColoree(f);
+  for (const f of [
+    { a: coefRat(3), b: coefRat(-5), c: coefRat(7) },
+    { a: coefRat(-1), b: coefRat(1), c: coefRat(-2) },
+    { a: coefRat(1), b: coefRat(0), c: coefRat(4) },
+    { a: coefRat(-4), b: coefRat(16), c: coefRat(-16) },
+    { a: coefRat(1, 2), b: coefRacine(3, 5), c: coefRat(-1, 4) },
+    { a: coefRat(2), b: coefRacine(-1, 2, 3), c: coefRat(0) },
+  ]) {
+    const aide = aideFormuleColoreeMD(f);
     verifier(validerAide(aide).length === 0, `formule_coloree valide pour ${JSON.stringify(f)}`);
     const chaine = assemblerFormuleColoree((aide as { segments: { latex: string; role?: string }[] }).segments);
     const r = rendre(chaine, true);
@@ -134,10 +138,19 @@ for (const [nom, empreinte] of Object.entries(EMPREINTES)) verifier(sha(join(DOS
   }
 }
 
-// ── 4. Garde : les textes d'auteur de gen7 compilent ──
-const CATEGORIES: CategorieAnalyseFonction[] = ["mise_en_evidence", "binome_conjugue", "produit_remarquable", "irreductible"];
-const ENTREES_MALFORMEES = ["", "x", "{}", "[]", "null", "{\"a\":\"x\"}", "{\"axeTexte\":\"3\",\"xS\":\"1\",\"yS\":\"1\"}", "{\"axeTexte\":\"x = \",\"xS\":\"a\",\"yS\":\"1\"}", "{\"crochetGauche\":\"[\",\"borneGauche\":\"a\",\"crochetDroit\":\"[\",\"borneDroite\":\"1\"}", "{\"signeA\":\"+\"}", "((x", "2x(x-4", "[\"a\"]", "{\"__proto__\":1}"];
-const GRAINES = Array.from({ length: 60 }, (_, i) => 3 + i * 1013);
+// ── 4. Garde : les textes d'auteur de gen7 « motif / delta » compilent ──
+const ENTREES_MALFORMEES = ["", "x", "{}", "[]", "null", "{\"a\":\"x\"}", "{\"axeTexte\":\"3\",\"xS\":\"1\",\"yS\":\"1\"}", "{\"axeTexte\":\"x = \",\"xS\":\"a\",\"yS\":\"1\"}", "{\"crochetGauche\":\"[\",\"borneGauche\":\"a\",\"crochetDroit\":\"[\",\"borneDroite\":\"1\"}", "{\"signeA\":\"+\"}", "((x", "2x(x-4", "[\"a\"]", "{\"__proto__\":1}", "sqrt(", "sqrt()", "1/0", "2sqrt(", "{\"a\":\"sqrt(2)\",\"b\":\"1/\",\"c\":\"x\"}", "{\"a\":\"1\",\"b\":\"sqrt(4)\",\"c\":\"$x$\"}", "[\"sqrt(\"]", "[\"1\",\"1\",\"$\"]"];
+const GRAINES = Array.from({ length: 30 }, (_, i) => 3 + i * 1013);
+const CHAMPS = champsMotifDelta();
+// Coefficients CONFIRMÉS par l'élève (faux mais exploitables, avec racines, fractions, décimale) : les consignes suivantes les ré-écrivent en LaTeX, jamais la chaîne brute.
+const COEFFICIENTS_ELEVE = [
+  { a: "2", b: "sqrt(3)", c: "-1" },
+  { a: "1/2", b: "0", c: "3/4" },
+  { a: "-3", b: "2sqrt(5)", c: "7" },
+  { a: "0.5", b: "4", c: "-2" },
+  { a: "1", b: "1/3", c: "-1/9" },
+  { a: "-1", b: "-2sqrt(2)", c: "0" },
+];
 const compilesVus = new Set<string>();
 let segmentsCompiles = 0;
 function verifierCompile(texte: string, contexte: string): void {
@@ -151,37 +164,34 @@ function verifierCompile(texte: string, contexte: string): void {
     verifier(rendre(s.valeur).ok, `${contexte} : « $${s.valeur}$ » ne compile pas (throwOnError) ou contient une commande refusée`);
   }
 }
-for (const categorie of CATEGORIES) {
+function verifierEcrans(ex: ReturnType<typeof projeterMotifDelta>, contexte: string): void {
+  for (const e of ecransMotifDelta(ex) as EcranDeclare[]) {
+    for (const t of textesAuteurDe(e)) verifierCompile(t, `${contexte}/${e.champ}`);
+    if (typeof e.aide === "object") {
+      verifier(validerAide(e.aide).length === 0, `${contexte}/${e.champ} : aide typée valide`);
+      if (e.aide.type === "formule_coloree") {
+        segmentsCompiles++;
+        verifier(rendre(assemblerFormuleColoree(e.aide.segments), true).ok, `${contexte}/${e.champ} : formule_coloree assemblée compile`);
+      }
+    }
+  }
+}
+for (const famille of FAMILLES) {
   for (const graine of GRAINES) {
-    const brut = genererExercice(categorie, graine);
-    // Tout réussi en correction immédiate : le panneau « Ce que tu sais déjà » est présent sur tous les écrans qui suivent.
-    const reussis = champsAnalyseFonction(categorie).map((champ) => ({ champ, reponseBrute: reponseBruteCorrecteAnalyseFonction(brut, champ), statut: "correct" as const }));
-    for (const [correctionImmediate, confirmees] of [[true, []], [false, []], [true, reussis]] as const) {
-      const ex = projeterAnalyseFonction(brut, confirmees, { correctionImmediate, solutionMontree: correctionImmediate });
-      for (const e of ecransAnalyseFonction(ex) as EcranDeclare[]) {
-        for (const t of textesAuteurDe(e)) verifierCompile(t, `${categorie}/${e.champ}`);
-        if (typeof e.aide === "object") {
-          verifier(validerAide(e.aide).length === 0, `${categorie}/${e.champ} : aide typée valide`);
-          if (e.aide.type === "formule_coloree") {
-            segmentsCompiles++;
-            const r = rendre(assemblerFormuleColoree(e.aide.segments), true);
-            verifier(r.ok, `${categorie}/${e.champ} : formule_coloree assemblée compile`);
-          }
-        }
-      }
+    const brut = genererExerciceMD(famille.id, graine);
+    const reussis = CHAMPS.map((champ) => ({ champ, reponseBrute: reponseBruteCorrecteMotifDelta(brut, champ), statut: "correct" as const }));
+    // Tout réussi / rien répondu, sous les trois régimes d'affichage du tableau (valeurs vraies ou symboliques).
+    for (const [correctionImmediate, solutionMontree, confirmees] of [[true, true, []], [false, false, []], [true, false, reussis], [true, true, reussis]] as const) {
+      verifierEcrans(projeterMotifDelta(brut, [...confirmees], { correctionImmediate, solutionMontree }), `${famille.id}`);
     }
-    // Cascade : consigne de racinesChamp2 bâtie sur une réponse confirmée (ré-écriture LaTeX, jamais la chaîne brute).
-    if (categorie !== "irreductible") {
-      for (const reponse of ["(4x)(x+2)", "3x(x-2)", "x^2-4", "0.5x(x-0.5)", "-x(x+2)", "2(x-3)^2", "x(x-1)(x-2)"]) {
-        const ex = projeterAnalyseFonction(brut, [{ champ: "racinesChamp1", reponseBrute: reponse, statut: "not_equivalent" }], { correctionImmediate: false, solutionMontree: false });
-        for (const e of ecransAnalyseFonction(ex)) if (e.champ === "racinesChamp2") verifierCompile(e.consigne, `${categorie}/racinesChamp2 (réponse « ${reponse} »)`);
-      }
+    for (const c of COEFFICIENTS_ELEVE) {
+      verifierEcrans(projeterMotifDelta(brut, [{ champ: "coefficients", reponseBrute: JSON.stringify(c), statut: "not_equivalent" }], { correctionImmediate: false, solutionMontree: false }), `${famille.id} (coefficients « ${JSON.stringify(c)} »)`);
     }
-    for (const champ of champsAnalyseFonction(categorie)) {
-      verifierCompile(solutionAttendueAnalyseFonction(brut, champ), `${categorie}/${champ} : solution`);
+    for (const champ of CHAMPS) {
+      verifierCompile(solutionAttendueMotifDelta(brut, champ), `${famille.id}/${champ} : solution`);
       for (const entree of ENTREES_MALFORMEES) {
-        const r = verifierAnalyseFonction(brut, champ, entree);
-        if (r.statut === "parse_error") verifierCompile(r.messageErreur, `${categorie}/${champ} : message d'erreur pour « ${entree} »`);
+        const r = verifierMotifDelta(brut, champ, entree);
+        if (r.statut === "parse_error") verifierCompile(r.messageErreur, `${famille.id}/${champ} : message d'erreur pour « ${entree} »`);
       }
     }
   }

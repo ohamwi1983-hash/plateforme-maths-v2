@@ -1,12 +1,13 @@
 import type { ContexteProjection, ReponseConfirmee } from "../../../lib/contratGenerateur";
 import { decoderChampsMultiples } from "../../../lib/reponsesEcran";
 import { COEFFICIENT_MAX } from "../../../lib/aideTypee";
-import { CHAMP_AXE_SOMMET, CHAMP_COEFFICIENTS } from "../analyseFonction/types";
 import { SOUS_CHAMPS_COEFFICIENTS_MD } from "./coefficients";
 import { SOUS_CHAMPS_AXE_SOMMET_MD } from "./axeSommet";
 import { TOLERANCE_SAISIE, lireValeur } from "./comparaison";
 import { approx, egaux, moins } from "./exact/nombreExact";
 import {
+  CHAMP_AXE_SOMMET,
+  CHAMP_COEFFICIENTS,
   coefDepuisExact,
   coefVersExact,
   effectifVraiMD,

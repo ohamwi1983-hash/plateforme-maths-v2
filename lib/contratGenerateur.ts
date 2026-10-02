@@ -306,12 +306,6 @@ export interface Generateur<TExercice = unknown> {
    * codes obligatoirement présents dans le dictionnaire, entrée de catalogue obligatoire.
    */
   curriculaire: boolean;
-  /**
-   * `true` : variante RETIRÉE du catalogue affiché (RAPPORT §49) mais toujours EXÉCUTABLE — les exercices déjà assignés continuent de se régénérer, d'être corrigés et
-   * affichés. Un générateur retiré ne doit PAS figurer dans `CATALOGUE_GENERATEURS` (donc `validerComposition` refuse de nouvelles compositions) et doit figurer dans
-   * `VARIANTES_RETIREES` (libellé d'affichage). Ses codes de compétence restent contrôlés contre le dictionnaire. Absent : variante active.
-   */
-  retire?: boolean;
   /** Tous les codes que `verifier` peut renvoyer — contrôlé au chargement du registre ET à chaque vérification (échec bruyant). */
   codesCompetenceDeclares: string[];
   /**
