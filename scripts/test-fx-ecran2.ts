@@ -296,7 +296,7 @@ verifier(chainesJugees === CONFIGURATIONS.length * GRAINES.length, "toutes les c
   // Mauvaise valeur sur une règle vraie : étape fausse, jamais un code « hors sujet », jamais une erreur de lecture.
   for (const [i, v, nomCas] of [[0, "-3", "TH : signe inversé (vers la gauche)"], [0, "2", "TH : autre valeur"], [1, "3", "EV : autre facteur"], [2, "-4", "TV : signe inversé"]] as [number, string, string][]) {
     const r = G.verifier(ex, CHAMP_CHAINE, avecValeur(i, v));
-    verifier(r.statut === "not_equivalent" && r.codesCompetence.length === 0 && r.partiesFausses?.join() === `etape:${i}`, `${nomCas} : seule l'étape ${i} est fausse, sans code`);
+    verifier(r.statut === "not_equivalent" && r.codesCompetence.join() === "VALEUR_DECLAREE_INCORRECTE" && r.partiesFausses?.join() === `etape:${i}`, `${nomCas} : seule l'étape ${i} est fausse, avec le seul code VALEUR_DECLAREE_INCORRECTE`);
     verifier(r.statut === "not_equivalent" && Math.abs((r.fractionCorrecte ?? -1) - (Math.min(2, longueurMinimale(g)) + 1) / 4) < 1e-12, `${nomCas} : crédit partiel (deux étapes valides + arrivée)`);
   }
   // Valeur HORS DOMAINE de la transformation choisie (TH, TV ≠ 0 ; EV > 1 ; CV dans ]0 ; 1[) : parse_error IMMÉDIAT (aucune tentative), avant toute comparaison à la règle ou à f ; le message est
@@ -321,6 +321,34 @@ verifier(chainesJugees === CONFIGURATIONS.length * GRAINES.length, "toutes les c
     // L'ordre : un domaine refusé l'est AVANT le jugement, même si l'expression de l'étape est fausse.
     const fausseEtDomaine = G.verifier(ex, CHAMP_CHAINE, JSON.stringify({ etapes: [{ expression: "x^2+7", transformation: "EV", valeur: "1/2" }] }));
     verifier(fausseEtDomaine.statut === "parse_error", "valeur hors domaine + expression fausse : parse_error, pas un verdict");
+  }
+  // Le code VALEUR_DECLAREE_INCORRECTE PARTITIONNE (signal pur) : règle vraie + valeur différente (dans le domaine) -> ce code et lui seul ; règle fausse -> aucun ; tout juste -> aucun ;
+  // jamais sur un parse_error ; il ne change ni les étapes fausses ni fractionCorrecte.
+  {
+    let verdicts = 0;
+    for (const actives of CONFIGURATIONS) for (const graine of GRAINES.slice(0, 4)) {
+      const b = genererExerciceFx(graine, cfg(actives));
+      const f = parametres(b);
+      const exF = exProjete(b, f);
+      const canon = chaineCanonique(f, transformationsAdmises(actives, f))!.map((c) => ({ t: c.transformation, e: polynomeDe(c.apres) }));
+      let avant: Polynome = POLYNOME_DEPART;
+      canon.forEach((etape, i) => {
+        const vrai = parametreEtape(etape.t as Transformation, avant, etape.e);
+        avant = etape.e;
+        if (vrai === null || etape.t === "SOX") return;
+        const faux = etape.t === "TH" || etape.t === "TV" ? rat(-vrai.n, vrai.d) : etape.t === "EV" ? rat(vrai.n + vrai.d, vrai.d) : rat(vrai.n + vrai.d, 2 * vrai.d); // ≠ vrai et dans le domaine
+        const juste = G.verifier(exF, CHAMP_CHAINE, brute(canon));
+        const r = G.verifier(exF, CHAMP_CHAINE, brute(canon.map((e, k) => (k === i ? { ...e, v: saisieRat(faux) } : e))));
+        verdicts++;
+        verifier(juste.statut === "correct" && juste.codesCompetence.length === 0, `${actives.join("+")} g=${graine} : chaîne juste, aucun code`);
+        verifier(r.statut === "not_equivalent" && r.codesCompetence.join() === "VALEUR_DECLAREE_INCORRECTE" && r.partiesFausses?.join() === `etape:${i}`, `${actives.join("+")} g=${graine} étape ${i} (${etape.t}) : valeur fausse -> seul code VALEUR_DECLAREE_INCORRECTE`);
+        if (r.statut === "not_equivalent") {
+          const k = longueurMinimale(f);
+          verifier(Math.abs((r.fractionCorrecte ?? -1) - (Math.min(canon.length - 1, k) + 1) / (canon.length + 1)) < 1e-12, `${actives.join("+")} g=${graine} étape ${i} : le code ne change pas la fraction (${r.fractionCorrecte})`);
+        }
+      });
+    }
+    verifier(verdicts > 100, `partition de VALEUR_DECLAREE_INCORRECTE : ${verdicts} cas`);
   }
   // Toute écriture équivalente de la bonne valeur est acceptée (lecture exacte, pas de comparaison de texte).
   for (const [i, v] of [[0, "3.0"], [0, "+3"], [0, "6/2"], [0, "03"], [1, "4/2"], [1, "2,0"], [1, "(2)"], [2, "8/2"], [2, "4"]] as [number, string][]) {
@@ -347,7 +375,7 @@ verifier(chainesJugees === CONFIGURATIONS.length * GRAINES.length, "toutes les c
   const gPeu = parametres(brutPeu);
   const canonique = chaineCanonique(gPeu, transformationsAdmises(brutPeu.actives, gPeu))!.map((c) => ({ t: c.transformation, e: polynomeDe(c.apres) }));
   const horsSujet = G.verifier(exProjete(brutPeu, gPeu), CHAMP_CHAINE, brute([...construire([{ t: "TV", param: rat(3) }]), ...canonique].map((e, i) => (i === 0 ? { ...e, v: "99" } : e))));
-  verifier(horsSujet.statut === "not_equivalent" && horsSujet.codesCompetence[0] === "TRANSFORMATION_HORS_SUJET", "règle vraie + transformation non admise + valeur fausse : code hors sujet conservé");
+  verifier(horsSujet.statut === "not_equivalent" && horsSujet.codesCompetence.join() === "TRANSFORMATION_HORS_SUJET,VALEUR_DECLAREE_INCORRECTE", "règle vraie + transformation non admise + valeur fausse : les DEUX codes, dans cet ordre (deux erreurs distinctes)");
   // La solution écrite cite les valeurs (TH, TV, EV, CV) mais pas SOX.
   const sol = G.solutionAttendue(ex, CHAMP_CHAINE);
   verifier(/TH \(valeur \$3\$\)/.test(sol) && /EV \(valeur \$2\$\)/.test(sol) && /TV \(valeur \$4\$\)/.test(sol), `la solution cite les valeurs : ${sol}`);

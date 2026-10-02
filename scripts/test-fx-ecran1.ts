@@ -318,7 +318,7 @@ for (const graine of GRAINES) {
 }
 
 // ── 8. Codes : déclarés, au dictionnaire, expliqués, catégorisés ──
-verifier(JSON.stringify([...G.codesCompetenceDeclares].sort()) === JSON.stringify([...CODES_FX].sort()) && G.codesCompetenceDeclares.length === 5, "cinq codes déclarés (quatre de l'écran 1 + TRANSFORMATION_HORS_SUJET)");
+verifier(JSON.stringify([...G.codesCompetenceDeclares].sort()) === JSON.stringify([...CODES_FX].sort()) && G.codesCompetenceDeclares.length === 6, "six codes déclarés (quatre de l'écran 1 + TRANSFORMATION_HORS_SUJET + VALEUR_DECLAREE_INCORRECTE)");
 for (const code of CODES_FX_ECRAN_EXPRESSION) {
   verifier(Object.hasOwn(DICTIONNAIRE_COMPETENCES, code), `${code} : dictionnaire`);
   verifier(Object.hasOwn(EXPLICATIONS_COMPETENCES, code) && EXPLICATIONS_COMPETENCES[code]!.explication.length > 20 && EXPLICATIONS_COMPETENCES[code]!.exemple.length > 10, `${code} : explication professeur`);

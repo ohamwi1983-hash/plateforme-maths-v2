@@ -108,6 +108,7 @@ export const CATEGORIES_COMPETENCES: Record<string, CategorieCompetence> = {
   EGALITE_MAUVAIS_VECTEUR: { categorie: "Mauvais élément de référence" },
   ORTHOGONALITE_SOMMET_INCORRECT: { categorie: "Mauvais élément de référence" },
   TRANSFORMATION_HORS_SUJET: { categorie: "Mauvais élément de référence" },
+  VALEUR_DECLAREE_INCORRECTE: { categorie: "Confusion de signe/sens" },
 
   // 9. Nombre d'éléments incorrect
   QUEL_ANGLE_NOMBRE_SOLUTIONS: { categorie: "Nombre d'éléments incorrect", sousCategorie: "Compte" },

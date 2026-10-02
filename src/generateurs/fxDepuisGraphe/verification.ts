@@ -3,7 +3,7 @@ import { decoderChaineTransformations } from "../../../lib/reponsesEcran";
 import { DebordementExact, egalR, signeR, type Rat } from "../analyseFonctionMotifDelta/exact/rationnel";
 import { fonctionEffective } from "./cascade";
 import { POLYNOME_DEPART, longueurMinimale, parametreEtape, transformationsAdmises } from "./chaine";
-import { CODE_TRANSFORMATION_HORS_SUJET } from "./codes";
+import { CODE_TRANSFORMATION_HORS_SUJET, CODE_VALEUR_DECLAREE_INCORRECTE } from "./codes";
 import { diagnostiquerExpression } from "./diagnostic";
 import { BORNES_CHAINE } from "./ecrans";
 import { coefficient, degre, egalP, estConstant, lirePolynome, type Polynome } from "./polynome";
@@ -93,6 +93,7 @@ export function verifierChaine(ex: ExerciceFx, reponseBrute: string): ResultatVe
   const fausses: string[] = [];
   let valides = 0;
   let horsSujet = 0;
+  let valeursFausses = 0;
   let avant = POLYNOME_DEPART;
   decodee.valeur.forEach((etape, i) => {
     const apres = polynomes[i] as typeof avant;
@@ -103,6 +104,7 @@ export function verifierChaine(ex: ExerciceFx, reponseBrute: string): ResultatVe
     const declaree = valeursDeclarees[i] as Rat | null;
     // SOX n'a pas de valeur (le décodeur la refuse) ; pour les autres, la valeur déclarée doit être exactement celle de la règle.
     const valeurJuste = t === "SOX" || (declaree !== null && parametre !== null && egalR(declaree, parametre));
+    if (regleVraie && !valeurJuste) valeursFausses++; // règle vraie, valeur déclarée différente de la valeur réelle (RAPPORT §58)
     if (regleVraie && valeurJuste && admises.has(t)) valides++;
     else {
       fausses.push(`etape:${i}`);
@@ -121,7 +123,7 @@ export function verifierChaine(ex: ExerciceFx, reponseBrute: string): ResultatVe
   const fractionCorrecte = (Math.min(valides, longueurMinimale(g)) + (arrivee ? 1 : 0)) / (soumises + 1);
   return {
     statut: "not_equivalent",
-    codesCompetence: horsSujet > 0 ? [CODE_TRANSFORMATION_HORS_SUJET] : [],
+    codesCompetence: [...(horsSujet > 0 ? [CODE_TRANSFORMATION_HORS_SUJET] : []), ...(valeursFausses > 0 ? [CODE_VALEUR_DECLAREE_INCORRECTE] : [])],
     partiesFausses: fausses,
     fractionCorrecte,
   };
