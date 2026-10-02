@@ -934,7 +934,7 @@ async function main(): Promise<void> {
       await pR.route("**/fonts.googleapis.com/**", (r: any) => r.fulfill({ contentType: "text/css", body: "" }));
       await pR.setContent(refCh);
       const REF: Record<string, Element | null> = {};
-      for (const ref of ["depart", "etape", "entete", "numero", "aide", "legende", "ligne-transformation", "nom", "select", "separateur", "valeur", "ligne-expression", "nom-expression", "champ", "ligne-transformation-sox", "select-sox", "secondaire"]) REF[ref] = await mesurer(pR, `[data-ref="${ref}"]`);
+      for (const ref of ["bloc-question", "ligne-question", "question", "aide-question", "legende-question", "depart", "etape", "entete", "numero", "aide", "legende", "ligne-transformation", "nom", "select", "separateur", "valeur", "ligne-expression", "nom-expression", "champ", "ligne-transformation-sox", "select-sox", "secondaire"]) REF[ref] = await mesurer(pR, `[data-ref="${ref}"]`);
       await pR.screenshot({ path: join(CAPTURES, `fidelite-ref-chaine-${largeur}.png`), fullPage: true });
       await ctxR.close();
 
@@ -956,8 +956,18 @@ async function main(): Promise<void> {
       comparer(e, "étape", REF["etape"]!, await app(page, ".moteur-chaine-etape"), [...BORD, "display", "flexDirection", "gap"]);
       comparer(e, "en-tête", REF["entete"]!, await app(page, ".moteur-chaine-entete"), FLEX);
       comparer(e, "numéro d'étape", REF["numero"]!, await app(page, ".moteur-chaine-numero"), [...TXT, "letterSpacing", "textTransform"]);
-      comparer(e, "bouton « ? »", REF["aide"]!, await app(page, ".moteur-chaine-aide"), ["backgroundColor", "color", "borderTopWidth", "borderTopLeftRadius", "fontFamily", "fontSize", "fontWeight", "lineHeight", "width", "height", "minHeight", "boxShadow", "marginTop", "marginLeft", ...PADDING]);
-      comparer(e, "légende des abréviations", REF["legende"]!, await app(page, ".moteur-chaine-legende"), [...BORD, ...TXT, "lineHeight"]);
+      // « ? » GLOBAL (RAPPORT §58) : à droite de la question, légende en dessous ; mêmes gabarits que le « ? » et la légende de l'étape.
+      await page.locator(`${C} .moteur-question-ligne .moteur-chaine-aide`).click();
+      const PASTILLE = ["backgroundColor", "color", "borderTopWidth", "borderTopLeftRadius", "fontFamily", "fontSize", "fontWeight", "lineHeight", "width", "height", "minHeight", "boxShadow", "marginTop", "marginLeft", ...PADDING];
+      comparer(e, "bloc de la question", REF["bloc-question"]!, await app(page, ".moteur-question-bloc"), ["display", "flexDirection", "gap"]);
+      comparer(e, "ligne de la question", REF["ligne-question"]!, await app(page, ".moteur-question-ligne"), ["display", "alignItems", "justifyContent", "gap"]);
+      comparer(e, "question", REF["question"]!, await app(page, ".moteur-question-ligne .moteur-question"), ["color", "fontWeight", "fontSize", "lineHeight", "marginTop", "marginBottom", "flexGrow", "minWidth"]);
+      comparer(e, "« ? » global", REF["aide-question"]!, await app(page, ".moteur-question-ligne .moteur-chaine-aide"), PASTILLE);
+      comparer(e, "légende globale", REF["legende-question"]!, await app(page, ".moteur-question-bloc > .moteur-chaine-legende"), [...BORD, ...TXT, "lineHeight"]);
+      const globalGeo = (await page.evaluate(`(() => { const q = document.querySelector("${C} .moteur-question-ligne .moteur-question").getBoundingClientRect(); const a = document.querySelector("${C} .moteur-question-ligne .moteur-chaine-aide").getBoundingClientRect(); const l = document.querySelector("${C} .moteur-question-bloc > .moteur-chaine-legende").getBoundingClientRect(); return { droite: a.left >= q.right - 0.5, haut: Math.abs(a.top - q.top) <= 2, dessous: l.top >= Math.max(q.bottom, a.bottom) - 0.5 }; })()`)) as { droite: boolean; haut: boolean; dessous: boolean };
+      verifier(globalGeo.droite && globalGeo.haut && globalGeo.dessous, `${e} : « ? » global à droite et en haut de la question, légende en dessous (${JSON.stringify(globalGeo)})`);
+      comparer(e, "bouton « ? »", REF["aide"]!, await app(page, ".moteur-chaine-etape:first-child .moteur-chaine-aide"), ["backgroundColor", "color", "borderTopWidth", "borderTopLeftRadius", "fontFamily", "fontSize", "fontWeight", "lineHeight", "width", "height", "minHeight", "boxShadow", "marginTop", "marginLeft", ...PADDING]);
+      comparer(e, "légende des abréviations", REF["legende"]!, await app(page, ".moteur-chaine-etape:first-child .moteur-chaine-legende"), [...BORD, ...TXT, "lineHeight"]);
       comparer(e, "ligne de transformation", REF["ligne-transformation"]!, await app(page, ".moteur-chaine-etape:first-child > div:nth-of-type(2)"), FLEX);
       comparer(e, "nom f_k(x)", REF["nom"]!, await app(page, ".moteur-chaine-etape:first-child > div:nth-of-type(2) .moteur-chaine-nom"), [...TXT]);
       comparer(e, "liste déroulante", REF["select"]!, await app(page, ".moteur-chaine-etape:first-child .moteur-select"), [...P_CHAMP, "minHeight", "marginTop", "flexGrow"]);

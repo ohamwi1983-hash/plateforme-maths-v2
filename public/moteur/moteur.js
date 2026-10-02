@@ -165,6 +165,37 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
     return composant ? composant.creer(ecran.figure) : null;
   }
 
+  let compteurLegendes = 0;
+
+  /**
+   * Question de l'écran (RAPPORT §58). Si l'écran déclare une `legende` (abréviations), la question porte à sa DROITE un bouton « ? » — même convention que le « ? » de chaque étape de la chaîne
+   * — qui dévoile la légende en dessous ; sans légende, c'est la question seule. La légende n'est jamais affichée d'office et n'est pas une aide (aucune pénalité, rien d'enregistré).
+   */
+  function creerQuestion(ecran) {
+    const question = creer("p", "moteur-question", ecran.question, { math: true });
+    if (typeof ecran.legende !== "string" || ecran.legende === "") return question;
+    const bloc = creer("div", "moteur-question-bloc");
+    const ligne = creer("div", "moteur-question-ligne");
+    const aide = document.createElement("button");
+    aide.type = "button";
+    aide.className = "moteur-chaine-aide";
+    aide.textContent = "?";
+    aide.title = "Signification des abréviations";
+    aide.setAttribute("aria-label", "Signification des abréviations");
+    aide.setAttribute("aria-expanded", "false");
+    const legende = creer("p", "moteur-chaine-legende", ecran.legende, { math: true });
+    legende.id = `question-legende-${++compteurLegendes}`;
+    legende.hidden = true;
+    aide.setAttribute("aria-controls", legende.id);
+    aide.addEventListener("click", () => {
+      legende.hidden = !legende.hidden;
+      aide.setAttribute("aria-expanded", String(!legende.hidden));
+    });
+    ligne.append(question, aide);
+    bloc.append(ligne, legende);
+    return bloc;
+  }
+
   async function afficher(exercice, contexte = {}) {
     const racine = creer("div", "moteur-exercice");
     const infosParChamp = new Map(exercice.champs.map((c) => [c.champ, c]));
@@ -193,7 +224,7 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
       carte.appendChild(creer("p", "moteur-consigne", ecranCourant.consigne, { math: true }));
       const figure = creerFigure(ecranCourant);
       if (figure) carte.appendChild(figure.element);
-      if (ecranCourant.question) carte.appendChild(creer("p", "moteur-question", ecranCourant.question, { math: true })); // la question de l'écran est SOUS le graphique (RAPPORT §58)
+      if (ecranCourant.question) carte.appendChild(creerQuestion(ecranCourant)); // la question de l'écran est SOUS le graphique (RAPPORT §58)
       carteCourante = { carte, ecran: ecranCourant, info: infosParChamp.get(ecranCourant.champ), modification: edition !== null, figure };
       racine.appendChild(carte);
     } else {
@@ -206,7 +237,7 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
         carte.appendChild(creer("p", "moteur-consigne", ecran.consigne, { math: true }));
         const figureRelecture = creerFigure(ecran); // le graphique reste sous l'énoncé en relecture (sans annotations)
         if (figureRelecture) carte.appendChild(figureRelecture.element);
-        if (ecran.question) carte.appendChild(creer("p", "moteur-question", ecran.question, { math: true }));
+        if (ecran.question) carte.appendChild(creerQuestion(ecran));
         // Écran déjà répondu mais encore modifiable : le crayon, à droite de « Ta réponse », rouvre l'écran (RAPPORT §48).
         const crayon = info.modifiable === true ? creerCrayon(nomDe(ecran, exercice.ecrans.indexOf(ecran) + 1), () => afficher(exercice, { edition: ecran.champ })) : null;
         carte.appendChild(resumeTermine(ecran, info, crayon));

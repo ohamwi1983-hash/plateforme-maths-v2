@@ -1,6 +1,6 @@
 import type { ResultatVerification } from "../../../lib/contratGenerateur";
 import { decoderChaineTransformations } from "../../../lib/reponsesEcran";
-import { DebordementExact, egalR, type Rat } from "../analyseFonctionMotifDelta/exact/rationnel";
+import { DebordementExact, egalR, signeR, type Rat } from "../analyseFonctionMotifDelta/exact/rationnel";
 import { fonctionEffective } from "./cascade";
 import { POLYNOME_DEPART, longueurMinimale, parametreEtape, transformationsAdmises } from "./chaine";
 import { CODE_TRANSFORMATION_HORS_SUJET } from "./codes";
@@ -10,6 +10,24 @@ import { coefficient, degre, egalP, estConstant, lirePolynome, type Polynome } f
 import { estTransformation, parametres, polynomeDe, polynomeVrai, type ExerciceFx } from "./types";
 
 const MESSAGE_VALEUR = "doit être un nombre, par exemple 3, -2 ou 1/2.";
+
+/**
+ * DOMAINE de la valeur d'une transformation (RAPPORT §58) : une propriété de la transformation CHOISIE, publique et identique pour tous les élèves (jamais de la fonction visée). TH et TV : un
+ * nombre non nul (une translation de 0 ne fait rien) ; EV : un facteur > 1 ; CV : un facteur entre 0 et 1 (exclus). Hors domaine : `null` ; sinon, le message d'une valeur hors domaine.
+ */
+function messageHorsDomaine(t: string, valeur: Rat): string | null {
+  switch (t) {
+    case "TH":
+    case "TV":
+      return signeR(valeur) === 0 ? `pour ${t}, la valeur ne peut pas être 0 (une translation de 0 ne change rien).` : null;
+    case "EV":
+      return valeur.n > valeur.d ? null : "pour EV, la valeur doit être un facteur supérieur à 1.";
+    case "CV":
+      return signeR(valeur) > 0 && valeur.n < valeur.d ? null : "pour CV, la valeur doit être un facteur compris entre 0 et 1 (exclus).";
+    default:
+      return null;
+  }
+}
 
 /** La valeur déclarée d'une étape : un NOMBRE rationnel (lu par `lirePolynome`, donc `3`, `-2`, `1/2`, `0,5`, `2*3`), jamais une expression en `x`. */
 function lireValeurDeclaree(texte: string): Rat | null {
@@ -60,12 +78,15 @@ export function verifierChaine(ex: ExerciceFx, reponseBrute: string): ResultatVe
   const polynomes: Polynome[] = [];
   const valeursDeclarees: (Rat | null)[] = [];
   for (let i = 0; i < decodee.valeur.length; i++) {
-    const etape = decodee.valeur[i] as { expression: string; valeur: string };
+    const etape = decodee.valeur[i] as { expression: string; transformation: string; valeur: string };
     const lue = lirePolynome(etape.expression);
     if (!lue.ok) return { statut: "parse_error", codesCompetence: [], messageErreur: `Étape ${i + 1} : ${lue.message}` };
     polynomes.push(lue.polynome);
     const declaree = etape.valeur === "" ? null : lireValeurDeclaree(etape.valeur);
     if (etape.valeur !== "" && declaree === null) return { statut: "parse_error", codesCompetence: [], messageErreur: `Étape ${i + 1} : la valeur ${MESSAGE_VALEUR}` };
+    // Hors domaine pour la transformation choisie : lecture refusée (aucune tentative consommée), AVANT toute comparaison à la règle ou à la fonction visée.
+    const horsDomaine = declaree !== null ? messageHorsDomaine(etape.transformation, declaree) : null;
+    if (horsDomaine !== null) return { statut: "parse_error", codesCompetence: [], messageErreur: `Étape ${i + 1} : ${horsDomaine}` };
     valeursDeclarees.push(declaree);
   }
   const admises = transformationsAdmises(ex.actives, g);

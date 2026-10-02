@@ -1688,6 +1688,25 @@
   outline-offset: 2px;
 }
 
+/* Question avec son « ? » global (RAPPORT §58) : la pastille à droite de la question, la légende en dessous. */
+.moteur-question-bloc {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+}
+
+.moteur-question-ligne {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--espace-2);
+}
+
+.moteur-question-ligne .moteur-question {
+  flex: 1;
+  min-width: 0;
+}
+
 .moteur-chaine-legende {
   margin: 0;
   padding: var(--espace-2) var(--espace-3);

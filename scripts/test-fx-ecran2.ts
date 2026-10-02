@@ -294,10 +294,33 @@ verifier(chainesJugees === CONFIGURATIONS.length * GRAINES.length, "toutes les c
   verifier(G.verifier(ex, CHAMP_CHAINE, brute(bonne)).statut === "correct", "valeurs déclarées justes : chaîne juste");
   const avecValeur = (i: number, v: string) => brute(bonne.map((e, k) => (k === i ? { ...e, v } : e)));
   // Mauvaise valeur sur une règle vraie : étape fausse, jamais un code « hors sujet », jamais une erreur de lecture.
-  for (const [i, v, nomCas] of [[0, "-3", "TH : signe inversé (vers la gauche)"], [0, "2", "TH : autre valeur"], [1, "1/2", "EV : l'inverse du facteur"], [1, "3", "EV : autre facteur"], [2, "-4", "TV : signe inversé"], [2, "0", "TV : zéro"]] as [number, string, string][]) {
+  for (const [i, v, nomCas] of [[0, "-3", "TH : signe inversé (vers la gauche)"], [0, "2", "TH : autre valeur"], [1, "3", "EV : autre facteur"], [2, "-4", "TV : signe inversé"]] as [number, string, string][]) {
     const r = G.verifier(ex, CHAMP_CHAINE, avecValeur(i, v));
     verifier(r.statut === "not_equivalent" && r.codesCompetence.length === 0 && r.partiesFausses?.join() === `etape:${i}`, `${nomCas} : seule l'étape ${i} est fausse, sans code`);
     verifier(r.statut === "not_equivalent" && Math.abs((r.fractionCorrecte ?? -1) - (Math.min(2, longueurMinimale(g)) + 1) / 4) < 1e-12, `${nomCas} : crédit partiel (deux étapes valides + arrivée)`);
+  }
+  // Valeur HORS DOMAINE de la transformation choisie (TH, TV ≠ 0 ; EV > 1 ; CV dans ]0 ; 1[) : parse_error IMMÉDIAT (aucune tentative), avant toute comparaison à la règle ou à f ; le message est
+  // une propriété de la transformation, identique pour tous les exercices, et ne cite aucune valeur attendue.
+  const horsDomaine: [number, string, string][] = [[0, "0", "TH"], [2, "0", "TV"], [1, "1", "EV : 1 exactement"], [1, "1/2", "EV : l'inverse du facteur"], [1, "-2", "EV : négatif"], [1, "0", "EV : zéro"]];
+  for (const [i, v, nomCas] of horsDomaine) {
+    const r = G.verifier(ex, CHAMP_CHAINE, avecValeur(i, v));
+    verifier(r.statut === "parse_error" && r.codesCompetence.length === 0 && r.messageErreur.startsWith(`Étape ${i + 1} : pour `), `valeur hors domaine (${nomCas}) : parse_error sur l'étape ${i + 1}, sans code`);
+  }
+  {
+    const gCv = P([1, 3], [0], [0]); // x² comprimée : CV exigée
+    const exCv = exProjete(genererExerciceFx(3, cfg(["CV"])), gCv);
+    const chaineCv = construire([{ t: "CV", param: rat(1, 3) }]);
+    verifier(G.verifier(exCv, CHAMP_CHAINE, brute(chaineCv)).statut === "correct", "CV 1/3 : juste");
+    for (const v of ["3", "1", "0", "-1/3", "2"]) {
+      const r = G.verifier(exCv, CHAMP_CHAINE, brute(chaineCv.map((e) => ({ ...e, v }))));
+      verifier(r.statut === "parse_error" && r.messageErreur === "Étape 1 : pour CV, la valeur doit être un facteur compris entre 0 et 1 (exclus).", `CV « ${v} » : hors domaine -> parse_error`);
+    }
+    const memeMessage = G.verifier(ex, CHAMP_CHAINE, avecValeur(1, "1/2"));
+    const autre = G.verifier(exProjete(brut, P([5], [-2], [1])), CHAMP_CHAINE, avecValeur(1, "1/2"));
+    verifier(memeMessage.statut === "parse_error" && autre.statut === "parse_error" && memeMessage.messageErreur === autre.messageErreur, "le message hors domaine ne dépend pas de l'exercice");
+    // L'ordre : un domaine refusé l'est AVANT le jugement, même si l'expression de l'étape est fausse.
+    const fausseEtDomaine = G.verifier(ex, CHAMP_CHAINE, JSON.stringify({ etapes: [{ expression: "x^2+7", transformation: "EV", valeur: "1/2" }] }));
+    verifier(fausseEtDomaine.statut === "parse_error", "valeur hors domaine + expression fausse : parse_error, pas un verdict");
   }
   // Toute écriture équivalente de la bonne valeur est acceptée (lecture exacte, pas de comparaison de texte).
   for (const [i, v] of [[0, "3.0"], [0, "+3"], [0, "6/2"], [0, "03"], [1, "4/2"], [1, "2,0"], [1, "(2)"], [2, "8/2"], [2, "4"]] as [number, string][]) {

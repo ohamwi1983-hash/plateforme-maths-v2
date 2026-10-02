@@ -2608,8 +2608,21 @@ async function scenarioGen8Eleve(navigateur: any, base: string, largeur: number)
     const consigne2 = await lireConsigneGen7(page);
     const question2 = await lireQuestionGen7(page);
     verifier(question2.includes(`$f(x) = ${latexFonction(f)}$`) && consigne2.startsWith("Détermine l'expression analytique de la parabole ci-dessous.") && !consigne2.includes("$f(x)"), `${l} : l'écran 2 rappelle la consigne globale, et sa QUESTION (sous le graphique) reprend la fonction (« ${question2.slice(0, 120)} »)`);
-    const ordre2: string[] = await page.evaluate(`[...document.querySelector(".moteur-ecran-courant").children].map((e) => e.className.split(" ").filter((c) => /^(moteur-consigne|moteur-question|moteur-figure|moteur-chaine)$/.test(c))[0] ?? "").filter(Boolean)`);
-    verifier(ordre2.join() === "moteur-consigne,moteur-figure,moteur-question,moteur-chaine", `${l} : écran 2 : consigne / graphique / question / chaîne (${ordre2.join()})`);
+    const ordre2: string[] = await page.evaluate(`[...document.querySelector(".moteur-ecran-courant").children].map((e) => e.className.split(" ").filter((c) => /^(moteur-consigne|moteur-question-bloc|moteur-figure|moteur-chaine)$/.test(c))[0] ?? "").filter(Boolean)`);
+    verifier(ordre2.join() === "moteur-consigne,moteur-figure,moteur-question-bloc,moteur-chaine", `${l} : écran 2 : consigne / graphique / question (avec son « ? ») / chaîne (${ordre2.join()})`);
+    // « ? » GLOBAL de l'écran (RAPPORT §58) : à DROITE de la question elle-même, légende cachée jusqu'à l'appui, puis dévoilée en dessous.
+    const globalAide = courant.locator(".moteur-question-ligne .moteur-chaine-aide");
+    const globalLegende = courant.locator(".moteur-question-bloc > .moteur-chaine-legende");
+    const bQ = await courant.locator(".moteur-question-ligne .moteur-question").boundingBox();
+    const bA = await globalAide.boundingBox();
+    verifier(bA.x >= bQ.x + bQ.width - 0.5 && bA.y <= bQ.y + 2, `${l} : le « ? » global est à DROITE de la question, en haut de sa ligne`);
+    verifier(await globalLegende.isHidden(), `${l} : la légende globale est cachée avant l'appui`);
+    await globalAide.click();
+    const bL = await globalLegende.boundingBox();
+    verifier((await globalLegende.innerText()) === "TH : translation horizontale · TV : translation verticale · EV : étirement vertical · CV : compression verticale · SOX : symétrie d'axe Ox." && bL.y >= bQ.y + bQ.height - 0.5 && (await globalAide.getAttribute("aria-expanded")) === "true", `${l} : le « ? » global dévoile la légende, en dessous de la question`);
+    await globalAide.click();
+    verifier(await globalLegende.isHidden(), `${l} : un second appui la referme`);
+    verifier(s.base.table("aides_utilisees").length === 0, `${l} : le « ? » n'est pas une aide : rien d'enregistré`);
     verifier(!(await page.locator("body").innerText()).includes("TH : translation horizontale") , `${l} : la légende des abréviations n'est PAS affichée d'office`);
     verifier((await courant.locator(".moteur-chaine-etape").first().locator(".moteur-select option:not([disabled])").count()) === 5 && (await courant.locator(".moteur-aide button").count()) === 0, `${l} : cinq transformations au menu quelle que soit la ligne ; aucun bouton d'aide`);
     await composerChaineFx(page, chaineEleveFx(f, cas.actives));

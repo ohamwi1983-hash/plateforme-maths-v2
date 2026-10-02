@@ -28,11 +28,22 @@
   .champ { box-sizing: border-box; min-height: 44px; padding: 10px 12px; font-family: 'Inter', sans-serif; font-size: 15.2px; color: #1C1730; background: #F6F3FB; border: 1px solid #E9E4F3; border-radius: 13px; }
   .valeur { flex: 1 1 120px; min-width: 0; }
   .expression { flex: 1 1 160px; min-width: 0; }
+  /* Question de l'écran avec son « ? » GLOBAL (RAPPORT §58) : la pastille est à DROITE de la question elle-même, même convention et même gabarit que le « ? » de chaque étape ; la légende s'ouvre en dessous. */
+  .bloc-question { display: flex; flex-direction: column; gap: 8px; }
+  .ligne-question { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .enonce { flex: 1; min-width: 0; margin: 0; font-weight: 600; color: #1C1730; line-height: 1.4; }
   .actions { display: flex; flex-wrap: wrap; gap: 8px; }
   /* Bouton secondaire du site (style.css) : fond transparent, 16 px, mêmes que « Ajouter une valeur » des listes — pas un style propre à cet écran. */
   .secondaire { font-family: 'Inter', sans-serif; font-weight: 600; font-size: 16px; min-height: 44px; padding: 9px 16px; color: #7C3AED; background: transparent; border: 2px solid #7C3AED; border-radius: 13px; }
 </style>
 <div class="carte" data-ref="carte">
+  <div class="bloc-question" data-ref="bloc-question">
+    <div class="ligne-question" data-ref="ligne-question">
+      <p class="enonce" data-ref="question">Quelles transformations permettent d'obtenir la fonction f(x) = 2(x − 3)² + 1 à partir de x² ?</p>
+      <button class="aide" data-ref="aide-question" aria-label="Signification des abréviations">?</button>
+    </div>
+    <p class="legende" data-ref="legende-question">TH : translation horizontale · TV : translation verticale · EV : étirement vertical · CV : compression verticale · SOX : symétrie d'axe Ox.</p>
+  </div>
   <p class="depart" data-ref="depart">f₀(x) = x²</p>
   <ol class="etapes">
     <li class="etape" data-ref="etape">
