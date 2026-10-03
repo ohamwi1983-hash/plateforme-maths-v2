@@ -27,7 +27,7 @@ export const CATALOGUE_GENERATEURS = [
   { generateur_id: "gen8", variante_id: "fx_depuis_graphe", label: "f(x) à partir du graphe" },
   // gen9 « Complète le carré » (RAPPORT §59) : UNE seule entrée, comme gen8 ; les transformations actives se choisissent PAR LIGNE, avec `TH` OBLIGATOIRE (`Generateur.configuration.obligatoires`).
   // Libellé IDENTIQUE à `public/catalogue-generateurs-complet.json` (4e, n° 68).
-  { generateur_id: "gen9", variante_id: "completion_du_carre", label: "Complète le carré" },
+  { generateur_id: "gen9", variante_id: "completion_du_carre", label: "Forme canonique et transformations" },
 ] as const;
 
 export type VariantePilote = (typeof CATALOGUE_GENERATEURS)[number]["variante_id"];

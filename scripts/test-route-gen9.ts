@@ -123,12 +123,12 @@ async function main(): Promise<void> {
   // ── 1. Câblage : catalogue serveur, JSON, prof.html ──
   const cat = await appeler("catalogue-generateurs", "GET", { jeton: jetonProf });
   const entree = (cat.corps as any[]).find((e) => e.variante_id === VARIANTE);
-  verifier(entree?.executable === true && entree.generateur_id === "gen9" && entree.label === "Complète le carré", "catalogue serveur : gen9 exécutable, libellé exact");
+  verifier(entree?.executable === true && entree.generateur_id === "gen9" && entree.label === "Forme canonique et transformations", "catalogue serveur : gen9 exécutable, libellé exact");
   verifier(entree?.configuration?.cases?.map((c: any) => c.id).join() === "TH,TV,EV,CV,SOX" && JSON.stringify(entree.configuration.exclusifs) === '[["EV","CV"]]' && JSON.stringify(entree.configuration.obligatoires) === '["TH"]', "catalogue serveur : descripteur servi, TH obligatoire");
   verifier(CATALOGUE_GENERATEURS.filter((e) => e.variante_id === VARIANTE).length === 1 && chercherGenerateur(VARIANTE) !== null, "une seule entrée de catalogue, au registre");
   const json = JSON.parse(readFileSync(join(RACINE, "public/catalogue-generateurs-complet.json"), "utf8")) as { "4e": { numero: number; chapitre: number; libelle: string; variantes: { axe: string; label: string }[] | string }[] };
   const e68 = json["4e"].filter((g) => g.numero === 68);
-  verifier(e68.length === 1 && e68[0]!.chapitre === 1 && Array.isArray(e68[0]!.variantes) && e68[0]!.variantes.length === 1 && (e68[0]!.variantes as { label: string }[])[0]!.label === "Complète le carré", "JSON : 4e n°68, chapitre 1, UNE variante au libellé identique au catalogue");
+  verifier(e68.length === 1 && e68[0]!.chapitre === 1 && Array.isArray(e68[0]!.variantes) && e68[0]!.variantes.length === 1 && (e68[0]!.variantes as { label: string }[])[0]!.label === "Forme canonique et transformations", "JSON : 4e n°68, chapitre 1, UNE variante au libellé identique au catalogue");
   const html = readFileSync(join(RACINE, "public/prof.html"), "utf8");
   verifier(/"4e:68":\s*\[\s*\{\s*index:\s*0,\s*variante_id:\s*"completion_du_carre"\s*\}\s*\]/.test(html), 'prof.html : CORRESPONDANCE_JSON_VERS_PILOTE["4e:68"] = [{ index: 0, variante_id: "completion_du_carre" }]');
   const bloc = /const NUMEROS_PAR_CHAPITRE_4E = \{([\s\S]*?)\n    \};/.exec(html);
