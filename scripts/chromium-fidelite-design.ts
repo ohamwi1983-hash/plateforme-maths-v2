@@ -138,7 +138,7 @@ async function main(): Promise<void> {
   await ctxRef.close();
 
   // ── Application ──
-  async function ouvrir(profil: "base" | "etendu" | "graphe", champsAvant: string[], attendre: string, largeur = 390) {
+  async function ouvrir(profil: "base" | "etendu" | "graphe" | "formule", champsAvant: string[], attendre: string, largeur = 390) {
     imposerProfilAssignation(profil);
     const s = creerScenario();
     installerBase(s.base);
@@ -888,6 +888,42 @@ async function main(): Promise<void> {
       // Réponse juste -> relecture : le graphique reste sous l'énoncé, SANS annotations.
       const ligne = (await page.evaluate(`1`)) as number;
       void ligne;
+      await ctx.close();
+    }
+  }
+
+  // ── Aide formule_coloree à paliers avec EMPHASE (RAPPORT §59) : docs/reference/formule-emphase.html, à 390 ET 1280 px ──
+  {
+    const refF = readFileSync(join(RACINE, "docs/reference/formule-emphase.html"), "utf8");
+    for (const largeur of [390, 1280]) {
+      const e = `formule à paliers ${largeur} px`;
+      const ctxR = await navigateur.newContext({ viewport: { width: largeur, height: 800 } });
+      const pR = await ctxR.newPage();
+      await pR.route("**/fonts.googleapis.com/**", (r: any) => r.fulfill({ contentType: "text/css", body: "" }));
+      await pR.setContent(refF);
+      const REF: Record<string, Element | null> = {};
+      for (const ref of ["zone", "palier", "legende", "formule", "emphase"]) REF[ref] = await mesurer(pR, `[data-ref="${ref}"]`);
+      await pR.screenshot({ path: join(CAPTURES, `fidelite-ref-formule-${largeur}.png`), fullPage: true });
+      await ctxR.close();
+
+      const { page, ctx } = await ouvrir("formule", [], ".moteur-champ-expression", largeur);
+      const bouton = page.locator(`${C} .moteur-aide button`);
+      await bouton.click(); // confirmation de la pénalité
+      await bouton.click(); // palier 1
+      await page.waitForSelector(`${C} .moteur-formule-palier`);
+      verifier((await page.locator(`${C} .moteur-emphase`).count()) === 0, `${e} : le palier 1 n'a aucune emphase`);
+      await bouton.click(); // « Un indice de plus ? » -> palier 2
+      await page.waitForSelector(`${C} .moteur-emphase`);
+      await page.mouse.move(0, 0);
+      await page.screenshot({ path: join(CAPTURES, `fidelite-app-formule-${largeur}.png`), fullPage: true });
+      const BORD = ["backgroundColor", "borderTopColor", "borderTopWidth", "borderTopStyle", "borderTopLeftRadius", ...PADDING];
+      comparer(e, "zone d'aide", REF["zone"]!, await app(page, ".moteur-aide-texte.moteur-aide-typee"), [...BORD, "color", "boxSizing"]);
+      comparer(e, "palier", REF["palier"]!, await app(page, ".moteur-formule-palier"), ["display", "flexDirection", "gap"]);
+      comparer(e, "légende du palier", REF["legende"]!, await app(page, ".moteur-formule-palier .moteur-aide-legende"), ["marginTop", "marginBottom", "color", "fontSize"]);
+      comparer(e, "formule", REF["formule"]!, await app(page, ".moteur-formule-palier .moteur-formule"), ["display", "justifyContent", "flexWrap", "fontSize"]);
+      comparer(e, "emphase", REF["emphase"]!, await app(page, ".moteur-emphase"), ["backgroundColor", "borderBottomColor", "borderBottomWidth", "borderBottomStyle", "borderTopLeftRadius", "paddingLeft", "paddingRight"]);
+      const sans = (await page.evaluate(`(() => { const e = document.querySelector("${C} .moteur-emphase"); return { couleurEnLigne: /color/.test(e.getAttribute("style") ?? ""), coef: !!e.closest(".moteur-coef-a, .moteur-coef-b, .moteur-coef-c"), source: !!document.querySelector("${C} .moteur-math-source"), katex: !!e.closest(".katex"), debord: document.documentElement.scrollWidth > window.innerWidth }; })()`)) as { couleurEnLigne: boolean; coef: boolean; source: boolean; katex: boolean; debord: boolean };
+      verifier(!sans.couleurEnLigne && !sans.coef && !sans.source && sans.katex && !sans.debord, `${e} : emphase rendue par KaTeX, sans couleur en ligne ni token de coefficient, sans défilement horizontal (${JSON.stringify(sans)})`);
       await ctx.close();
     }
   }

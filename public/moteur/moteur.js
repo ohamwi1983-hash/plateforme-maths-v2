@@ -637,7 +637,7 @@ export async function ouvrirExercice(conteneur, exerciceId, { api, surExerciceTe
         afficherAide(texte, resultat.aide, figure);
         texte.hidden = false;
         const a = resultat.aide;
-        if (a && typeof a === "object" && a.type === "annotations_figure" && a.palier < a.palierTotal) {
+        if (a && typeof a === "object" && Number.isInteger(a.palierTotal) && a.palier < a.palierTotal) {
           prochainPalier = a.palier + 1;
           rendreTexte(libelle, "Un indice de plus ?");
           bouton.disabled = false;

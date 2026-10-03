@@ -1,7 +1,7 @@
 import type { RequeteHttp, ReponseHttp } from "../httpTypes";
 import { avecGestionErreurs } from "../avecGestionErreurs";
 import { eleveAuthentifie, supabaseAdmin } from "../supabaseAdmin";
-import { aideAuPalier, nombrePaliers, validerAide, type AideAnnotationsFigure } from "../aideTypee";
+import { aideAPaliers, aideAuPalier, nombrePaliers, validerAide } from "../aideTypee";
 import { calculerEtatExercice, chargerContexteTache, chargerDonneesExercice, COLONNES_EXERCICE_ASSIGNE, projeterExercice, regenererExercice, type LigneExerciceAssigne } from "../etatExercice";
 import { dependancesTerminees } from "../cascadeEcrans";
 
@@ -84,13 +84,13 @@ export const gererReponsesAide = avecGestionErreurs(async function handler(req: 
     return;
   }
 
-  // Aide PAR PALIERS (`annotations_figure`, RAPPORT §56) : le serveur ne sert QUE le palier demandé (annotations cumulées), jamais les suivants. Palier demandé : 1..n ; permis
+  // Aide PAR PALIERS (`annotations_figure`, RAPPORT §56 ; `formule_coloree` écrite avec `paliers`, RAPPORT §59) : le serveur ne sert QUE le palier demandé (annotations cumulées, ou formule du palier), jamais les suivants. Palier demandé : 1..n ; permis
   // seulement s'il est ≤ palier atteint + 1 (on ne saute pas un palier) ; sans `palier`, le premier ou, une fois l'aide utilisée, le palier atteint (rejouer est gratuit).
   // Le palier atteint est enregistré CÔTÉ SERVEUR (`aides_utilisees.palier`) ; la pénalité reste binaire (un palier ou deux : même coût, décision D2).
   const { data: ligneAide, error: erreurLecture } = await admin.from("aides_utilisees").select("palier").eq("exercice_assigne_id", exercice_assigne_id).eq("champ", champ).maybeSingle();
   if (erreurLecture) throw new Error(erreurLecture.message);
   const palierAtteint = ligneAide ? (typeof ligneAide.palier === "number" ? ligneAide.palier : 1) : 0;
-  const parPaliers = typeof ecranProjete.aide !== "string" && ecranProjete.aide.type === "annotations_figure";
+  const parPaliers = aideAPaliers(ecranProjete.aide);
   if (!parPaliers) {
     const { error: erreurUpsert } = await admin.from("aides_utilisees").upsert({ exercice_assigne_id, champ }, { onConflict: "exercice_assigne_id,champ", ignoreDuplicates: true });
     if (erreurUpsert) throw new Error(erreurUpsert.message);
@@ -114,5 +114,5 @@ export const gererReponsesAide = avecGestionErreurs(async function handler(req: 
         : await admin.from("aides_utilisees").update({ palier }).eq("exercice_assigne_id", exercice_assigne_id).eq("champ", champ);
     if (ecriture.error) throw new Error(ecriture.error.message);
   }
-  res.status(200).json({ aide: aideAuPalier(ecranProjete.aide as AideAnnotationsFigure, palier), penalite_pourcent: contexte.aidePenalitePourcent });
+  res.status(200).json({ aide: aideAuPalier(ecranProjete.aide as Exclude<typeof ecranProjete.aide, string> & Parameters<typeof aideAuPalier>[0], palier), penalite_pourcent: contexte.aidePenalitePourcent });
 });

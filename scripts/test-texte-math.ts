@@ -82,8 +82,8 @@ for (const c of COMMANDES_MATH_INTERDITES) {
 }
 {
   const occurrences = (t: string) => (t.match(/htmlClass/g) ?? []).length;
-  verifier(occurrences(clientTexteMath) === 1 && clientTexteMath.includes("\\\\htmlClass{moteur-coef-${segment.role}}"), "htmlClass : UNE occurrence dans texteMath.js, l'assemblage moteur-coef-<rôle>");
-  verifier(occurrences(clientRendre) === 1 && clientRendre.includes('contexte.command === "\\\\htmlClass"') && clientRendre.includes("/^moteur-coef-[abc]$/"), "htmlClass : UNE occurrence dans rendreTexte.js, la confiance restreinte à moteur-coef-a|b|c");
+  verifier(occurrences(clientTexteMath) === 2 && clientTexteMath.includes("\\\\htmlClass{moteur-coef-${segment.role}}") && clientTexteMath.includes("\\\\htmlClass{moteur-emphase}"), "htmlClass : DEUX occurrences dans texteMath.js, l'assemblage moteur-coef-<rôle> et l'emphase neutre (RAPPORT §59)");
+  verifier(occurrences(clientRendre) === 1 && clientRendre.includes('contexte.command === "\\\\htmlClass"') && clientRendre.includes("/^(moteur-coef-[abc]|moteur-emphase)$/"), "htmlClass : UNE occurrence dans rendreTexte.js, la confiance restreinte à moteur-coef-a|b|c et moteur-emphase");
   const dossier = join(__dirname, "../public/moteur");
   const autres: string[] = [];
   const parcourir = (d: string): void => {

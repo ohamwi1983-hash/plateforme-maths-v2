@@ -22,7 +22,7 @@ import { join } from "node:path";
 import { demarrerServeur, stubSupabase } from "./support/serveurChromium";
 import { appeler, creerScenario, creerTache, imposerProfilAssignation, installerBase, type Scenario } from "./support/harnaisRouteur";
 import {
-  CHAMP_ALLURE, CHAMP_AXE, CHAMP_COEFFICIENTS, CHAMP_COURBE, CHAMP_DIVISEURS, CHAMP_EXTREMUM, CHAMP_IMAGE, CHAMP_PARITE, CHAMP_QUOTIENT, CHAMP_RACINES, CHAMP_SIGNES, CHAMP_SIGNES_VARIATION, CHAMP_SOMME,
+  CHAMP_ALLURE, CHAMP_CARRE, CHAMP_AXE, CHAMP_COEFFICIENTS, CHAMP_COURBE, CHAMP_DIVISEURS, CHAMP_EXTREMUM, CHAMP_IMAGE, CHAMP_PARITE, CHAMP_QUOTIENT, CHAMP_RACINES, CHAMP_SIGNES, CHAMP_SIGNES_VARIATION, CHAMP_SOMME,
   generateurTemoinTechnique as temoin, graineDeProfil, reponseBruteCorrecte, VARIANTE_TEMOIN, type ExerciceEtendu, type ExerciceTemoin,
 } from "../src/generateurs/_temoinTechnique";
 
@@ -2331,6 +2331,57 @@ async function scenarioFigureAidePaliers(navigateur: any, base: string, largeur:
 }
 
 /**
+ * Aide `formule_coloree` À PALIERS avec EMPHASE (RAPPORT §59) sur le TÉMOIN (profil `formule`) : le palier 1 montre la légende et la formule SANS emphase ; « Un indice de plus ? » sert le palier 2, où
+ * la quantité `(b/2a)²` est mise en évidence (rendue par KaTeX, sans couleur en ligne ni repli en source) ; une seule pénalité ; recharger la page rejoue le palier atteint (« Revoir l'indice »).
+ */
+async function scenarioFormulePaliers(navigateur: any, base: string, largeur: number) {
+  const l = `${largeur} formule paliers`;
+  imposerProfilAssignation("formule");
+  const s: Scenario = creerScenario();
+  installerBase(s.base);
+  const tacheId = creerTache(s, { nom: "Formule à paliers", aide_activee: true, aide_penalite_pourcent: 25, reponse_visible: true, variantes: [{ variante_id: VARIANTE_TEMOIN, nombre_exercices: 1 }] });
+  const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tacheId, eleve_ids: ["eleve-1"] } });
+  verifier(a.statut === 201, `${l} : assignation ${a.statut}`);
+  const ligne = s.base.table("exercices_assignes")[0]!;
+  const ex = temoin.generer(Number(ligne.graine));
+  const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+  const courant = page.locator(".moteur-ecran-courant");
+  await page.waitForSelector(".moteur-champ-expression");
+  verifier((await courant.locator(".moteur-aide-texte").isHidden()) && (await courant.locator(".moteur-emphase").count()) === 0, `${l} : zone d'aide fermée, aucune emphase d'office`);
+  const bouton = courant.locator(".moteur-aide button");
+  await bouton.click();
+  if ((await bouton.innerText()).startsWith("Confirmer")) await bouton.click();
+  await page.waitForSelector(".moteur-formule-palier");
+  verifier((await courant.locator(".moteur-formule-palier .moteur-aide-legende").innerText()).length > 0 && (await courant.locator(".moteur-formule .katex").count()) === 1 && (await courant.locator(".moteur-emphase").count()) === 0, `${l} : palier 1 : légende + formule, SANS emphase`);
+  verifier(/Un indice de plus/.test(await bouton.innerText()), `${l} : « Un indice de plus ? » proposé`);
+  await bouton.click();
+  await page.waitForSelector(".moteur-emphase");
+  verifier((await courant.locator(".moteur-emphase").count()) === 1 && (await courant.locator(".moteur-emphase").evaluate((e: any) => e.closest(".katex-html") !== null)) && (await page.locator(".moteur-math-source").count()) === 0, `${l} : palier 2 : UNE quantité en emphase, rendue par KaTeX`);
+  const emphase = courant.locator(".moteur-emphase");
+  const bordure = (await emphase.evaluate((e: any) => getComputedStyle(e).borderBottomWidth)) as string;
+  verifier(bordure === "2px" && (await emphase.evaluate((e: any) => !(e.getAttribute("style") ?? "").includes("color"))), `${l} : l'emphase est un soulignement épais (la couleur ne suffit pas) et n'a aucune couleur en ligne`);
+  verifier((await courant.locator(".moteur-aide button:visible").count()) === 0, `${l} : après le dernier palier, plus de bouton d'indice`);
+  verifier(journal.requetes.filter((r: any) => r.url.endsWith("/api/reponses/aide")).map((r: any) => JSON.parse(r.corps ?? "{}").palier).join() === ",2", `${l} : première demande sans palier, la suivante palier 2`);
+  verifier(s.base.table("aides_utilisees").length === 1 && s.base.table("aides_utilisees")[0]!.palier === 2, `${l} : une seule ligne d'usage, palier 2 (pénalité binaire)`);
+  await page.reload();
+  await page.waitForSelector(".carte-tache");
+  await page.locator(".carte-tache").click();
+  await page.waitForSelector(".moteur-champ-expression");
+  verifier(/Revoir l'indice/.test(await courant.locator(".moteur-aide button").innerText()), `${l} : après rechargement, « Revoir l'indice »`);
+  await courant.locator(".moteur-aide button").click();
+  await page.waitForSelector(".moteur-emphase");
+  verifier((await courant.locator(".moteur-aide button:visible").count()) === 0 && s.base.table("aides_utilisees").length === 1, `${l} : « Revoir » rejoue le palier atteint (2), sans nouvelle pénalité`);
+  await page.screenshot({ path: join(CAPTURES, `${l.replace(/ /g, "-")}.png`), fullPage: true });
+  await courant.locator(".moteur-champ").fill(reponseBruteCorrecte(ex, CHAMP_CARRE));
+  await courant.getByRole("button", { name: "Valider", exact: true }).click();
+  await page.waitForSelector(".moteur-statut-correct");
+  verifier(!(await page.evaluate("document.documentElement.scrollWidth > window.innerWidth")), `${l} : pas de défilement horizontal`);
+  verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+  await contexte.close();
+  imposerProfilAssignation("aleatoire");
+}
+
+/**
  * Configuration PAR LIGNE de composition (RAPPORT §55) dans le formulaire du professeur, avec le générateur de TEST à configuration (scripts/support/generateurConfigurable.ts) :
  * il n'est ni dans le catalogue réel ni dans l'arbre JSON, donc injecté ici au registre/catalogue du serveur ET dans la page (arbre JSON + table de correspondance, par interception).
  * Vérifie : lignes ajoutées/retirées, nouvelle ligne VIDE (jamais pré-cochée), message et bouton « Créer » désactivé, cases exclusives, doublons signalés, envoi et stockage de la
@@ -3117,6 +3168,8 @@ async function main() {
         controlerReponsesHttp(`${largeur} chaîne`);
         await scenarioFigureAidePaliers(navigateur, url, largeur);
         controlerReponsesHttp(`${largeur} figure aide paliers`);
+        await scenarioFormulePaliers(navigateur, url, largeur);
+        controlerReponsesHttp(`${largeur} formule paliers`);
         continue;
       }
       // Chaque scénario est suivi du contrôle de ses réponses HTTP >= 400 (attendus déclarés à part, s'il y en a).
@@ -3150,6 +3203,8 @@ async function main() {
       controlerReponsesHttp(`${largeur} gen8 élève`);
       await scenarioFigureAidePaliers(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} figure aide paliers`);
+      await scenarioFormulePaliers(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} formule paliers`);
       await scenarioChaineTransformations(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} chaîne`);
       await scenarioPartiesFausses(navigateur, url, largeur);

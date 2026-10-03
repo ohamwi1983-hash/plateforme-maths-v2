@@ -15,7 +15,7 @@ export interface SegmentTexteMath {
 interface ModuleTexteMath {
   decouperTexteMath(texte: string): { valide: boolean; segments: SegmentTexteMath[] };
   versTexteBrut(texte: string): string;
-  assemblerFormuleColoree(segments: { latex: string; role?: string }[]): string;
+  assemblerFormuleColoree(segments: { latex: string; role?: string; emphase?: boolean }[]): string;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
