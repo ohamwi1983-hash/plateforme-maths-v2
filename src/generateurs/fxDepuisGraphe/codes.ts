@@ -1,7 +1,8 @@
-import { CODES_CHAINE } from "../_noyauQuadratique/codes";
+import { CODE_SIGNE_P_INVERSE, CODES_CHAINE } from "../_noyauQuadratique/codes";
+
+export { CODE_SIGNE_P_INVERSE };
 
 /** Codes de compétence de gen8 « f(x) à partir du graphe » (RAPPORT §56). Signal pur : n'affectent jamais la note. Déclarés aussi dans `lib/dictionnaireCompetences.ts` et les trois fichiers d'explication. */
-export const CODE_SIGNE_P_INVERSE = "SIGNE_P_INVERSE";
 export const CODE_Q_INCORRECT = "Q_INCORRECT";
 export const CODE_A_INCORRECT = "A_INCORRECT";
 export const CODE_P_MAGNITUDE_INCORRECTE = "P_MAGNITUDE_INCORRECTE";

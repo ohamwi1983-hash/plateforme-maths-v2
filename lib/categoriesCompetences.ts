@@ -109,6 +109,9 @@ export const CATEGORIES_COMPETENCES: Record<string, CategorieCompetence> = {
   ORTHOGONALITE_SOMMET_INCORRECT: { categorie: "Mauvais élément de référence" },
   TRANSFORMATION_HORS_SUJET: { categorie: "Mauvais élément de référence" },
   VALEUR_DECLAREE_INCORRECTE: { categorie: "Confusion de signe/sens" },
+  P_FACTEUR_A_OUBLIE: { categorie: "Formule fantôme" },
+  Q_FACTEUR_A_OUBLIE: { categorie: "Formule fantôme" },
+  Q_SIGNE_INVERSE: { categorie: "Confusion de signe/sens" },
 
   // 9. Nombre d'éléments incorrect
   QUEL_ANGLE_NOMBRE_SOLUTIONS: { categorie: "Nombre d'éléments incorrect", sousCategorie: "Compte" },

@@ -269,6 +269,21 @@ export const EXPLICATIONS_COMPETENCES: Record<string, ExplicationCompetence> = {
       "Dans une étape de la chaîne, la fonction écrite découle bien de la fonction précédente par la transformation choisie, mais la valeur déclarée à côté (décalage de TH ou TV, facteur de EV ou CV) n'est pas celle de cette transformation : confusion de signe pour un décalage (f(x − h) décale vers la droite si h > 0), facteur inversé, ou valeur recopiée d'une autre étape. Signal sans effet sur la note : l'étape est comptée fausse, avec ou sans ce code.",
     exemple: "De x² à (x − 3)² par TH : l'élève déclare −3 (il lit « x − 3 » comme un décalage vers la gauche) ; ou, de (x − 3)² à 2(x − 3)² par EV, il déclare 1/2.",
   },
+  P_FACTEUR_A_OUBLIE: {
+    explication:
+      "En complétant le carré de ax² + bx + c, l'élève met a en facteur sur les deux premiers termes mais calcule p comme −b/2 au lieu de −b/(2a) : il divise b par 2 sans tenir compte de a. a et q sont justes. L'erreur n'est observable que si a ≠ 1 (pour a = 1 les deux formules coïncident) ; à a = −1 elle se confond avec l'inversion du signe de p, et aucun code n'est alors émis.",
+    exemple: "f(x) = 2x² − 12x + 19 : attendu 2(x − 3)² + 1. L'élève écrit 2(x − 6)² + 1 (p = 12/2 au lieu de 12/4).",
+  },
+  Q_FACTEUR_A_OUBLIE: {
+    explication:
+      "L'élève complète le carré avec le bon p mais retranche p² au lieu de a·p² : il calcule q = c − b²/(4a²) au lieu de c − b²/(4a). Le facteur a, mis en facteur au départ, n'est pas reporté sur la quantité ajoutée puis retranchée. a et p sont justes. Observable seulement si a ≠ 1 ; à a = −1 elle se confond avec l'inversion du signe de la correction, et aucun code n'est alors émis.",
+    exemple: "f(x) = 2x² − 12x + 19 : attendu 2(x − 3)² + 1. L'élève écrit 2(x − 3)² + 10 (19 − 9 au lieu de 19 − 18).",
+  },
+  Q_SIGNE_INVERSE: {
+    explication:
+      "L'élève complète le carré avec le bon p mais AJOUTE à c la quantité qu'il faut retrancher : il calcule q = c + b²/(4a) au lieu de c − b²/(4a). Il a ajouté b²/(4a) pour former le carré et oublie de le compenser dans le bon sens. a et p sont justes. À a = −1 elle se confond avec l'oubli du facteur a, et aucun code n'est alors émis.",
+    exemple: "f(x) = 2x² − 12x + 19 : attendu 2(x − 3)² + 1. L'élève écrit 2(x − 3)² + 37 (19 + 18 au lieu de 19 − 18).",
+  },
   TRANSFORMATION_HORS_SUJET: {
     explication:
       "Une étape de la chaîne est algébriquement correcte pour la transformation choisie, mais cette transformation ne fait pas partie de celles que la ligne de la tâche travaille ni de celles que la fonction visée exige. Le détail compte : deux étapes hors sujet qui s'annulent (par exemple +3 puis −3) restent chacune hors sujet, même si la chaîne retombe sur la bonne expression.",

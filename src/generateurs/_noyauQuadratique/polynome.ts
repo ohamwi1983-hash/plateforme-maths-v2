@@ -99,12 +99,15 @@ const MESSAGES = {
 
 const SUPERSCRIPT: Record<string, number> = { "²": 2, "³": 3, "⁴": 4 };
 
-export function lirePolynome(texte: string): LecturePolynome {
+/**
+ * CORPS d'une saisie : signes typographiques normalisés, espaces retirés, longueur bornée, préfixe facultatif « f(x)= », « y= », « E1(x)= » (un identifiant, `(x)` facultatif, puis UN signe égal)
+ * retiré. Unique normalisation : `lirePolynome` et `lireFormeCanonique` passent toutes deux ici (jamais une seconde implémentation, RAPPORT §59).
+ */
+export function corpsDeSaisie(texte: string): { ok: true; corps: string } | { ok: false; message: string } {
   if (typeof texte !== "string") return { ok: false, message: MESSAGES.vide };
   let brut = texte.replace(/[−–—]/g, "-").replace(/[×·]/g, "*").replace(/\s+/g, "");
   if (brut === "") return { ok: false, message: MESSAGES.vide };
   if (brut.length > LONGUEUR_MAX) return { ok: false, message: MESSAGES.longue };
-  // Préfixe facultatif « f(x)= », « y= », « E1(x)= » : un identifiant, `(x)` facultatif, puis UN signe égal.
   const egal = brut.indexOf("=");
   if (egal >= 0) {
     // Noms de fonction admis : f, g, y, E (E1, E_2…). `x = 3` ou `a = 2` ne sont PAS des préfixes (équations) : refusés plutôt que lus comme la constante.
@@ -112,6 +115,13 @@ export function lirePolynome(texte: string): LecturePolynome {
     brut = brut.slice(egal + 1);
     if (brut === "") return { ok: false, message: MESSAGES.vide };
   }
+  return { ok: true, corps: brut };
+}
+
+export function lirePolynome(texte: string): LecturePolynome {
+  const normalise = corpsDeSaisie(texte);
+  if (!normalise.ok) return { ok: false, message: normalise.message };
+  const brut = normalise.corps;
   let i = 0;
   let profondeur = 0;
   const fin = (): boolean => i >= brut.length;

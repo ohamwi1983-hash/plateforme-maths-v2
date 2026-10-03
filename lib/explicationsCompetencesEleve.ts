@@ -62,5 +62,8 @@ export const EXPLICATIONS_COMPETENCES_ELEVE: Record<string, string> = {
   A_INCORRECT: "Ton sommet est bon, mais pas le coefficient devant la parenthèse : utilise un second point de la courbe pour le retrouver.",
   P_MAGNITUDE_INCORRECTE: "Ton coefficient et la hauteur du sommet sont bons — relis la position horizontale du sommet sur l'axe.",
   VALEUR_DECLAREE_INCORRECTE: "La transformation que tu as choisie est la bonne pour passer d'une fonction à l'autre, mais la valeur que tu indiques ne correspond pas : compare la fonction de l'étape avec la précédente pour retrouver de combien elle a été décalée ou multipliée (attention au sens du décalage).",
+  P_FACTEUR_A_OUBLIE: "Ton coefficient devant la parenthèse et ta constante sont bons, mais pas le nombre dans la parenthèse : quand tu complètes le carré, on divise b par 2a, pas seulement par 2.",
+  Q_FACTEUR_A_OUBLIE: "Ton coefficient et la parenthèse sont bons, mais pas la constante : ce que tu ajoutes pour compléter le carré se retrouve multiplié par a quand tu le retranches.",
+  Q_SIGNE_INVERSE: "Ton coefficient et la parenthèse sont bons, mais pas la constante : ce que tu as ajouté pour compléter le carré, il faut le retrancher, pas l'ajouter une seconde fois.",
   TRANSFORMATION_HORS_SUJET: "Une de tes étapes est bien calculée, mais elle utilise une transformation qui n'est pas nécessaire pour passer de x² à cette fonction — cherche un chemin plus direct.",
 };

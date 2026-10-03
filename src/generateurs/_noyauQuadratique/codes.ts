@@ -2,6 +2,12 @@
  * Codes de compétence de l'écran « chaîne de transformations », communs à gen8 et gen9 (RAPPORT §57, §58, §59). Signaux purs : n'affectent jamais la note. Déclarés aussi dans
  * `lib/dictionnaireCompetences.ts` et les trois fichiers d'explication.
  */
+/**
+ * `p` écrit avec le signe CONTRAIRE (`a` et `q` justes) : confusion sur le sens du décalage horizontal. Émis par gen8 (écran 1, lecture graphique) ET gen9 (écran 1, complétion du carré :
+ * `p' = b/(2a)` au lieu de `−b/(2a)`) — la même confusion, donc UN code (RAPPORT §59) : le profil de compétences agrège par code.
+ */
+export const CODE_SIGNE_P_INVERSE = "SIGNE_P_INVERSE";
+
 /** Une étape bien formée mais avec une transformation que ni la ligne du professeur ni la fonction de l'élève n'autorisent. */
 export const CODE_TRANSFORMATION_HORS_SUJET = "TRANSFORMATION_HORS_SUJET";
 
