@@ -44,6 +44,7 @@ async function main(): Promise<void> {
       ["admin/classes-test", "POST", { nom: "T" }],
       ["admin/classes-test/classe-1", "DELETE", undefined],
       ["admin/classes-test/classe-1/eleves", "POST", { nombre: 2 }],
+      ["admin/classes-test/classe-1/mot-de-passe", "POST", {}],
     ];
     for (const [chemin, methode, corps] of ROUTES) {
       const sans = await appeler(chemin, methode, { corps });
@@ -61,7 +62,7 @@ async function main(): Promise<void> {
       for (const n of readdirSync(d)) (statSync(join(d, n)).isDirectory() ? parcourir(join(d, n)) : fichiers.push(join(d, n)));
     };
     parcourir(join(RACINE, "lib", "routes", "admin", "classes-test"));
-    verifier(fichiers.length === 3 && fichiers.every((f) => readFileSync(f, "utf8").includes("await exigerAdmin(req, res)")), "les trois gestionnaires appellent exigerAdmin");
+    verifier(fichiers.length === 4 && fichiers.every((f) => readFileSync(f, "utf8").includes("await exigerAdmin(req, res)")), "les quatre gestionnaires appellent exigerAdmin");
   }
 
   // ── 2. Création ──
@@ -100,6 +101,65 @@ async function main(): Promise<void> {
   // Connexion : les élèves de test restent candidats (l'admin s'y connecte).
   const connexion = await appeler("connexion-eleve", "POST", { corps: { nom: crees[0]!.nom, prenom: crees[0]!.prenom, motDePasse } });
   verifier(connexion.statut === 200 && connexion.corps.eleve?.id === crees[0]!.id, `un élève de test peut se connecter par nom + mot de passe (${connexion.statut})`);
+
+  // ── 3b. Régénération du mot de passe commun (RAPPORT §64) ──
+  {
+    const route = `admin/classes-test/${classeTest}/mot-de-passe`;
+    const connecter = (e: { nom: string; prenom: string }, mdp: string) => appeler("connexion-eleve", "POST", { corps: { nom: e.nom, prenom: e.prenom, motDePasse: mdp } });
+    verifier((await connecter(crees[2]!, motDePasse)).statut === 200, "avant : l'ancien mot de passe fonctionne");
+    for (const corps of [{ nombre: 2 }, { motDePasse: "x" }, []]) verifier((await appeler(route, "POST", { jeton: jAdmin, corps })).statut === 400, `corps refusé : ${JSON.stringify(corps)}`);
+    verifier((await appeler("admin/classes-test/classe-1/mot-de-passe", "POST", { jeton: jAdmin, corps: {} })).statut === 404, "une VRAIE classe : 404, aucun mot de passe touché");
+    verifier((await appeler(route, "POST", { jeton: jAutreAdmin, corps: {} })).statut === 404, "la classe de test d'un autre admin : 404");
+    const avantAppels = b.appelsAuth.length;
+    const regen = await appeler(route, "POST", { jeton: jAdmin, corps: {} });
+    const nouveau = regen.corps.mot_de_passe as string;
+    verifier(regen.statut === 200 && /^[a-z2-9]{8}$/.test(nouveau) && nouveau !== motDePasse, `nouveau mot de passe de 8 caractères, différent de l'ancien (${regen.statut})`);
+    verifier(regen.corps.eleves.length === 4 && regen.corps.eleves.every((e: any) => /^Test-/.test(e.nom) && /^Élève 0[1-4]$/.test(e.prenom)), "les noms de connexion des 4 élèves sont renvoyés");
+    const majs = b.appelsAuth.slice(avantAppels).filter((a) => a.appel === "updateUserById");
+    verifier(majs.length === 4 && majs.every((a) => crees.some((e) => e.id === a.id) && (a.attributs as any).password === nouveau), "exactement les 4 comptes de test sont réinitialisés, avec le même mot de passe");
+    for (const e of crees) {
+      verifier((await connecter(e, nouveau)).statut === 200, `${e.prenom} se connecte avec le NOUVEAU mot de passe`);
+      verifier((await connecter(e, motDePasse)).statut === 401, `${e.prenom} ne se connecte plus avec l'ANCIEN`);
+    }
+    verifier(!JSON.stringify((await appeler("admin/classes-test", "GET", { jeton: jAdmin })).corps).includes(nouveau), "le nouveau mot de passe n'est JAMAIS relisible ensuite (GET)");
+    // Un compte en échec : erreur SANS mot de passe, relancer remet tout d'accord.
+    b.echecProchaineMajAuth = "indisponible";
+    const echec = await appeler(route, "POST", { jeton: jAdmin, corps: {} });
+    verifier(echec.statut === 500 && !("mot_de_passe" in echec.corps) && echec.corps.eleves_en_echec.length === 1, `un compte en échec : 500 sans mot de passe, l'élève est nommé (${echec.statut})`);
+    const encore = await appeler(route, "POST", { jeton: jAdmin, corps: {} });
+    verifier(encore.statut === 200 && (await Promise.all(crees.map((e) => connecter(e, encore.corps.mot_de_passe)))).every((r) => r.statut === 200), "relancer remet les 4 comptes d'accord sur un même mot de passe");
+    // Élève partagé avec une vraie classe : 409, rien modifié.
+    b.inserer("inscriptions", { eleve_id: crees[0]!.id, classe_id: "classe-1" });
+    const avantMdp = JSON.stringify([...b.utilisateursAuth.values()]);
+    const partage = await appeler(route, "POST", { jeton: jAdmin, corps: {} });
+    verifier(partage.statut === 409 && JSON.stringify([...b.utilisateursAuth.values()]) === avantMdp, `élève partagé : 409 et aucun mot de passe modifié (${partage.statut})`);
+    b.table("inscriptions").splice(b.table("inscriptions").findIndex((i) => i.eleve_id === crees[0]!.id && i.classe_id === "classe-1"), 1);
+    // Plusieurs lots : 25 élèves de test -> 3 lots (10 + 10 + 5), TOUS réinitialisés, concurrence plafonnée à 10.
+    {
+      const grande = await appeler("admin/classes-test", "POST", { jeton: jAdmin, corps: { nom: "Grande" } });
+      const gr = await appeler(`admin/classes-test/${grande.corps.id}/eleves`, "POST", { jeton: jAdmin, corps: { nombre: 25 } });
+      const ids = (gr.corps.eleves as { id: string }[]).map((e) => e.id);
+      let enCours = 0;
+      let maxEnCours = 0;
+      const originale = b.auth.admin.updateUserById.bind(b.auth.admin);
+      b.auth.admin.updateUserById = async (id: string, attributs: { password?: string; ban_duration?: string }) => {
+        enCours++;
+        maxEnCours = Math.max(maxEnCours, enCours);
+        await new Promise((ok) => setTimeout(ok, 3));
+        enCours--;
+        return originale(id, attributs);
+      };
+      const g = await appeler(`admin/classes-test/${grande.corps.id}/mot-de-passe`, "POST", { jeton: jAdmin, corps: {} });
+      b.auth.admin.updateUserById = originale;
+      verifier(g.statut === 200 && ids.every((id) => b.utilisateursAuth.get(id)?.password === g.corps.mot_de_passe), `25 élèves sur plusieurs lots : TOUS ont le nouveau mot de passe (${g.statut})`);
+      verifier(maxEnCours > 1 && maxEnCours <= 10, `réinitialisations en parallèle, jamais plus de 10 à la fois (observé ${maxEnCours})`);
+      verifier((await appeler(`admin/classes-test/${grande.corps.id}`, "DELETE", { jeton: jAdmin })).statut === 200, "(nettoyage de la grande classe)");
+    }
+    // Classe sans élève : 409.
+    const vide = await appeler("admin/classes-test", "POST", { jeton: jAdmin, corps: { nom: "Vide" } });
+    verifier((await appeler(`admin/classes-test/${vide.corps.id}/mot-de-passe`, "POST", { jeton: jAdmin, corps: {} })).statut === 409, "classe de test sans élève : 409");
+    verifier((await appeler(`admin/classes-test/${vide.corps.id}`, "DELETE", { jeton: jAdmin })).statut === 200, "(nettoyage de la classe vide)");
+  }
 
   // ── 4. Classes : badge, jamais de code ──
   {
