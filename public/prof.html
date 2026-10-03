@@ -541,6 +541,25 @@
           <p class="meta-item">Affiché une seule fois : notez-le ou transmettez-le maintenant.</p>
         </div>
       </div>
+
+      <!--
+        Classes de test (RAPPORT §61) : de vraies classes (élèves, tâches assignées, réponses, résultats) réservées à l'administrateur, pour tester le site en conditions réelles. Elles apparaissent aussi dans
+        « Mes classes » avec le badge TEST. Suppression IRRÉVERSIBLE en cascade (confirmation explicite dans la page, jamais un simple clic).
+      -->
+      <h2>Classes de test</h2>
+      <ul id="liste-classes-test-admin"></ul>
+      <p id="statut-classes-test-admin"></p>
+      <button type="button" id="btn-toggle-creer-classe-test" class="bouton-ajouter-eleve"><span class="emoji-inline" aria-hidden="true">+</span>Créer une classe de test</button>
+      <div class="carte-formulaire" id="carte-creer-classe-test" hidden>
+        <div class="zone-edition">
+          <h3 class="zone-titre">Créer une classe de test</h3>
+          <div><label class="champ-label" for="creer-classe-test-nom">Nom de la classe</label><input class="champ-input" id="creer-classe-test-nom" type="text" autocomplete="off" maxlength="80" /></div>
+          <p class="meta-item">Une classe de test n'a pas de code d'inscription : les élèves de test se créent ici, avec un mot de passe commun.</p>
+        </div>
+        <div class="zone-pied">
+          <button id="btn-creer-classe-test" disabled><span class="emoji-inline" aria-hidden="true">+</span>Créer</button>
+        </div>
+      </div>
     </div>
 
     <div id="onglet-taches" class="onglet-panneau" hidden>
@@ -2494,6 +2513,14 @@
         const nomSpan = document.createElement("span");
         nomSpan.className = "ligne-mes-classes-nom";
         nomSpan.textContent = classe.nom;
+        if (classe.est_test === true) {
+          // Classe de test (RAPPORT §61) : badge visible pour l'admin dans ses propres vues.
+          const badgeTest = document.createElement("span");
+          badgeTest.className = "badge badge-test";
+          badgeTest.textContent = "TEST";
+          nomSpan.appendChild(document.createTextNode(" "));
+          nomSpan.appendChild(badgeTest);
+        }
         const effectifSpan = document.createElement("span");
         effectifSpan.className = "ligne-mes-classes-effectif";
         const effectif = classe.nombre_eleves_actifs ?? 0;
@@ -2559,7 +2586,7 @@
       for (const classe of classesDuProf) {
         const option = document.createElement("option");
         option.value = classe.id;
-        option.textContent = classe.nom;
+        option.textContent = classe.est_test === true ? `${classe.nom} (TEST)` : classe.nom;
         option.dataset.code = classe.code ?? "";
         select.appendChild(option);
       }
@@ -4380,6 +4407,10 @@
      * qu'afficher ou masquer l'onglet « Admin » : chaque route /api/admin/* re-vérifie côté serveur (403 sinon).
      */
     let profsAdmin = [];
+    let classesTestAdmin = [];
+    let suppressionClasseTestEnAttenteId = null;
+    /** Derniers élèves de test créés par classe (mot de passe commun inclus) : en mémoire de la page SEULEMENT, jamais relus du serveur. */
+    let resultatElevesTest = {};
     let profEnReinitialisationId = null;
     let idProfConnecte = null;
 
@@ -4387,6 +4418,10 @@
       document.getElementById("onglet-bouton-admin").hidden = true;
       document.getElementById("onglet-admin").hidden = true;
       document.getElementById("liste-profs-admin").innerHTML = "";
+      document.getElementById("liste-classes-test-admin").innerHTML = "";
+      classesTestAdmin = [];
+      suppressionClasseTestEnAttenteId = null;
+      resultatElevesTest = {};
       document.getElementById("resultat-invitation").hidden = true;
       document.getElementById("resultat-invitation-code").textContent = "";
       profsAdmin = [];
@@ -4404,6 +4439,7 @@
         if (moi.est_admin !== true) return;
         document.getElementById("onglet-bouton-admin").hidden = false;
         await chargerProfsAdmin();
+        await chargerClassesTestAdmin();
       } catch (e) {
         /* Sans réponse fiable du serveur, l'administration reste masquée. */
       }
@@ -4562,6 +4598,230 @@
       li.appendChild(meta);
       return li;
     }
+
+    // ── Classes de test (RAPPORT §61) ──
+    async function chargerClassesTestAdmin() {
+      const statut = document.getElementById("statut-classes-test-admin");
+      const reponse = await fetch("/api/admin/classes-test", { headers: enteteAdmin() });
+      const corps = await reponse.json();
+      if (!reponse.ok) {
+        statut.textContent = formaterErreur(corps);
+        return;
+      }
+      classesTestAdmin = corps.classes;
+      rendreClassesTestAdmin();
+    }
+
+    function rendreClassesTestAdmin() {
+      const liste = document.getElementById("liste-classes-test-admin");
+      liste.innerHTML = "";
+      for (const classe of classesTestAdmin) liste.appendChild(construireLigneClasseTest(classe));
+      if (classesTestAdmin.length === 0) {
+        const vide = document.createElement("li");
+        vide.className = "meta-item";
+        vide.textContent = "Aucune classe de test.";
+        liste.appendChild(vide);
+      }
+    }
+
+    /** Après une création / suppression : recharge la liste admin ET « Mes classes » (une classe de test y figure avec son badge). */
+    async function rafraichirClassesTest() {
+      await chargerClassesTestAdmin();
+      try {
+        await chargerClasses();
+      } catch (e) {
+        /* « Mes classes » se rechargera au prochain affichage de l'onglet. */
+      }
+    }
+
+    function construireLigneClasseTest(classe) {
+      const li = document.createElement("li");
+      li.className = "item-eleve";
+      li.dataset.classeTestId = classe.id;
+      const ligne = document.createElement("div");
+      ligne.className = "ligne-eleve";
+      const nom = document.createElement("span");
+      nom.className = "nom-eleve-liste";
+      nom.textContent = classe.nom;
+      ligne.appendChild(nom);
+      const badge = document.createElement("span");
+      badge.className = "badge badge-test";
+      badge.textContent = "TEST";
+      ligne.appendChild(badge);
+      li.appendChild(ligne);
+
+      const meta = document.createElement("div");
+      meta.className = "stats-ligne-eleve";
+      meta.textContent = `${classe.nombre_eleves} élève${classe.nombre_eleves === 1 ? "" : "s"} de test`;
+      li.appendChild(meta);
+
+      // Ajouter N élèves de test (nom « Test-xxxx », prénom « Élève 01 »…, mot de passe commun affiché une seule fois).
+      const ajout = document.createElement("div");
+      ajout.className = "actions-item";
+      const etiquette = document.createElement("label");
+      etiquette.className = "champ-label";
+      etiquette.textContent = "Élèves de test à ajouter (1 à 40) ";
+      const nombre = document.createElement("input");
+      nombre.className = "champ-input";
+      nombre.type = "number";
+      nombre.min = "1";
+      nombre.max = "40";
+      nombre.value = "3";
+      nombre.setAttribute("aria-label", `Nombre d'élèves de test à ajouter à ${classe.nom}`);
+      nombre.dataset.role = "nombre-eleves-test";
+      etiquette.appendChild(nombre);
+      const ajouter = document.createElement("button");
+      ajouter.type = "button";
+      ajouter.dataset.role = "ajouter-eleves-test";
+      ajouter.textContent = "Ajouter des élèves de test";
+      ajouter.addEventListener("click", async () => {
+        const n = Number(nombre.value);
+        const statut = document.getElementById("statut-classes-test-admin");
+        if (!Number.isInteger(n) || n < 1 || n > 40) {
+          statut.textContent = "Nombre d'élèves de test : un entier de 1 à 40.";
+          return;
+        }
+        statut.textContent = "Création des élèves de test…";
+        try {
+          const reponse = await fetch(`/api/admin/classes-test/${encodeURIComponent(classe.id)}/eleves`, { method: "POST", headers: enteteAdmin(), body: JSON.stringify({ nombre: n }) });
+          const retour = await reponse.json();
+          if (!reponse.ok) {
+            statut.textContent = formaterErreur(retour);
+            return;
+          }
+          statut.textContent = "";
+          resultatElevesTest[classe.id] = retour;
+          await rafraichirClassesTest();
+        } catch (e) {
+          statut.textContent = "Erreur inattendue : " + e.message;
+        }
+      });
+      ajout.appendChild(etiquette);
+      ajout.appendChild(ajouter);
+      li.appendChild(ajout);
+
+      // Identifiants de connexion des élèves de test : le mot de passe commun n'est montré qu'à la création.
+      const recent = resultatElevesTest[classe.id];
+      if (recent) {
+        const carte = document.createElement("div");
+        carte.className = "carte-formulaire";
+        carte.dataset.role = "identifiants-eleves-test";
+        const interieur = document.createElement("div");
+        interieur.className = "zone-edition";
+        const titre = document.createElement("h3");
+        titre.className = "zone-titre";
+        titre.textContent = "Élèves de test créés";
+        const consigne = document.createElement("p");
+        consigne.className = "meta-item";
+        consigne.textContent = "Connexion élève : prénom et nom ci-dessous, mot de passe commun. Le mot de passe n'est affiché qu'une seule fois : notez-le maintenant.";
+        const mdp = document.createElement("div");
+        mdp.className = "code-invitation";
+        mdp.dataset.role = "mot-de-passe-eleves-test";
+        mdp.textContent = recent.mot_de_passe;
+        const noms = document.createElement("p");
+        noms.className = "meta-item";
+        noms.textContent = recent.eleves.map((e) => `${e.prenom} ${e.nom}`).join(" · ");
+        interieur.append(titre, consigne, mdp, noms);
+        carte.appendChild(interieur);
+        li.appendChild(carte);
+      }
+
+      if (classe.eleves.length > 0) {
+        const detail = document.createElement("details");
+        const resume = document.createElement("summary");
+        resume.textContent = "Noms de connexion";
+        detail.appendChild(resume);
+        const p = document.createElement("p");
+        p.className = "meta-item";
+        p.textContent = classe.eleves.map((e) => `${e.prenom} ${e.nom}`).join(" · ");
+        detail.appendChild(p);
+        li.appendChild(detail);
+      }
+
+      // Suppression IRRÉVERSIBLE : confirmation explicite dans la page (deux temps), jamais un simple clic.
+      const zoneSuppression = document.createElement("div");
+      zoneSuppression.className = "actions-item";
+      if (suppressionClasseTestEnAttenteId === classe.id) {
+        const avertissement = document.createElement("p");
+        avertissement.className = "meta-item";
+        avertissement.dataset.role = "confirmation-suppression";
+        avertissement.textContent = `Supprimer définitivement « ${classe.nom} » : ses ${classe.nombre_eleves} élève(s) de test (comptes compris), leurs tâches assignées, exercices, réponses et résultats. Cette action est irréversible.`;
+        const confirmer = document.createElement("button");
+        confirmer.type = "button";
+        confirmer.className = "bouton-danger-texte";
+        confirmer.dataset.role = "confirmer-suppression";
+        confirmer.textContent = "Oui, supprimer définitivement";
+        confirmer.addEventListener("click", async () => {
+          const statut = document.getElementById("statut-classes-test-admin");
+          statut.textContent = "Suppression…";
+          try {
+            const reponse = await fetch(`/api/admin/classes-test/${encodeURIComponent(classe.id)}`, { method: "DELETE", headers: enteteAdmin() });
+            const retour = await reponse.json();
+            suppressionClasseTestEnAttenteId = null;
+            if (!reponse.ok) {
+              statut.textContent = formaterErreur(retour);
+              rendreClassesTestAdmin();
+              return;
+            }
+            delete resultatElevesTest[classe.id];
+            statut.textContent = `Classe de test supprimée (${retour.eleves_supprimes} élève(s), ${retour.exercices_supprimes} exercice(s)).`;
+            await rafraichirClassesTest();
+          } catch (e) {
+            statut.textContent = "Erreur inattendue : " + e.message;
+          }
+        });
+        const annuler = document.createElement("button");
+        annuler.type = "button";
+        annuler.className = "bouton-secondaire";
+        annuler.dataset.role = "annuler-suppression";
+        annuler.textContent = "Annuler";
+        annuler.addEventListener("click", () => {
+          suppressionClasseTestEnAttenteId = null;
+          rendreClassesTestAdmin();
+        });
+        zoneSuppression.append(avertissement, confirmer, annuler);
+      } else {
+        const supprimer = document.createElement("button");
+        supprimer.type = "button";
+        supprimer.className = "bouton-danger-texte";
+        supprimer.dataset.role = "supprimer-classe-test";
+        supprimer.textContent = "Supprimer cette classe de test";
+        supprimer.addEventListener("click", () => {
+          suppressionClasseTestEnAttenteId = classe.id;
+          rendreClassesTestAdmin();
+        });
+        zoneSuppression.appendChild(supprimer);
+      }
+      li.appendChild(zoneSuppression);
+      return li;
+    }
+
+    document.getElementById("btn-toggle-creer-classe-test").addEventListener("click", () => {
+      const carte = document.getElementById("carte-creer-classe-test");
+      carte.hidden = !carte.hidden;
+    });
+    document.getElementById("creer-classe-test-nom").addEventListener("input", () => {
+      document.getElementById("btn-creer-classe-test").disabled = document.getElementById("creer-classe-test-nom").value.trim() === "";
+    });
+    document.getElementById("btn-creer-classe-test").addEventListener("click", async () => {
+      const statut = document.getElementById("statut-classes-test-admin");
+      statut.textContent = "Création…";
+      try {
+        const reponse = await fetch("/api/admin/classes-test", { method: "POST", headers: enteteAdmin(), body: JSON.stringify({ nom: document.getElementById("creer-classe-test-nom").value.trim() }) });
+        const retour = await reponse.json();
+        if (!reponse.ok) {
+          statut.textContent = formaterErreur(retour);
+          return;
+        }
+        statut.textContent = `Classe de test « ${retour.nom} » créée.`;
+        document.getElementById("creer-classe-test-nom").value = "";
+        document.getElementById("btn-creer-classe-test").disabled = true;
+        document.getElementById("carte-creer-classe-test").hidden = true;
+        await rafraichirClassesTest();
+      } catch (e) {
+        statut.textContent = "Erreur inattendue : " + e.message;
+      }
+    });
 
     document.getElementById("btn-toggle-creer-prof").addEventListener("click", () => {
       const carte = document.getElementById("carte-creer-prof");

@@ -1755,7 +1755,8 @@ input.stepper-valeur::-webkit-outer-spin-button {
  */
 #liste-taches,
 #liste-eleves-classe,
-#liste-profs-admin {
+#liste-profs-admin,
+#liste-classes-test-admin {
   list-style: none;
   padding: 0;
   margin: 0 0 var(--espace-4);
@@ -1774,7 +1775,8 @@ input.stepper-valeur::-webkit-outer-spin-button {
  * column ne change rien à son rendu).
  */
 #liste-eleves-classe li,
-#liste-profs-admin li {
+#liste-profs-admin li,
+#liste-classes-test-admin li {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1818,6 +1820,11 @@ input.stepper-valeur::-webkit-outer-spin-button {
 .meta-item { font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; }
 
 .badge { display: inline-flex; align-items: center; font-size: 0.75rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
+/* Classe de test du compte administrateur (RAPPORT §61) : badge « TEST » (tokens existants, aucune valeur en dur). */
+.badge-test { background: var(--ambre-clair); color: var(--ambre); margin-left: 6px; }
+/* Bouton de suppression irréversible (classes de test) : mêmes tokens que `.icone-action.danger`. */
+.bouton-danger-texte { color: var(--danger); background: var(--danger-clair); }
+.bouton-danger-texte:hover { background: var(--danger); color: #fff; }
 .badge-succes { background: var(--vert-clair); color: var(--vert); }
 
 .actions-item { display: flex; flex-wrap: wrap; gap: var(--espace-2); }

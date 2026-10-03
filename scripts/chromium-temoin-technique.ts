@@ -3427,6 +3427,79 @@ function coefficientsDeveloppesCc(f: ParametresFx): { a: number; b: number; c: n
   return { a, b: -2 * a * p, c: a * p * p + q };
 }
 
+// ══ Classes de test du compte administrateur (RAPPORT §61) : section « Classes de test » de l'onglet Admin, badge TEST, suppression confirmée ══
+async function scenarioClassesTest(navigateur: any, base: string, largeur: number) {
+  const l = `${largeur} classes de test`;
+  const hauteur = largeur < 600 ? 800 : 900;
+  const sc = creerScenario();
+  const b = sc.base;
+  Object.assign(b.table("profs").find((p) => p.id === sc.profId)!, { nom: "Alice Admin", est_admin: true, actif: true });
+  b.table("classes")[0]!.code = "REEL01";
+  installerBase(b);
+  const { page, contexte, journal } = await preparerPage(navigateur, base, largeur, hauteur, `prof:${sc.profId}`, "alice@ecole.be");
+  await page.goto(base + "/prof.html");
+  await page.waitForSelector("#onglet-bouton-admin:visible");
+  await page.locator("#onglet-bouton-admin").click();
+  await page.waitForSelector("#onglet-admin:visible");
+  await page.waitForSelector("#liste-classes-test-admin li");
+  verifier((await page.locator("#liste-classes-test-admin").innerText()).includes("Aucune classe de test"), `${l} : aucune classe de test au départ`);
+
+  // Création
+  await page.locator("#btn-toggle-creer-classe-test").click();
+  verifier(await page.locator("#btn-creer-classe-test").isDisabled(), `${l} : « Créer » désactivé tant que le nom est vide`);
+  await page.locator("#creer-classe-test-nom").fill("Classe de test A");
+  await page.locator("#btn-creer-classe-test").click();
+  await page.waitForSelector('#liste-classes-test-admin li[data-classe-test-id]');
+  const ligne = page.locator("#liste-classes-test-admin li[data-classe-test-id]").first();
+  const classeTest = b.table("classes").find((c) => c.est_test === true)!;
+  verifier(!!classeTest && classeTest.nom === "Classe de test A" && (classeTest.code ?? null) === null && (await ligne.locator(".badge-test").innerText()) === "TEST", `${l} : classe créée en base (est_test, sans code) et badge TEST affiché`);
+
+  // Élèves de test : mot de passe commun montré UNE fois
+  await ligne.locator('[data-role="nombre-eleves-test"]').fill("3");
+  await ligne.locator('[data-role="ajouter-eleves-test"]').click();
+  await page.waitForSelector('[data-role="identifiants-eleves-test"]');
+  const motDePasse = ((await page.locator('[data-role="mot-de-passe-eleves-test"]').textContent()) ?? "").trim();
+  const noms = await page.locator('[data-role="identifiants-eleves-test"]').innerText();
+  verifier(/^[a-z2-9]{8}$/.test(motDePasse) && /Élève 01/.test(noms) && /Élève 03/.test(noms) && /Test-/.test(noms), `${l} : identifiants des 3 élèves de test affichés (mot de passe « ${motDePasse} »)`);
+  verifier((await page.locator("#liste-classes-test-admin li[data-classe-test-id]").first().innerText()).includes("3 élèves de test"), `${l} : effectif de la classe de test`);
+  verifier(b.table("inscriptions").filter((i) => i.classe_id === classeTest.id).length === 3, `${l} : trois inscriptions en base`);
+  await page.screenshot({ path: join(CAPTURES, `${largeur}-classes-test-admin.png`), fullPage: true });
+  verifier(!(await page.evaluate("document.documentElement.scrollWidth > window.innerWidth")), `${l} : pas de défilement horizontal`);
+
+  // Badge dans « Mes classes » et dans le sélecteur
+  await page.locator('button[data-onglet="classes"]').click();
+  await page.waitForSelector("#onglet-classes:visible");
+  await page.locator("#bouton-accordeon-mes-classes").click();
+  await page.waitForSelector("#liste-mes-classes .ligne-mes-classes-nom");
+  const lignesClasses: string[] = await page.locator("#liste-mes-classes .ligne-mes-classes-nom").allInnerTexts();
+  verifier(lignesClasses.some((t) => /Classe de test A/.test(t) && /TEST/.test(t)) && lignesClasses.some((t) => /4A/.test(t) && !/TEST/.test(t)), `${l} : « Mes classes » : la classe de test porte le badge TEST, la vraie non (${JSON.stringify(lignesClasses)})`);
+  const options: string[] = await page.locator("#select-classe option").allInnerTexts();
+  verifier(options.some((t) => t === "Classe de test A (TEST)") && options.includes("4A"), `${l} : sélecteur de classe : « (TEST) » seulement sur la classe de test (${JSON.stringify(options)})`);
+
+  // Suppression : confirmation EXPLICITE en deux temps, rien n'est supprimé avant « Oui »
+  await page.locator('button[data-onglet="admin"]').click();
+  await page.waitForSelector("#onglet-admin:visible");
+  const zone = page.locator("#liste-classes-test-admin li[data-classe-test-id]").first();
+  await zone.locator('[data-role="supprimer-classe-test"]').click();
+  const avertissement = await zone.locator('[data-role="confirmation-suppression"]').innerText();
+  verifier(/irréversible/.test(avertissement) && /Classe de test A/.test(avertissement) && b.table("classes").some((c) => c.id === classeTest.id), `${l} : message d'avertissement, rien supprimé après le premier clic`);
+  await page.screenshot({ path: join(CAPTURES, `${largeur}-classes-test-confirmation.png`), fullPage: true });
+  await zone.locator('[data-role="annuler-suppression"]').click();
+  verifier((await zone.locator('[data-role="confirmation-suppression"]').count()) === 0 && b.table("classes").some((c) => c.id === classeTest.id), `${l} : « Annuler » ne supprime rien`);
+  const idsEleves = b.table("inscriptions").filter((i) => i.classe_id === classeTest.id).map((i) => i.eleve_id as string);
+  await zone.locator('[data-role="supprimer-classe-test"]').click();
+  await zone.locator('[data-role="confirmer-suppression"]').click();
+  await page.waitForFunction(`document.querySelectorAll("#liste-classes-test-admin li[data-classe-test-id]").length === 0`);
+  verifier(!b.table("classes").some((c) => c.id === classeTest.id) && idsEleves.every((id) => !b.table("eleves").some((e) => e.id === id) && !b.utilisateursAuth.has(id)) && b.table("inscriptions").every((i) => i.classe_id !== classeTest.id), `${l} : classe, élèves, inscriptions et comptes Auth supprimés`);
+  verifier(b.table("classes").some((c) => c.id === "classe-1") && b.table("eleves").some((e) => e.id === "eleve-1") && b.table("inscriptions").filter((i) => i.classe_id === "classe-1").length === 2, `${l} : la vraie classe et ses élèves sont intacts`);
+  verifier((await page.locator("#statut-classes-test-admin").innerText()).includes("supprimée"), `${l} : message de suppression`);
+  await page.locator('button[data-onglet="classes"]').click();
+  await page.locator("#bouton-accordeon-mes-classes").click().catch(() => {});
+  verifier(!(await page.locator("#select-classe option").allInnerTexts()).some((t: string) => /TEST/.test(t)), `${l} : plus aucune classe de test dans le sélecteur`);
+  verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+  await contexte.close();
+}
+
 async function main() {
   const { serveur, url } = await demarrerServeur();
   const navigateur = await chromium.launch();
@@ -3434,6 +3507,11 @@ async function main() {
     await temoinControleHttp(navigateur, url);
     for (const largeur of [390, 1280]) {
       // Confort de développement : `SCENARIOS_GEN8_SEULEMENT=1` ne joue que les scénarios gen8 (la suite complète prend plusieurs minutes). Jamais utilisé pour valider une livraison.
+      if (process.env.SCENARIOS_CLASSES_TEST_SEULEMENT === "1") {
+        await scenarioClassesTest(navigateur, url, largeur);
+        controlerReponsesHttp(`${largeur} classes de test`);
+        continue;
+      }
       if (process.env.SCENARIOS_GEN9_SEULEMENT === "1") {
         await scenarioGen9Prof(navigateur, url, largeur);
         controlerReponsesHttp(`${largeur} gen9 prof`);
@@ -3475,6 +3553,8 @@ async function main() {
       controlerReponsesHttp(`${largeur} prof`);
       await scenarioAdmin(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} admin`, [{ statut: 403, motif: /^GET \/api\/admin\/profs$/, pourquoi: "un prof non admin appelle l'API admin à la main : refus serveur attendu (403)" }]);
+      await scenarioClassesTest(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} classes de test`);
       await scenarioPoids(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} poids`);
       await scenarioGen7Coupe(navigateur, url, largeur);
