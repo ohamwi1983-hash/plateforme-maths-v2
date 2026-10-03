@@ -29,6 +29,8 @@ create table if not exists classes (
   nom text not null
 );
 alter table classes add column if not exists code text unique;
+-- Classes de test du compte administrateur (RAPPORT §61) : voir supabase/schema.sql pour la justification complète. Idempotent.
+alter table classes add column if not exists est_test boolean not null default false;
 
 create table if not exists eleves (
   id uuid primary key default gen_random_uuid(),

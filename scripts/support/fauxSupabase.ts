@@ -100,6 +100,8 @@ export class BaseMemoire {
     if (TABLES_AVEC_ID.has(nom) && complete.id === undefined) complete.id = randomUUID();
     // Défaut du schéma (`est_apercu boolean not null default false`) : sans lui, `.eq("est_apercu", false)` ne verrait aucune vraie tâche.
     if (nom === "taches" && complete.est_apercu === undefined) complete.est_apercu = false;
+    // Défaut du schéma (RAPPORT §61) : `est_test boolean not null default false`.
+    if (nom === "classes" && complete.est_test === undefined) complete.est_test = false;
     // Défauts du schéma (RAPPORT §37) : `autoriser_retour_arriere boolean not null default false`, `remis_le` nul.
     if (nom === "taches" && complete.autoriser_retour_arriere === undefined) complete.autoriser_retour_arriere = false;
     if (nom === "exercices_assignes" && complete.remis_le === undefined) complete.remis_le = null;
