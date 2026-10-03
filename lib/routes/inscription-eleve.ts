@@ -52,10 +52,11 @@ export const gererInscriptionEleve = avecGestionErreurs(async function handler(r
 
   const { data: classe, error: erreurClasse } = await admin
     .from("classes")
-    .select("id")
+    .select("id, est_test")
     .eq("code", req.body.code.trim().toUpperCase())
     .maybeSingle();
-  if (erreurClasse || !classe) {
+  // Une classe de test n'a jamais de code (RAPPORT §61) ; garde en profondeur : même réponse que « code inexistant », jamais d'auto-inscription dans une classe qui sera supprimée avec ses élèves.
+  if (erreurClasse || !classe || classe.est_test === true) {
     res.status(404).json({ erreur: "Code de classe invalide" });
     return;
   }

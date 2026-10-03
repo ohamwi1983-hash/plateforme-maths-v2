@@ -2,6 +2,7 @@ import type { supabaseAdmin } from "./supabaseAdmin";
 import { filtrerHomonymes, formaterAffichage } from "./homonymes";
 import { genererEmailSynthetique } from "./emailSynthetique";
 import { tousLesEleves } from "./tousLesEleves";
+import { idsElevesDeTest } from "./elevesDeTest";
 
 export interface ResultatProvisionnement {
   id: string;
@@ -33,11 +34,15 @@ export async function provisionnerEleve(
   prenom: string,
   motDePasse: string,
   emailFourni: string | undefined,
+  options: { classeEstTest?: boolean } = {},
 ): Promise<ResultatOuErreur> {
   const resultatExistants = await tousLesEleves(admin);
   if (!resultatExistants.ok) return { ok: false, erreur: "Échec de lecture des élèves existants", detail: resultatExistants.erreur };
 
-  const suffixe = filtrerHomonymes(resultatExistants.eleves, { nom, prenom }).length + 1;
+  // Classes de test (RAPPORT §61) : un VRAI élève ignore les élèves de test dans le calcul de son suffixe (un homonyme de test ne doit pas le faire apparaître « (2) » pour toujours) ; un élève de
+  // test, lui, compte tout le monde. Les élèves de test restent candidats de la connexion (`connexion-eleve.ts` n'est pas touché).
+  const aIgnorer = options.classeEstTest === true ? new Set<string>() : await idsElevesDeTest(admin);
+  const suffixe = filtrerHomonymes(resultatExistants.eleves.filter((e) => !aIgnorer.has(e.id)), { nom, prenom }).length + 1;
 
   const email = emailFourni ?? genererEmailSynthetique(nom, prenom);
 

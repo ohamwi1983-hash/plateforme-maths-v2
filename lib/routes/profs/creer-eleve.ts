@@ -58,7 +58,7 @@ export const gererProfsCreerEleve = avecGestionErreurs(async function handler(re
 
   const { data: classe, error: erreurClasse } = await admin
     .from("classes")
-    .select("id")
+    .select("id, est_test")
     .eq("id", req.body.classe_id)
     .eq("prof_id", prof.id)
     .maybeSingle();
@@ -67,7 +67,7 @@ export const gererProfsCreerEleve = avecGestionErreurs(async function handler(re
     return;
   }
 
-  const resultat = await provisionnerEleve(admin, classe.id, nom, prenom, req.body.motDePasse, email);
+  const resultat = await provisionnerEleve(admin, classe.id, nom, prenom, req.body.motDePasse, email, { classeEstTest: classe.est_test === true });
   if (!resultat.ok) {
     res.status(500).json({ erreur: resultat.erreur, detail: resultat.detail });
     return;

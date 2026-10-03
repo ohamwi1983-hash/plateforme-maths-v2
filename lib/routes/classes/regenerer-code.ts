@@ -42,9 +42,13 @@ export const gererClassesRegenererCode = avecGestionErreurs(async function handl
 
   const admin = supabaseAdmin();
 
-  const { data: classe, error: erreurClasse } = await admin.from("classes").select("id, prof_id").eq("id", req.body.classe_id).maybeSingle();
+  const { data: classe, error: erreurClasse } = await admin.from("classes").select("id, prof_id, est_test").eq("id", req.body.classe_id).maybeSingle();
   if (erreurClasse || !classe || classe.prof_id !== prof.id) {
     res.status(404).json({ erreur: "Classe introuvable" });
+    return;
+  }
+  if (classe.est_test === true) {
+    res.status(400).json({ erreur: "Une classe de test n'a pas de code d'inscription (RAPPORT §61)." });
     return;
   }
 

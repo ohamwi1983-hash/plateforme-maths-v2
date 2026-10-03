@@ -102,6 +102,8 @@ export class BaseMemoire {
     if (nom === "taches" && complete.est_apercu === undefined) complete.est_apercu = false;
     // Défaut du schéma (RAPPORT §61) : `est_test boolean not null default false`.
     if (nom === "classes" && complete.est_test === undefined) complete.est_test = false;
+    // Défaut du schéma : `eleves.actif boolean not null default true` (un élève créé par `provisionnerEleve` n'écrit pas la colonne).
+    if (nom === "eleves" && complete.actif === undefined) complete.actif = true;
     // Défauts du schéma (RAPPORT §37) : `autoriser_retour_arriere boolean not null default false`, `remis_le` nul.
     if (nom === "taches" && complete.autoriser_retour_arriere === undefined) complete.autoriser_retour_arriere = false;
     if (nom === "exercices_assignes" && complete.remis_le === undefined) complete.remis_le = null;
