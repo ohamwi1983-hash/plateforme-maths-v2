@@ -59,7 +59,7 @@ La **taxonomie** de compétences est conservée : `C04`, `C05_SIGNE_REPETE`, `C0
 
 ## 6. Piste de reconstruction avec `lirePolynome`
 
-HYPOTHÈSE de conception, non testée : le vérificateur archivé repose sur un arbre syntaxique flottant (tolérance 1e-6). Un nouveau contrôle pourrait s'appuyer sur `lirePolynome` (`src/generateurs/fxDepuisGraphe/polynome.ts`) : lecture exacte dans ℚ, multiplication implicite (`2x(x-4)`, `(x-3)(x+3)`), degré ≤ 4. La comparaison « coefficients développés égaux » deviendrait **exacte** au lieu d'une tolérance, et les racines entières de ces trois catégories restent dans ℚ.
+HYPOTHÈSE de conception, non testée : le vérificateur archivé repose sur un arbre syntaxique flottant (tolérance 1e-6). Un nouveau contrôle pourrait s'appuyer sur `lirePolynome` (`src/generateurs/_noyauQuadratique/polynome.ts`) : lecture exacte dans ℚ, multiplication implicite (`2x(x-4)`, `(x-3)(x+3)`), degré ≤ 4. La comparaison « coefficients développés égaux » deviendrait **exacte** au lieu d'une tolérance, et les racines entières de ces trois catégories restent dans ℚ.
 
 Limites à connaître avant de s'y fier :
 - `lirePolynome` renvoie le polynôme **développé** : `x(2x − 8)` et `2x² − 8x` y sont identiques. Les contrôles de **structure** (produit et non somme, `x` explicite en facteur, exactement deux facteurs, détection de `C04` = facteur `−x`) exigent encore une analyse syntaxique de surface, que le lecteur ne fournit pas.
