@@ -73,8 +73,10 @@ async function main(): Promise<void> {
   const { mot_de_passe: motDePasse, eleves: liste } = eleves.corps as { mot_de_passe: string; eleves: { id: string; nom: string; prenom: string }[] };
   console.log(`Création de ${liste.length} élèves : ${Math.round(eleves.ms)} ms`);
 
+  const tacheIds: string[] = [];
   for (let t = 0; t < NB_TACHES; t++) {
     const tache = exiger(await appel("POST", "taches", jetonAdmin, { nom: `Mesure ${t}`, feedback_immediat: true, reponse_visible: true, tentatives_supplementaires: 0, aide_activee: AVEC_AIDE, composition: [{ variante_id: "completion_du_carre", nombre_exercices: 1, configuration: { actives: ["TH"] } }] }), 201, "création d'une tâche").corps;
+    tacheIds.push(tache.id as string);
     exiger(await appel("POST", "assignations", jetonAdmin, { tache_id: tache.id, classe_id: classe.id }), 201, "assignation");
   }
 
@@ -106,6 +108,10 @@ async function main(): Promise<void> {
     console.log(`Requêtes émises par la suppression : ${base} requêtes de base de données (séquentielles) + ${auth} appels Auth (séquentiels).`);
     console.log("Durée réelle ≈ requêtes de base × latence d'une requête + appels Auth × latence d'un appel Auth — à mesurer sur une cible réelle (BASE_URL + JETON_ADMIN).");
   }
+  // Nettoyage : les tâches créées par l'outil ne sont plus assignées une fois la classe supprimée, donc supprimables (elles ne doivent pas rester dans la liste du compte utilisé).
+  let tachesSupprimees = 0;
+  for (const id of tacheIds) if ((await appel("DELETE", `taches/${id}`, jetonAdmin)).statut === 200) tachesSupprimees++;
+  console.log(`Nettoyage : ${tachesSupprimees}/${tacheIds.length} tâche(s) de mesure supprimée(s).`);
   arreter();
   if (suppression.statut !== 200) process.exit(1);
 }
