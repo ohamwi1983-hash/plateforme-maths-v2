@@ -4700,6 +4700,37 @@
       ajout.appendChild(ajouter);
       li.appendChild(ajout);
 
+      // Régénérer le mot de passe commun (RAPPORT §64) : tous les élèves de test reçoivent un NOUVEAU mot de passe, affiché une seule fois dans la même carte que lors de la création.
+      if (classe.nombre_eleves > 0) {
+        const zoneRegeneration = document.createElement("div");
+        zoneRegeneration.className = "actions-item";
+        const regenerer = document.createElement("button");
+        regenerer.type = "button";
+        regenerer.className = "bouton-secondaire";
+        regenerer.dataset.role = "regenerer-mot-de-passe";
+        regenerer.textContent = "Régénérer le mot de passe commun";
+        regenerer.title = "Tous les élèves de test de cette classe reçoivent un nouveau mot de passe ; l'ancien cesse de fonctionner.";
+        regenerer.addEventListener("click", async () => {
+          const statut = document.getElementById("statut-classes-test-admin");
+          statut.textContent = "Régénération du mot de passe…";
+          try {
+            const reponse = await fetch(`/api/admin/classes-test/${encodeURIComponent(classe.id)}/mot-de-passe`, { method: "POST", headers: enteteAdmin(), body: "{}" });
+            const retour = await reponse.json();
+            if (!reponse.ok) {
+              statut.textContent = formaterErreur(retour);
+              return;
+            }
+            statut.textContent = "";
+            resultatElevesTest[classe.id] = { ...retour, regenere: true };
+            await rafraichirClassesTest();
+          } catch (e) {
+            statut.textContent = "Erreur inattendue : " + e.message;
+          }
+        });
+        zoneRegeneration.appendChild(regenerer);
+        li.appendChild(zoneRegeneration);
+      }
+
       // Identifiants de connexion des élèves de test : le mot de passe commun n'est montré qu'à la création.
       const recent = resultatElevesTest[classe.id];
       if (recent) {
@@ -4710,10 +4741,12 @@
         interieur.className = "zone-edition";
         const titre = document.createElement("h3");
         titre.className = "zone-titre";
-        titre.textContent = "Élèves de test créés";
+        titre.textContent = recent.regenere === true ? "Nouveau mot de passe commun" : "Élèves de test créés";
         const consigne = document.createElement("p");
         consigne.className = "meta-item";
-        consigne.textContent = "Connexion élève : prénom et nom ci-dessous, mot de passe commun. Le mot de passe n'est affiché qu'une seule fois : notez-le maintenant.";
+        consigne.textContent = recent.regenere === true
+          ? "Tous les élèves de test de cette classe ont ce nouveau mot de passe ; l'ancien ne fonctionne plus. Il n'est affiché qu'une seule fois : notez-le maintenant."
+          : "Connexion élève : prénom et nom ci-dessous, mot de passe commun. Le mot de passe n'est affiché qu'une seule fois : notez-le maintenant.";
         const mdp = document.createElement("div");
         mdp.className = "code-invitation";
         mdp.dataset.role = "mot-de-passe-eleves-test";

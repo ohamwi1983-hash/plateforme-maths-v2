@@ -1,4 +1,5 @@
 import type { supabaseAdmin } from "./supabaseAdmin";
+import { elevesInscritsAilleurs } from "./elevesDeTest";
 import { recupererToutesLesLignes } from "./supabasePagination";
 
 type Admin = ReturnType<typeof supabaseAdmin>;
@@ -59,19 +60,10 @@ export async function supprimerClasseDeTest(admin: Admin, classeId: string, etap
   const eleveIds = (inscrits ?? []).map((l) => l.eleve_id as string);
 
   // Élève partagé : inscrit aussi dans une AUTRE classe -> refus explicite, rien n'est supprimé.
-  const partages = new Set<string>();
-  for (const lot of lots(eleveIds)) {
-    const { data: ailleurs, error } = await admin.from("inscriptions").select("eleve_id, classe_id").in("eleve_id", lot);
-    if (error) return { ok: false, statut: 500, erreur: "Échec de lecture des autres inscriptions : " + error.message };
-    for (const l of ailleurs ?? []) if (l.classe_id !== classeId) partages.add(l.eleve_id as string);
-  }
-  if (partages.size > 0) {
-    const noms: string[] = [];
-    for (const lot of lots([...partages])) {
-      const { data } = await admin.from("eleves").select("id, nom, prenom").in("id", lot);
-      for (const e of data ?? []) noms.push(`${e.prenom as string} ${e.nom as string}`.trim());
-    }
-    return { ok: false, statut: 409, erreur: "Suppression refusée : des élèves de cette classe sont aussi inscrits dans une autre classe (" + noms.join(", ") + ").", elevesPartages: noms };
+  const partages = await elevesInscritsAilleurs(admin, classeId, eleveIds);
+  if ("erreur" in partages) return { ok: false, statut: 500, erreur: partages.erreur };
+  if (partages.noms.length > 0) {
+    return { ok: false, statut: 409, erreur: "Suppression refusée : des élèves de cette classe sont aussi inscrits dans une autre classe (" + partages.noms.join(", ") + ").", elevesPartages: partages.noms };
   }
 
   const exerciceIds: string[] = [];

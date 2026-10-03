@@ -3466,6 +3466,17 @@ async function scenarioClassesTest(navigateur: any, base: string, largeur: numbe
   await page.screenshot({ path: join(CAPTURES, `${largeur}-classes-test-admin.png`), fullPage: true });
   verifier(!(await page.evaluate("document.documentElement.scrollWidth > window.innerWidth")), `${l} : pas de défilement horizontal`);
 
+  // Régénérer le mot de passe commun (RAPPORT §64) : nouveau mot de passe affiché UNE fois dans la même carte, posé sur les 3 comptes ; l'ancien disparaît
+  await page.locator('[data-role="regenerer-mot-de-passe"]').first().click();
+  await page.waitForFunction(`document.querySelector('[data-role="mot-de-passe-eleves-test"]')?.textContent.trim() !== ${JSON.stringify(motDePasse)}`);
+  const nouveauMdp = ((await page.locator('[data-role="mot-de-passe-eleves-test"]').textContent()) ?? "").trim();
+  const titreCarte = await page.locator('[data-role="identifiants-eleves-test"] .zone-titre').innerText();
+  verifier(/^[a-z2-9]{8}$/.test(nouveauMdp) && nouveauMdp !== motDePasse && /Nouveau mot de passe commun/.test(titreCarte), `${l} : nouveau mot de passe affiché dans la carte (« ${nouveauMdp} », titre « ${titreCarte} »)`);
+  const comptesTest = b.table("inscriptions").filter((i) => i.classe_id === classeTest.id).map((i) => b.utilisateursAuth.get(i.eleve_id as string));
+  verifier(comptesTest.length === 3 && comptesTest.every((u) => u?.password === nouveauMdp), `${l} : les 3 comptes Auth portent le nouveau mot de passe, l'ancien a disparu`);
+  verifier(!(await page.evaluate("document.documentElement.scrollWidth > window.innerWidth")), `${l} : pas de défilement horizontal après la régénération`);
+  await page.screenshot({ path: join(CAPTURES, `${largeur}-classes-test-regeneration.png`), fullPage: true });
+
   // Badge dans « Mes classes » et dans le sélecteur
   await page.locator('button[data-onglet="classes"]').click();
   await page.waitForSelector("#onglet-classes:visible");

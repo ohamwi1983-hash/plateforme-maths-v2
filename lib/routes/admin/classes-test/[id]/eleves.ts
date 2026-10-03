@@ -1,18 +1,12 @@
-import { randomBytes } from "node:crypto";
 import type { RequeteHttp, ReponseHttp } from "../../../../httpTypes";
 import { avecGestionErreurs } from "../../../../avecGestionErreurs";
 import { supabaseAdmin } from "../../../../supabaseAdmin";
 import { exigerAdmin } from "../../../../adminAuth";
 import { elevesDeLaClasse } from "../../../../elevesDeLaClasse";
 import { provisionnerEleve } from "../../../../provisionnerEleve";
+import { genererMotDePasseEleveTest } from "../../../../motDePasseEleveTest";
 
 export const NOMBRE_ELEVES_TEST_MAX = 40;
-const ALPHABET_MDP = "abcdefghijkmnpqrstuvwxyz23456789"; // sans caractères ambigus (l, o, 0, 1)
-
-/** Mot de passe commun d'une série d'élèves de test : 8 caractères, tirés de `crypto` (jamais `Math.random`). */
-function genererMotDePasse(): string {
-  return [...randomBytes(8)].map((o) => ALPHABET_MDP[o % ALPHABET_MDP.length]).join("");
-}
 
 /**
  * POST /api/admin/classes-test/:id/eleves `{ nombre }` EXACTEMENT (1 à 40) — crée N élèves de test dans la classe (RAPPORT §61, D6). Noms RÉSERVÉS : nom « Test-xxxx » (xxxx = début de l'identifiant de la
@@ -51,7 +45,7 @@ export const gererAdminClassesTestEleves = avecGestionErreurs(async function han
     return;
   }
 
-  const motDePasse = genererMotDePasse();
+  const motDePasse = genererMotDePasseEleveTest();
   const nomFamille = `Test-${(classe.id as string).replace(/[^a-zA-Z0-9]/g, "").slice(0, 4).toLowerCase()}`;
   const crees: { id: string; nom: string; prenom: string }[] = [];
   for (let k = 1; k <= nombre; k++) {

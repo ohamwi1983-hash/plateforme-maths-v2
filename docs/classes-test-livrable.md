@@ -6,6 +6,8 @@ Détail, citations `fichier:ligne` et décisions : `RAPPORT.md` §61. Conception
 
 Onglet **Admin → Classes de test** : créer une classe de test, y ajouter N élèves de test (1 à 40, noms réservés `Élève 01 · Test-xxxx`, **un mot de passe commun affiché une seule fois**), les voir dans « Mes classes » avec le badge **TEST**, leur assigner des tâches comme à une vraie classe, répondre en tant qu'eux (connexion par nom + mot de passe), consulter les résultats normalement, puis **supprimer la classe en cascade** (confirmation en deux temps, irréversible).
 
+**Régénérer le mot de passe commun** (RAPPORT §64) : si le mot de passe affiché à la création est perdu (rechargement de page, reconnexion), le bouton « Régénérer le mot de passe commun » de la classe pose un nouveau mot de passe sur tous ses élèves de test et l'affiche une seule fois ; l'ancien cesse de fonctionner.
+
 ## Checklist de suppression (lue dans le schéma réel)
 
 `reponses`, `debuts_ecran`, `aides_utilisees` → `exercices_assignes` → `taches_assignations_eleves` → `taches_assignations` → `inscriptions` → `eleves` → **comptes Supabase Auth** → `classes`. Les tâches (`taches`, `taches_composition`) sont conservées : une tâche qui n'était assignée qu'à la classe de test redevient modifiable et supprimable. Refus avant toute suppression : classe non marquée test (404), élève inscrit ailleurs (409).

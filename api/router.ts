@@ -9,6 +9,7 @@ import { gererAdminProfsResetMdp } from "../lib/routes/admin/profs/[id]/reset-md
 import { gererAdminClassesTest } from "../lib/routes/admin/classes-test/index";
 import { gererAdminClassesTestSuppression } from "../lib/routes/admin/classes-test/[id]";
 import { gererAdminClassesTestEleves } from "../lib/routes/admin/classes-test/[id]/eleves";
+import { gererAdminClassesTestMotDePasse } from "../lib/routes/admin/classes-test/[id]/mot-de-passe";
 import { gererProfsMoi } from "../lib/routes/profs/moi";
 import { gererAssignations } from "../lib/routes/assignations";
 import { gererCatalogueGenerateurs } from "../lib/routes/catalogue-generateurs";
@@ -134,6 +135,13 @@ const TABLE_ROUTAGE: EntreeRoutage[] = [
     correspond: (s) => s.length === 4 && s[0] === "admin" && s[1] === "classes-test" && s[3] === "eleves",
     extraireParams: (s) => ({ id: s[2] }),
     gestionnaire: gererAdminClassesTestEleves,
+  },
+  {
+    methodes: ["POST"],
+    chemin: "/api/admin/classes-test/:id/mot-de-passe",
+    correspond: (s) => s.length === 4 && s[0] === "admin" && s[1] === "classes-test" && s[3] === "mot-de-passe",
+    extraireParams: (s) => ({ id: s[2] }),
+    gestionnaire: gererAdminClassesTestMotDePasse,
   },
   {
     methodes: ["GET"],
