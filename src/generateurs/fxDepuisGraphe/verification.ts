@@ -10,7 +10,7 @@ const MESSAGE_DEGRE = "Cette expression n'est pas celle d'une fonction du second
 
 /**
  * Écran 1 (RAPPORT §56) : la réponse est lue par `lirePolynome` (ℚ exact, jamais de flottant) puis comparée à la vraie fonction par ses coefficients DÉVELOPPÉS `(A, B, C)` — toute forme
- * équivalente est acceptée (`2x²-4x+5` comme `2(x-1)²+3`, décision D8). Illisible ou de degré ≠ 2 : `parse_error` (aucune tentative consommée). Verdict binaire, aucune fraction de mérite
+ * équivalente est acceptée (`2x²-4x+5` comme `2(x-1)²+3`, décision D8). Illisible ou de degré ≠ 2 : `parse_error` (compte comme une tentative ratée, comme tout statut ≠ correct : lib/moteurTentatives.ts). Verdict binaire, aucune fraction de mérite
  * (un seul champ). Les codes diagnostiquent la réponse FAUSSE (`diagnostic.ts`) et n'affectent jamais la note.
  */
 export function verifierExpression(ex: ExerciceFx, reponseBrute: string): ResultatVerification {

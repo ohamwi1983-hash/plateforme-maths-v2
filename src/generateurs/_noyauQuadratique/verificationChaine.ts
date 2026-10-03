@@ -35,7 +35,7 @@ function lireValeurDeclaree(texte: string): Rat | null {
 
 /**
  * Écran 2 (RAPPORT §57) : vérification à DEUX niveaux, sur la fonction EFFECTIVE `g` (cascade).
- *  - Niveau 0 : structure (`decoderChaineTransformations`), lecture de chaque expression (`lirePolynome`) et de chaque VALEUR déclarée (TH, TV, EV, CV : un nombre) ; sinon `parse_error` (aucune tentative consommée).
+ *  - Niveau 0 : structure (`decoderChaineTransformations`), lecture de chaque expression (`lirePolynome`) et de chaque VALEUR déclarée (TH, TV, EV, CV : un nombre) ; sinon `parse_error` (compte comme une tentative ratée, comme tout statut ≠ correct : lib/moteurTentatives.ts).
  *  - Niveau 1 (local) : l'étape `i` se juge contre l'expression que l'ÉLÈVE a écrite à l'étape `i − 1` (`x²` pour la première), jamais contre la vraie chaîne. Étape VALIDE = la règle locale de la
  *    transformation choisie est vraie, la VALEUR que l'élève a déclarée est celle de la règle (TH : `h` de `E_{i-1}(x − h)`, positif vers la droite ; TV : la constante ajoutée ; EV | CV : le facteur ; SOX : aucune valeur)
  *    ET cette transformation est ADMISE pour cet élève (`transformationsAdmises`). Règle vraie mais transformation non admise : `TRANSFORMATION_HORS_SUJET`.
@@ -57,7 +57,7 @@ export function verifierChaineSur(g: Parametres, actives: readonly Transformatio
     polynomes.push(lue.polynome);
     const declaree = etape.valeur === "" ? null : lireValeurDeclaree(etape.valeur);
     if (etape.valeur !== "" && declaree === null) return { statut: "parse_error", codesCompetence: [], messageErreur: `Étape ${i + 1} : la valeur ${MESSAGE_VALEUR}` };
-    // Hors domaine pour la transformation choisie : lecture refusée (aucune tentative consommée), AVANT toute comparaison à la règle ou à la fonction visée.
+    // Hors domaine pour la transformation choisie : lecture refusée (compte comme une tentative ratée, comme tout statut ≠ correct : lib/moteurTentatives.ts), AVANT toute comparaison à la règle ou à la fonction visée.
     const horsDomaine = declaree !== null ? messageHorsDomaine(etape.transformation, declaree) : null;
     if (horsDomaine !== null) return { statut: "parse_error", codesCompetence: [], messageErreur: `Étape ${i + 1} : ${horsDomaine}` };
     valeursDeclarees.push(declaree);

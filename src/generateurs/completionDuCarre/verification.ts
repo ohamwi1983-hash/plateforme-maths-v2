@@ -10,7 +10,7 @@ const MESSAGE_A_NUL = "Cette expression n'est pas celle d'une fonction du second
 
 /**
  * Écran 1 (RAPPORT §59) : la réponse doit être ÉCRITE sous forme canonique `a(x − p)² + q` (`lireFormeCanonique`, qui délègue tout nombre à `lirePolynome`) : l'énoncé étant développé,
- * recopier `ax² + bx + c` est un `parse_error` (aucune tentative consommée), jamais « correct ». Juste ⇔ `(a, p, q)` identiques, en ℚ exact. Verdict binaire, aucune fraction de mérite.
+ * recopier `ax² + bx + c` est un `parse_error` (compte comme une tentative ratée, comme tout statut ≠ correct : lib/moteurTentatives.ts), jamais « correct ». Juste ⇔ `(a, p, q)` identiques, en ℚ exact. Verdict binaire, aucune fraction de mérite.
  * Les codes diagnostiquent la réponse FAUSSE (`diagnostic.ts`) et n'affectent jamais la note.
  */
 export function verifierFormeCanonique(ex: ExerciceCc, reponseBrute: string): ResultatVerification {

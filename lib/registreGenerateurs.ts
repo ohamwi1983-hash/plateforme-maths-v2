@@ -3,6 +3,7 @@ import { CATALOGUE_GENERATEURS } from "./catalogueGenerateurs";
 import { DICTIONNAIRE_COMPETENCES } from "./dictionnaireCompetences";
 import { generateurTemoinTechnique } from "../src/generateurs/_temoinTechnique";
 import { GENERATEURS_MOTIF_DELTA } from "../src/generateurs/analyseFonctionMotifDelta/generateurs";
+import { generateurCompletionDuCarre } from "../src/generateurs/completionDuCarre/generateur";
 import { generateurFxDepuisGraphe } from "../src/generateurs/fxDepuisGraphe/generateur";
 
 /**
@@ -16,7 +17,7 @@ import { generateurFxDepuisGraphe } from "../src/generateurs/fxDepuisGraphe/gene
  * (ce qu'on peut composer) : le registre sait EXÉCUTER. Les deux ne sont pas fusionnés, leur
  * cohérence est contrôlée par `verifierCoherenceRegistre` au chargement de ce module.
  */
-export const REGISTRE_GENERATEURS: readonly Generateur<any>[] = [generateurTemoinTechnique, ...GENERATEURS_MOTIF_DELTA, generateurFxDepuisGraphe];
+export const REGISTRE_GENERATEURS: readonly Generateur<any>[] = [generateurTemoinTechnique, ...GENERATEURS_MOTIF_DELTA, generateurFxDepuisGraphe, generateurCompletionDuCarre];
 
 interface EntreeCatalogue {
   generateur_id: string;

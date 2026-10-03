@@ -357,7 +357,7 @@ verifier(chainesJugees === CONFIGURATIONS.length * GRAINES.length, "toutes les c
   for (const [i, v] of [[0, "3.0"], [0, "+3"], [0, "6/2"], [0, "03"], [1, "4/2"], [1, "2,0"], [1, "(2)"], [2, "8/2"], [2, "4"]] as [number, string][]) {
     verifier(G.verifier(ex, CHAMP_CHAINE, avecValeur(i, v)).statut === "correct", `valeur équivalente acceptée : étape ${i} « ${v} »`);
   }
-  // Valeur illisible ou qui n'est pas un nombre : parse_error (aucune tentative consommée), message désignant l'étape.
+  // Valeur illisible ou qui n'est pas un nombre : parse_error (compte comme une tentative ratée, comme tout statut ≠ correct : lib/moteurTentatives.ts), message désignant l'étape.
   for (const v of ["x", "2x", "trois", "1/0", "3 vers la droite", "((", "3+", "x^2"]) {
     const r = G.verifier(ex, CHAMP_CHAINE, avecValeur(1, v));
     verifier(r.statut === "parse_error" && r.codesCompetence.length === 0 && r.messageErreur.startsWith("Étape 2 : la valeur"), `valeur illisible « ${v} » : parse_error sur l'étape 2`);

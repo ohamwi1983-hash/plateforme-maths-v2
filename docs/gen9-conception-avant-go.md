@@ -12,7 +12,7 @@ Lecture seule, état de `main` au commit `5bbd3f9`. Aucun code n'a été écrit 
 
 | # | Constat | Décision |
 |---|---|---|
-| 1 | gen8 accepte toute forme équivalente ; ici `ax²+bx+c` est affiché : recopier l'énoncé serait « correct » | Forme canonique exigée (`lireFormeCanonique`, posée sur `lirePolynome` qui lit tous les nombres) ; sinon `parse_error`, aucune tentative consommée |
+| 1 | gen8 accepte toute forme équivalente ; ici `ax²+bx+c` est affiché : recopier l'énoncé serait « correct » | Forme canonique exigée (`lireFormeCanonique`, posée sur `lirePolynome` qui lit tous les nombres) ; sinon `parse_error` (erratum, §59 : un `parse_error` COMPTE comme une tentative ratée, `lib/moteurTentatives.ts` — la mention « aucune tentative consommée » de la première rédaction était fausse) |
 | 2 | Le prompt exclut `a = −1` (génération) puis dit de ne pas l'exclure (collision) | Non exclu. À `a = −1`, les deux codes sur `p` coïncident (de même sur `q`) : aucun code émis, étape fausse |
 | 3 | `P_SIGNE_INVERSE` a la même condition que `SIGNE_P_INVERSE` de gen8 (`p' = −p`, `q' = q`) | `SIGNE_P_INVERSE` réutilisé : trois nouveaux codes, pas quatre |
 | 4 | Sans `TH`, `p = 0` donc `b = 0` : les quatre codes sont inobservables | `TH` obligatoire (case cochée et verrouillée) |

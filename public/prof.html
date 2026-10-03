@@ -1503,6 +1503,11 @@
        * « aucune » ne passe pas par `construireLigneVariante`, donc n'aurait pas de bloc de cases.
        */
       "4e:67": [{ index: 0, variante_id: "fx_depuis_graphe" }],
+      /**
+       * gen9 « Complète le carré » (RAPPORT §59) — 4e/numero 68 : UNE variante (`completion_du_carre`), configurée par ligne comme gen8 ; la case « Translation horizontale (TH) » est
+       * OBLIGATOIRE (cochée et verrouillée : `obligatoires` du descripteur). Même forme que gen8 : `variantes` est un tableau d'un élément.
+       */
+      "4e:68": [{ index: 0, variante_id: "completion_du_carre" }],
     };
 
     /** Étape 1.1 : `variantes` peut être la chaîne littérale "aucune" — jamais itérée comme un tableau. */
@@ -1988,7 +1993,7 @@
       8: "Géométrie dans l'espace",
     };
     const NUMEROS_PAR_CHAPITRE_4E = {
-      1: [7, 8, 9, 67, 55, 57, 60],
+      1: [7, 8, 9, 67, 68, 55, 57, 60],
       2: [1, 2, 3, 4, 5, 6, 61],
       3: [10, 11, 12, 13, 56, 62],
       4: [30, 31, 32, 33, 34, 35, 36, 37, 38, 59],
