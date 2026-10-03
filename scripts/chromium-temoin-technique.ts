@@ -3176,7 +3176,7 @@ async function scenarioGen9Prof(navigateur: any, base: string, largeur: number) 
   const bloc = '#composition-dynamique [data-config-variante-id="completion_du_carre"]';
   verifier((await page.locator(bloc).count()) === 1, `${l} : la variante completion_du_carre est un bloc de lignes configurables (entrée JSON + correspondance + descripteur serveur)`);
   const arbre = (await page.evaluate(`(() => { const d = document.querySelector('${bloc}').closest("details.arbre-generateur"); const chapitre = d.parentElement.closest("details"); return { generateur: d.querySelector("summary").textContent.trim(), chapitre: chapitre ? chapitre.querySelector("summary").textContent.trim() : null }; })()`)) as { generateur: string; chapitre: string | null };
-  verifier(arbre.generateur === "68. Complète le carré" && /second degré/.test(arbre.chapitre ?? ""), `${l} : rangé sous « La fonction du second degré » (${JSON.stringify(arbre)})`);
+  verifier(arbre.generateur === "68. Forme canonique et transformations" && /second degré/.test(arbre.chapitre ?? ""), `${l} : rangé sous « La fonction du second degré » (${JSON.stringify(arbre)})`);
   verifier((await page.locator(`${bloc} .ligne-config`).count()) === 0 && (await page.locator(`${bloc} .ajouter-ligne-config`).isEnabled()), `${l} : aucune ligne au départ ; « Ajouter une ligne » actif (équivalent du champ non disabled)`);
   await page.locator("#nom-tache").fill("Complète le carré");
   await page.locator(`${bloc} .ajouter-ligne-config`).click();
