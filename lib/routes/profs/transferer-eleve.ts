@@ -57,12 +57,23 @@ export const gererProfsTransfererEleve = avecGestionErreurs(async function handl
 
   const { data: classeDestination, error: erreurClasseDestination } = await admin
     .from("classes")
-    .select("id")
+    .select("id, est_test")
     .eq("id", nouvelleClasseId)
     .eq("prof_id", prof.id)
     .maybeSingle();
   if (erreurClasseDestination || !classeDestination) {
     res.status(404).json({ erreur: "Classe de destination introuvable" });
+    return;
+  }
+
+  // Classes de test (RAPPORT §61) : jamais de transfert depuis ou vers une classe de test — un vrai élève déplacé dans une classe de test serait supprimé avec elle.
+  const { data: classesOrigine, error: erreurOrigine } = await admin.from("classes").select("id, est_test").in("id", classeIdsOrigine);
+  if (erreurOrigine) {
+    res.status(500).json({ erreur: "Échec de lecture des classes d'origine", detail: erreurOrigine.message });
+    return;
+  }
+  if (classeDestination.est_test === true || (classesOrigine ?? []).some((c) => c.est_test === true)) {
+    res.status(400).json({ erreur: "Transfert impossible depuis ou vers une classe de test." });
     return;
   }
 

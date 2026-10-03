@@ -41,7 +41,7 @@ export const gererClasses = avecGestionErreurs(async function handler(req: Reque
   const admin = supabaseAdmin();
 
   if (req.method === "GET") {
-    const { data: classes, error } = await admin.from("classes").select("id, nom, code").eq("prof_id", prof.id);
+    const { data: classes, error } = await admin.from("classes").select("id, nom, code, est_test").eq("prof_id", prof.id);
     if (error) {
       res.status(500).json({ erreur: "Échec de récupération des classes", detail: error.message });
       return;
@@ -49,8 +49,9 @@ export const gererClasses = avecGestionErreurs(async function handler(req: Reque
 
     const resultat = [];
     for (const classe of classes ?? []) {
-      if (classe.code) {
-        resultat.push(classe);
+      // Classe de test (RAPPORT §61) : jamais de code (aucune auto-inscription possible) ; `est_test` est exposé pour le badge « TEST » de l'admin.
+      if (classe.code || classe.est_test === true) {
+        resultat.push({ ...classe, est_test: classe.est_test === true });
         continue;
       }
       const code = await genererCodeClasseUnique(admin);
@@ -60,7 +61,7 @@ export const gererClasses = avecGestionErreurs(async function handler(req: Reque
         .eq("id", classe.id)
         .select("id, nom, code")
         .single();
-      resultat.push(erreurMaj || !classeMaj ? classe : classeMaj);
+      resultat.push({ ...(erreurMaj || !classeMaj ? classe : classeMaj), est_test: false });
     }
 
     // Refonte "Onglet Classes" (Option C) : effectif par classe pour le panneau "Mes classes" (liste

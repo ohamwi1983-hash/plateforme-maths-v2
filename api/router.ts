@@ -6,6 +6,9 @@ import { gererAdminProfsInviter } from "../lib/routes/admin/profs/inviter";
 import { gererAdminProfsDesactiver } from "../lib/routes/admin/profs/[id]/desactiver";
 import { gererAdminProfsReactiver } from "../lib/routes/admin/profs/[id]/reactiver";
 import { gererAdminProfsResetMdp } from "../lib/routes/admin/profs/[id]/reset-mdp";
+import { gererAdminClassesTest } from "../lib/routes/admin/classes-test/index";
+import { gererAdminClassesTestSuppression } from "../lib/routes/admin/classes-test/[id]";
+import { gererAdminClassesTestEleves } from "../lib/routes/admin/classes-test/[id]/eleves";
 import { gererProfsMoi } from "../lib/routes/profs/moi";
 import { gererAssignations } from "../lib/routes/assignations";
 import { gererCatalogueGenerateurs } from "../lib/routes/catalogue-generateurs";
@@ -109,6 +112,28 @@ const TABLE_ROUTAGE: EntreeRoutage[] = [
     correspond: (s) => s.length === 4 && s[0] === "admin" && s[1] === "profs" && s[3] === "reset-mdp",
     extraireParams: (s) => ({ id: s[2] }),
     gestionnaire: gererAdminProfsResetMdp,
+  },
+  // Classes de test du compte administrateur (RAPPORT §61) : `exigerAdmin` avant toute validation.
+  {
+    methodes: ["GET", "POST"],
+    chemin: "/api/admin/classes-test",
+    correspond: (s) => s.length === 2 && s[0] === "admin" && s[1] === "classes-test",
+    extraireParams: AUCUN_PARAM,
+    gestionnaire: gererAdminClassesTest,
+  },
+  {
+    methodes: ["DELETE"],
+    chemin: "/api/admin/classes-test/:id",
+    correspond: (s) => s.length === 3 && s[0] === "admin" && s[1] === "classes-test",
+    extraireParams: (s) => ({ id: s[2] }),
+    gestionnaire: gererAdminClassesTestSuppression,
+  },
+  {
+    methodes: ["POST"],
+    chemin: "/api/admin/classes-test/:id/eleves",
+    correspond: (s) => s.length === 4 && s[0] === "admin" && s[1] === "classes-test" && s[3] === "eleves",
+    extraireParams: (s) => ({ id: s[2] }),
+    gestionnaire: gererAdminClassesTestEleves,
   },
   {
     methodes: ["GET"],

@@ -57,6 +57,12 @@ function creerServeurPostgrestFactice(scenario: Scenario) {
       res.end(JSON.stringify(eleves));
       return;
     }
+    // Classes de test (RAPPORT §61) : `provisionnerEleve` lit `classes` (colonne `est_test`) pour ignorer les élèves de test dans le suffixe d'homonymes ; aucune classe de test ici.
+    if (url.pathname === "/rest/v1/classes" && req.method === "GET") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end("[]");
+      return;
+    }
     if (url.pathname === "/auth/v1/admin/users" && req.method === "POST") {
       const payload = JSON.parse(corps);
       res.writeHead(200, { "Content-Type": "application/json" });

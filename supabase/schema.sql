@@ -28,7 +28,11 @@ create table classes (
   -- Portée explicite exclut toute interface de création de classe pour cette itération, donc pas
   -- de génération "à la création"). Nullable + unique : une classe existante sans code tant que
   -- GET /api/classes n'a pas encore tourné dessus.
-  code text unique
+  code text unique,
+  -- Classes de test du compte administrateur (RAPPORT §61) : `true` pour une classe créée par `POST /api/admin/classes-test` (jamais par `POST /api/classes`, qui n'écrit que `nom`). Un élève
+  -- inscrit dans une classe de test hérite du statut par son inscription (aucun marquage individuel). Une classe de test n'a JAMAIS de code d'inscription (aucune auto-inscription possible :
+  -- un vrai élève qui y entrerait serait supprimé avec elle) ; elle se supprime d'un clic, en cascade explicite (lib/suppressionClasseTest.ts, aucun `on delete cascade` dans ce schéma).
+  est_test boolean not null default false
 );
 
 create table eleves (
