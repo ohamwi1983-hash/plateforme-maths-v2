@@ -7,7 +7,8 @@ import type { ConfigurationCases, DescripteurConfigurationCases, Generateur } fr
  * Règles (audit `docs/AUDIT-config-par-ligne-composition.md`, décisions B et D) :
  *  - un générateur SANS descripteur n'accepte AUCUNE configuration (absente ou `null` seulement) ;
  *  - un générateur AVEC descripteur exige une configuration NON VIDE : aucune case cochée est refusé, jamais complété par un défaut ;
- *  - la forme canonique ne fait que NORMALISER (identifiants connus, doublons retirés, ordre de `cases`) ; elle ne choisit jamais à la place du professeur.
+ *  - la forme canonique ne fait que NORMALISER (identifiants connus, doublons retirés, ordre de `cases`) ; elle ne choisit jamais à la place du professeur ;
+ *  - une case `obligatoire` du descripteur manquante est REFUSÉE (RAPPORT §59), jamais ajoutée.
  */
 export type ResultatConfiguration<T> = { ok: true; configuration: T } | { ok: false; erreur: string };
 
@@ -34,6 +35,9 @@ export function canoniserConfigurationCases(descripteur: DescripteurConfiguratio
       const libelles = groupe.map((id) => descripteur.cases.find((c) => c.id === id)?.libelle ?? id);
       return { ok: false, erreur: `Configuration invalide : ${libelles.join(" et ")} s'excluent mutuellement.` };
     }
+  }
+  for (const id of descripteur.obligatoires ?? []) {
+    if (!choisies.has(id)) return { ok: false, erreur: `Configuration invalide : « ${descripteur.cases.find((c) => c.id === id)?.libelle ?? id} » est obligatoire pour cette variante.` };
   }
   return { ok: true, configuration: { actives: descripteur.cases.map((c) => c.id).filter((id) => choisies.has(id)) } };
 }

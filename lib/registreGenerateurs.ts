@@ -58,6 +58,11 @@ export function verifierCoherenceRegistre(
       erreurs.push(`${g.variante_id} : générateur non curriculaire présent dans CATALOGUE_GENERATEURS (jamais exposé au professeur)`);
     }
     if (new Set(g.codesCompetenceDeclares).size !== g.codesCompetenceDeclares.length) erreurs.push(`${g.variante_id} : codesCompetenceDeclares contient des doublons`);
+    // Cases obligatoires du descripteur de configuration (RAPPORT §59) : connues, et dans aucun groupe exclusif (sinon une case obligatoire en interdirait une autre à jamais).
+    for (const id of g.configuration?.obligatoires ?? []) {
+      if (!g.configuration?.cases.some((c) => c.id === id)) erreurs.push(`${g.variante_id} : case obligatoire "${id}" absente de \`cases\``);
+      if ((g.configuration?.exclusifs ?? []).some((groupe) => groupe.includes(id))) erreurs.push(`${g.variante_id} : case obligatoire "${id}" membre d'un groupe exclusif`);
+    }
   }
   return erreurs;
 }

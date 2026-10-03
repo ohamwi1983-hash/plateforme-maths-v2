@@ -36,6 +36,7 @@
     "test-fx-ecran2": "tsx scripts/test-fx-ecran2.ts",
     "test-apercu-latex": "tsx scripts/test-apercu-latex.ts",
     "test-formule-paliers": "tsx scripts/test-formule-paliers.ts",
+    "test-gen9-generation": "tsx scripts/test-gen9-generation.ts",
     "test-route-fx": "tsx scripts/test-route-fx.ts",
     "test-chaine-transformations": "tsx scripts/test-chaine-transformations.ts",
     "test-exact-motif-delta": "tsx scripts/test-exact-motif-delta.ts",

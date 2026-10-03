@@ -1780,8 +1780,14 @@
         const coche = document.createElement("input");
         coche.type = "checkbox";
         coche.dataset.caseId = c.id;
-        // Une nouvelle ligne naît VIDE (décision D de l'audit) : jamais de case pré-cochée ; seules les cases d'une ligne restaurée (Modifier / Dupliquer) le sont.
-        coche.checked = (valeurs.actives ?? []).includes(c.id);
+        // Une nouvelle ligne naît VIDE (décision D de l'audit) : jamais de case pré-cochée ; seules les cases d'une ligne restaurée (Modifier / Dupliquer) le sont — et les cases
+        // OBLIGATOIRES du descripteur (RAPPORT §59), cochées et verrouillées : le serveur refuse de toute façon une ligne qui en omet une.
+        const obligatoire = (descripteur.obligatoires ?? []).includes(c.id);
+        coche.checked = obligatoire || (valeurs.actives ?? []).includes(c.id);
+        if (obligatoire) {
+          coche.disabled = true;
+          coche.title = "Cette case est obligatoire pour cette variante.";
+        }
         coche.addEventListener("change", () => {
           // Cases exclusives (ex. EV / CV) : en cocher une décoche les autres du groupe — l'interface l'applique, le serveur le refuse de toute façon.
           if (coche.checked) {
