@@ -34,10 +34,11 @@ import { projeterMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta
 import { champsMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/ecrans";
 import { fonctionEffective, fonctionVraie, type ExerciceMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/types";
 import { genererExerciceFx } from "../src/generateurs/fxDepuisGraphe/generation";
-import { chaineCanonique, parametreEtape, transformationsAdmises, POLYNOME_DEPART } from "../src/generateurs/fxDepuisGraphe/chaine";
-import { latexFonction } from "../src/generateurs/fxDepuisGraphe/formatage";
-import { parametres as parametresFx, polynomeDe as polynomeDeFx, type Parametres as ParametresFx, type Transformation as TransformationFx } from "../src/generateurs/fxDepuisGraphe/types";
-import { constante as constanteFx, plusP as plusPFx } from "../src/generateurs/fxDepuisGraphe/polynome";
+import { chaineCanonique, parametreEtape, transformationsAdmises, POLYNOME_DEPART } from "../src/generateurs/_noyauQuadratique/chaine";
+import { latexFonction } from "../src/generateurs/_noyauQuadratique/formatage";
+import { parametres as parametresFx } from "../src/generateurs/fxDepuisGraphe/types";
+import { polynomeDe as polynomeDeFx, type Parametres as ParametresFx, type Transformation as TransformationFx } from "../src/generateurs/_noyauQuadratique/types";
+import { constante as constanteFx, plusP as plusPFx } from "../src/generateurs/_noyauQuadratique/polynome";
 import { rat as ratFx, signeR as signeRFx, type Rat as RatFx } from "../src/generateurs/analyseFonctionMotifDelta/exact/rationnel";
 
 const RACINE = join(__dirname, "..");

@@ -12,11 +12,12 @@ import { verifierBalisageMath } from "./support/texteMath";
 import { CATALOGUE_GENERATEURS } from "../lib/catalogueGenerateurs";
 import { chercherGenerateur } from "../lib/registreGenerateurs";
 import { genererExerciceFx } from "../src/generateurs/fxDepuisGraphe/generation";
-import { chaineCanonique, parametreEtape, transformationsAdmises } from "../src/generateurs/fxDepuisGraphe/chaine";
-import { latexFonction } from "../src/generateurs/fxDepuisGraphe/formatage";
-import { coefficient, constante, plusP, type Polynome } from "../src/generateurs/fxDepuisGraphe/polynome";
-import { TRANSFORMATIONS, parametres, polynomeDe, type Parametres, type Transformation } from "../src/generateurs/fxDepuisGraphe/types";
-import { POLYNOME_DEPART } from "../src/generateurs/fxDepuisGraphe/chaine";
+import { chaineCanonique, parametreEtape, transformationsAdmises } from "../src/generateurs/_noyauQuadratique/chaine";
+import { latexFonction } from "../src/generateurs/_noyauQuadratique/formatage";
+import { coefficient, constante, plusP, type Polynome } from "../src/generateurs/_noyauQuadratique/polynome";
+import { parametres } from "../src/generateurs/fxDepuisGraphe/types";
+import { TRANSFORMATIONS, polynomeDe, type Parametres, type Transformation } from "../src/generateurs/_noyauQuadratique/types";
+import { POLYNOME_DEPART } from "../src/generateurs/_noyauQuadratique/chaine";
 import { rat, signeR, type Rat } from "../src/generateurs/analyseFonctionMotifDelta/exact/rationnel";
 
 const echecs: string[] = [];

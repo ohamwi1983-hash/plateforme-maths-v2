@@ -1,7 +1,7 @@
 import { diviserR, egalR, estZeroR, multiplierR, oppR, rat, ajouterR, type Rat } from "../analyseFonctionMotifDelta/exact/rationnel";
 import { CODE_A_INCORRECT, CODE_P_MAGNITUDE_INCORRECTE, CODE_Q_INCORRECT, CODE_SIGNE_P_INVERSE } from "./codes";
-import { coefficient, type Polynome } from "./polynome";
-import type { Parametres } from "./types";
+import { coefficient, type Polynome } from "../_noyauQuadratique/polynome";
+import type { Parametres } from "../_noyauQuadratique/types";
 
 /** Coefficients développés `(A, B, C)` de `a(x − p)² + q` : `A = a`, `B = −2ap`, `C = ap² + q`. */
 export function coefficientsDe({ a, p, q }: Parametres): { A: Rat; B: Rat; C: Rat } {
