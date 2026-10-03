@@ -294,6 +294,20 @@ export const DICTIONNAIRE_COMPETENCES: Record<string, { libelle: string; descrip
     libelle: "Signe de p inversé (forme canonique)",
     description: "Expression canonique a(x − p)² + q avec a et q corrects mais p remplacé par son opposé : confusion sur le sens du décalage horizontal",
   },
+  // gen9 « Complète le carré » (RAPPORT §59) : trois codes DIAGNOSTIQUES de l'écran « forme canonique » (erreur mécanique isolée de la méthode), jamais pris en compte dans la note. `SIGNE_P_INVERSE`
+  // (ci-dessus) y est RÉUTILISÉ : `p' = b/(2a)` au lieu de `−b/(2a)` est exactement la même confusion. `src/generateurs/completionDuCarre/diagnostic.ts`.
+  P_FACTEUR_A_OUBLIE: {
+    libelle: "Facteur a oublié dans p (complétion du carré)",
+    description: "Forme canonique obtenue par complétion du carré avec a et q corrects mais p calculé comme −b/2 au lieu de −b/(2a) : le coefficient a n'est pas pris en compte quand on divise b",
+  },
+  Q_FACTEUR_A_OUBLIE: {
+    libelle: "Facteur a oublié dans q (complétion du carré)",
+    description: "Forme canonique obtenue par complétion du carré avec a et p corrects mais q calculé comme c − b²/(4a²) au lieu de c − b²/(4a) : on retranche p² au lieu de a·p², le facteur a est oublié",
+  },
+  Q_SIGNE_INVERSE: {
+    libelle: "Signe de la correction de q inversé (complétion du carré)",
+    description: "Forme canonique obtenue par complétion du carré avec a et p corrects mais q calculé comme c + b²/(4a) au lieu de c − b²/(4a) : on ajoute une seconde fois au lieu de retrancher ce qu'on a ajouté pour compléter le carré",
+  },
   Q_INCORRECT: {
     libelle: "Ordonnée du sommet incorrecte",
     description: "Expression canonique avec a et p corrects mais une constante q fausse (seule l'ordonnée du sommet est mal lue)",

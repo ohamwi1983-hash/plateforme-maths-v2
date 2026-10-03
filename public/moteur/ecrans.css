@@ -1310,6 +1310,22 @@
   font-weight: 600;
 }
 
+/* Mise en évidence NEUTRE d'une quantité (RAPPORT §59) : docs/reference/formule-emphase.html. Ce n'est pas un coefficient : aucun token --coef-* ; la couleur ne suffit jamais, d'où le
+   soulignement épais. */
+.moteur-emphase {
+  padding: 0 var(--espace-1);
+  background: var(--violet-clair);
+  border-bottom: 2px solid var(--violet-vif);
+  border-radius: var(--radius-sm);
+}
+
+.moteur-formule-palier {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+  width: 100%;
+}
+
 /* ── Croquis SVG (croquis.js) : classes uniquement ; couleurs et épaisseurs par tokens ── */
 .moteur-croquis {
   display: block;

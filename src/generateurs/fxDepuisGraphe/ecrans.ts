@@ -1,8 +1,8 @@
 import type { EcranChampExpression, EcranChaineTransformations, EcranDeclare } from "../../../lib/contratGenerateur";
 import type { AideAnnotationsFigure } from "../../../lib/aideTypee";
 import { figureParabole } from "../../../lib/figureParabole";
-import { texteFonction } from "./formatage";
-import { depuisJson, parametres, pointsDe, type ExerciceFx } from "./types";
+import { ecranChaineTransformations } from "../_noyauQuadratique/ecranChaine";
+import { parametres, pointsDe, type ExerciceFx } from "./types";
 
 /** Identifiants de champ (= `reponses.champ`). */
 export const CHAMP_EXPRESSION = "expression";
@@ -24,22 +24,6 @@ export const CONSIGNE_GLOBALE = "Détermine l'expression analytique de la parabo
 export const POIDS_EXPRESSION = 3;
 export const POIDS_CHAINE = 2;
 
-/**
- * Le menu est TOUJOURS le même, quelle que soit la configuration : il ne trahit pas les transformations actives. TH, TV, EV et CV prennent une VALEUR (RAPPORT §58) ; son placeholder
- * donne la convention de signe, la même pour tous les élèves. SOX n'en prend pas.
- *  - TH : `h` tel que `f_k(x) = f_{k-1}(x − h)` (positif = vers la droite) ; TV : la constante `k` ajoutée (positive = vers le haut) ;
- *  - EV : le facteur `m > 1` ; CV : le facteur `0 < m < 1` (jamais l'inverse).
- */
-export const CHOIX_CHAINE = [
-  { id: "TH", libelle: "TH", valeur: { placeholder: "h (+ : vers la droite)" } },
-  { id: "TV", libelle: "TV", valeur: { placeholder: "k (+ : vers le haut)" } },
-  { id: "EV", libelle: "EV", valeur: { placeholder: "facteur > 1" } },
-  { id: "CV", libelle: "CV", valeur: { placeholder: "facteur entre 0 et 1" } },
-  { id: "SOX", libelle: "SOX" },
-];
-export const ETAPES_MIN = 1;
-export const ETAPES_MAX = 5;
-export const BORNES_CHAINE = { choix: CHOIX_CHAINE, etapesMin: ETAPES_MIN, etapesMax: ETAPES_MAX };
 
 /**
  * Figure de l'exercice : calculée sur l'exercice BRUT (jamais sur une réponse d'élève), donc IDENTIQUE sur tous les écrans. Aucune coordonnée remarquable n'y figure (RAPPORT §56, D4) :
@@ -88,28 +72,12 @@ function ecranExpression(ex: ExerciceFx): EcranChampExpression {
   };
 }
 
-export const LEGENDE_TRANSFORMATIONS = "TH : translation horizontale · TV : translation verticale · EV : étirement vertical · CV : compression verticale · SOX : symétrie d'axe Ox.";
-
 /**
- * Écran 2 : la fonction visée est l'EFFECTIVE (réponse confirmée à l'écran 1, re-sérialisée en forme canonique, jamais la chaîne brute de l'élève : RAPPORT §18). Sur l'exercice BRUT (sans
- * `effectif`, jamais servi : poids, dépendances, champs), la consigne ne nomme AUCUNE fonction : un oubli de projection ne peut pas faire fuiter la vraie.
+ * Écran 2 : la fonction visée est l'EFFECTIVE (réponse confirmée à l'écran 1, re-sérialisée en forme canonique, jamais la chaîne brute de l'élève : RAPPORT §18). L'écran lui-même est construit par
+ * le noyau partagé (`ecranChaineTransformations`, RAPPORT §59) ; gen8 lui fournit son champ, sa consigne globale, sa figure (la MÊME que l'écran 1), son poids et sa dépendance.
  */
 function ecranChaine(ex: ExerciceFx): EcranChaineTransformations {
-  const visee = ex.effectif ? texteFonction(depuisJson(ex.effectif)) : "$f(x)$";
-  return {
-    type: "chaine_transformations",
-    champ: CHAMP_CHAINE,
-    consigne: CONSIGNE_GLOBALE,
-    question: `Quelles transformations permettent d'obtenir la fonction ${visee} à partir de $x^2$ ?`,
-    legende: LEGENDE_TRANSFORMATIONS,
-    depart: "$f_0(x) = x^2$",
-    ...BORNES_CHAINE,
-    placeholder: "ex. (x-2)^2",
-    figure: figureEtPoints(ex).figure,
-    poids: POIDS_CHAINE,
-    nom: NOMS_ECRANS_FX[CHAMP_CHAINE],
-    dependDe: [CHAMP_EXPRESSION],
-  };
+  return ecranChaineTransformations({ champ: CHAMP_CHAINE, consigne: CONSIGNE_GLOBALE, effectif: ex.effectif, figure: figureEtPoints(ex).figure, poids: POIDS_CHAINE, nom: NOMS_ECRANS_FX[CHAMP_CHAINE] as string, dependDe: [CHAMP_EXPRESSION] });
 }
 
 export function ecransFx(ex: ExerciceFx): EcranDeclare[] {

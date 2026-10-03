@@ -4,7 +4,7 @@
 export {}; // module
 
 import { creerPrng } from "../lib/prng";
-import { coefficient, decalerP, degre, egalP, estNul, foisP, lirePolynome, plusP, rapportProportionnel, type Polynome } from "../src/generateurs/fxDepuisGraphe/polynome";
+import { coefficient, decalerP, degre, egalP, estNul, foisP, lirePolynome, plusP, rapportProportionnel, type Polynome } from "../src/generateurs/_noyauQuadratique/polynome";
 import { rat, egalR, type Rat } from "../src/generateurs/analyseFonctionMotifDelta/exact/rationnel";
 
 const echecs: string[] = [];

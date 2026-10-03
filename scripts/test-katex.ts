@@ -96,6 +96,13 @@ for (const [nom, empreinte] of Object.entries(EMPREINTES)) verifier(sha(join(DOS
     const r = rendre(`\\htmlClass{moteur-coef-${autorise}}{3}x`, true);
     verifier(r.ok && classesDe(r.html).includes(`moteur-coef-${autorise}`), `roles : \\htmlClass{moteur-coef-${autorise}} accepté et posé`);
   }
+  // Emphase neutre (RAPPORT §59) : acceptée comme classe, avec `roles` seulement ; toute variante voisine est refusée.
+  {
+    const r = rendre("\\htmlClass{moteur-emphase}{\\left(\\dfrac{b}{2a}\\right)^2}", true);
+    verifier(r.ok && classesDe(r.html).includes("moteur-emphase"), "roles : \\htmlClass{moteur-emphase} accepté et posé");
+    verifier(!rendre("\\htmlClass{moteur-emphase}{3}").ok, "hors formule_coloree, l'emphase est refusée comme toute classe");
+    for (const refuse of ["\\htmlClass{moteur-emphase2}{3}", "\\htmlClass{moteur-emphase moteur-coef-a}{3}", "\\htmlClass{x-moteur-emphase}{3}", "\\htmlClass{moteur-emphase evil}{3}"]) verifier(!rendre(refuse, true).ok, `roles : « ${refuse} » doit être refusé`);
+  }
   for (const refuse of ["\\htmlClass{evil}{3}", "\\htmlClass{moteur-coef-d}{3}", "\\htmlClass{moteur-coef-a moteur-coef-b}{3}", "\\htmlClass{moteur-coef-a evil}{3}", "\\htmlStyle{color:red}{3}", "\\htmlId{a}{3}", "\\htmlData{a=b}{3}", "\\href{http://exemple.test}{3}"]) {
     const r = rendre(refuse, true);
     verifier(!r.ok, `roles : « ${refuse} » doit être refusé`);
@@ -131,6 +138,12 @@ for (const [nom, empreinte] of Object.entries(EMPREINTES)) verifier(sha(join(DOS
     verifier(!/style="[^"]*color/.test(r.html), "aucune couleur en ligne dans la formule");
   }
   verifier(assemblerFormuleColoree([{ latex: "x", role: "z" }, { latex: "+1" }]) === "x+1", "un rôle inconnu n'ajoute aucune classe");
+  {
+    const chaine = assemblerFormuleColoree([{ latex: "3", role: "a" }, { latex: "+" }, { latex: "y", emphase: true }]);
+    const r = rendre(chaine, true);
+    verifier(r.ok && classesDe(r.html).filter((c) => c.startsWith("moteur-")).join() === "moteur-coef-a,moteur-emphase" && !/style="[^"]*color/.test(r.html), `emphase : une classe par segment, aucune couleur en ligne (${chaine})`);
+    verifier(assemblerFormuleColoree([{ latex: "y", emphase: false }]) === "y", "emphase: false n'ajoute rien");
+  }
   // Segment hostile (validerAide l'arrête déjà) : même s'il arrivait jusqu'au client, aucune classe étrangère ne sort.
   for (const hostile of ["}\\htmlClass{evil}{a", "\\htmlClass{evil}{a}", "}{\\htmlStyle{color:red}{a"]) {
     const r = rendre(assemblerFormuleColoree([{ latex: "3", role: "a" }, { latex: hostile }]), true);
@@ -171,7 +184,7 @@ function verifierEcrans(ex: ReturnType<typeof projeterMotifDelta>, contexte: str
       verifier(validerAide(e.aide).length === 0, `${contexte}/${e.champ} : aide typée valide`);
       if (e.aide.type === "formule_coloree") {
         segmentsCompiles++;
-        verifier(rendre(assemblerFormuleColoree(e.aide.segments), true).ok, `${contexte}/${e.champ} : formule_coloree assemblée compile`);
+        for (const segments of e.aide.paliers ? e.aide.paliers.map((p) => p.segments) : [e.aide.segments ?? []]) verifier(rendre(assemblerFormuleColoree(segments), true).ok, `${contexte}/${e.champ} : formule_coloree assemblée compile`);
       }
     }
   }

@@ -1503,6 +1503,11 @@
        * « aucune » ne passe pas par `construireLigneVariante`, donc n'aurait pas de bloc de cases.
        */
       "4e:67": [{ index: 0, variante_id: "fx_depuis_graphe" }],
+      /**
+       * gen9 « Complète le carré » (RAPPORT §59) — 4e/numero 68 : UNE variante (`completion_du_carre`), configurée par ligne comme gen8 ; la case « Translation horizontale (TH) » est
+       * OBLIGATOIRE (cochée et verrouillée : `obligatoires` du descripteur). Même forme que gen8 : `variantes` est un tableau d'un élément.
+       */
+      "4e:68": [{ index: 0, variante_id: "completion_du_carre" }],
     };
 
     /** Étape 1.1 : `variantes` peut être la chaîne littérale "aucune" — jamais itérée comme un tableau. */
@@ -1780,8 +1785,14 @@
         const coche = document.createElement("input");
         coche.type = "checkbox";
         coche.dataset.caseId = c.id;
-        // Une nouvelle ligne naît VIDE (décision D de l'audit) : jamais de case pré-cochée ; seules les cases d'une ligne restaurée (Modifier / Dupliquer) le sont.
-        coche.checked = (valeurs.actives ?? []).includes(c.id);
+        // Une nouvelle ligne naît VIDE (décision D de l'audit) : jamais de case pré-cochée ; seules les cases d'une ligne restaurée (Modifier / Dupliquer) le sont — et les cases
+        // OBLIGATOIRES du descripteur (RAPPORT §59), cochées et verrouillées : le serveur refuse de toute façon une ligne qui en omet une.
+        const obligatoire = (descripteur.obligatoires ?? []).includes(c.id);
+        coche.checked = obligatoire || (valeurs.actives ?? []).includes(c.id);
+        if (obligatoire) {
+          coche.disabled = true;
+          coche.title = "Cette case est obligatoire pour cette variante.";
+        }
         coche.addEventListener("change", () => {
           // Cases exclusives (ex. EV / CV) : en cocher une décoche les autres du groupe — l'interface l'applique, le serveur le refuse de toute façon.
           if (coche.checked) {
@@ -1982,7 +1993,7 @@
       8: "Géométrie dans l'espace",
     };
     const NUMEROS_PAR_CHAPITRE_4E = {
-      1: [7, 8, 9, 67, 55, 57, 60],
+      1: [7, 8, 9, 67, 68, 55, 57, 60],
       2: [1, 2, 3, 4, 5, 6, 61],
       3: [10, 11, 12, 13, 56, 62],
       4: [30, 31, 32, 33, 34, 35, 36, 37, 38, 59],

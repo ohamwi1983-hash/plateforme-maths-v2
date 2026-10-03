@@ -9,7 +9,10 @@ import { commandesInterditesDans } from "./balisageMath";
  *  - `formule_coloree` : une formule découpée en segments LaTeX (sans `$`) ; `role` colore un segment
  *    (a, b ou c — classes `moteur-coef-a|b|c`, tokens de design). Le client assemble les segments. Un
  *    segment n'est jamais vide : un coefficient de valeur absolue 1 s'écrit sans chiffre, il n'y a rien à
- *    colorer, on OMET le segment (son signe reste dans un segment sans rôle).
+ *    colorer, on OMET le segment (son signe reste dans un segment sans rôle). Deux extensions (RAPPORT §59, MÊME forme, pas une 4ᵉ) :
+ *      · `emphase: true` sur un segment : mise en évidence NEUTRE d'une quantité qui n'est pas un coefficient (fond + soulignement, aucun token `--coef-*`) ; jamais avec un `role` ;
+ *      · `paliers` (1 à 3) À LA PLACE de `segments` : chaque palier a sa légende (texte d'auteur, facultative) et SA formule complète. Le serveur ne sert que le palier demandé
+ *        (même mécanisme que `annotations_figure` : `aides_utilisees.palier`, pénalité binaire).
  *  - `croquis_parabole` : croquis qualitatif de y = ax² + bx + c (a, b, c réels FINIS, a ≠ 0 ; entiers ou non : RAPPORT §49, coefficients irrationnels) ; les options
  *    ajoutent des surcouches (marque S, surlignage de l'ensemble-image, marques sur Ox). Le client
  *    calcule la géométrie : c'est un AFFICHAGE, jamais une vérification.
@@ -22,10 +25,29 @@ export interface SegmentFormule {
   /** Fragment LaTeX, sans délimiteur `$`, sans commande de couleur/lien/image. */
   latex: string;
   role?: RoleCoefficient;
+  /** Mise en évidence neutre (jamais avec `role`). */
+  emphase?: boolean;
 }
 
+/** Un palier d'une aide `formule_coloree` : une légende d'auteur facultative et la formule COMPLÈTE de ce palier (rien n'est cumulé : le générateur reprend ce qu'il veut garder). */
+export interface PalierFormule {
+  legende?: string;
+  segments: SegmentFormule[];
+}
+
+/** Exactement UNE des deux écritures : `segments` (aide sans paliers, historique) ou `paliers`. */
 export interface AideFormuleColoree {
   type: "formule_coloree";
+  segments?: SegmentFormule[];
+  paliers?: PalierFormule[];
+}
+
+/** Ce que le navigateur reçoit pour une `formule_coloree` À PALIERS : un palier, le nombre total de paliers, sa légende et sa formule. */
+export interface AideFormuleColoreeServie {
+  type: "formule_coloree";
+  palier: number;
+  palierTotal: number;
+  legende?: string;
   segments: SegmentFormule[];
 }
 
@@ -79,16 +101,35 @@ export const ANNOTATIONS_PAR_PALIER_MAX = 6;
 export const ETIQUETTE_LONGUEUR_MAX = 60;
 export const COORDONNEE_MAX = 1e6;
 
-/** Nombre de paliers d'une aide DÉCLARÉE (1 pour toute aide sans paliers). */
-export function nombrePaliers(aide: unknown): number {
-  if (typeof aide === "object" && aide !== null && (aide as { type?: unknown }).type === "annotations_figure" && Array.isArray((aide as { paliers?: unknown }).paliers)) {
-    return (aide as { paliers: unknown[] }).paliers.length;
-  }
-  return 1;
+export type AideFormuleAPaliers = AideFormuleColoree & { paliers: PalierFormule[] };
+/** Les deux écritures d'aide à paliers. */
+export type AideAPaliers = AideAnnotationsFigure | AideFormuleAPaliers;
+export type AideServieAPaliers = AideAnnotationsFigureServie | AideFormuleColoreeServie;
+
+/** Une aide typée DÉCLARÉE est-elle à paliers ? (`annotations_figure`, ou `formule_coloree` écrite avec `paliers`.) Seule porte de décision côté serveur. */
+export function aideAPaliers(aide: unknown): aide is AideAPaliers {
+  if (typeof aide !== "object" || aide === null) return false;
+  const a = aide as { type?: unknown; paliers?: unknown };
+  return (a.type === "annotations_figure" || a.type === "formule_coloree") && Array.isArray(a.paliers);
 }
 
-/** Réduit une aide VALIDÉE au palier `palier` (1-indexé) : annotations cumulées des paliers ≤ `palier`, légende du palier `palier`. */
-export function aideAuPalier(aide: AideAnnotationsFigure, palier: number): AideAnnotationsFigureServie {
+/** Nombre de paliers d'une aide DÉCLARÉE (1 pour toute aide sans paliers). */
+export function nombrePaliers(aide: unknown): number {
+  return aideAPaliers(aide) ? aide.paliers.length : 1;
+}
+
+/**
+ * Réduit une aide VALIDÉE à paliers au palier `palier` (1-indexé). `annotations_figure` : annotations cumulées des paliers ≤ `palier`, légende du palier `palier`. `formule_coloree` : la légende et la
+ * formule du palier `palier` SEULS (chaque palier est complet).
+ */
+export function aideAuPalier(aide: AideAnnotationsFigure, palier: number): AideAnnotationsFigureServie;
+export function aideAuPalier(aide: AideFormuleAPaliers, palier: number): AideFormuleColoreeServie;
+export function aideAuPalier(aide: AideAPaliers, palier: number): AideServieAPaliers;
+export function aideAuPalier(aide: AideAPaliers, palier: number): AideServieAPaliers {
+  if (aide.type === "formule_coloree") {
+    const p = aide.paliers[palier - 1] as PalierFormule;
+    return { type: "formule_coloree", palier, palierTotal: aide.paliers.length, ...(p.legende !== undefined ? { legende: p.legende } : {}), segments: p.segments };
+  }
   const retenus = aide.paliers.slice(0, palier);
   return {
     type: "annotations_figure",
@@ -109,6 +150,32 @@ function clesInconnues(objet: Record<string, unknown>, autorisees: readonly stri
   return Object.keys(objet).filter((k) => !autorisees.includes(k));
 }
 
+/** Problèmes d'une liste de segments de formule (vide = valide). `lieu` préfixe chaque message. */
+function validerSegments(segments: unknown, lieu: string): string[] {
+  const problemes: string[] = [];
+  if (!Array.isArray(segments) || segments.length === 0) return [`${lieu} : \`segments\` doit être un tableau non vide`];
+  if (segments.length > NB_SEGMENTS_MAX) problemes.push(`${lieu} : ${segments.length} segments (maximum ${NB_SEGMENTS_MAX})`);
+  segments.forEach((segment: unknown, i: number) => {
+    if (typeof segment !== "object" || segment === null || Array.isArray(segment)) {
+      problemes.push(`${lieu} : segment ${i} : objet attendu`);
+      return;
+    }
+    const s = segment as Record<string, unknown>;
+    for (const k of clesInconnues(s, ["latex", "role", "emphase"])) problemes.push(`${lieu} : segment ${i} : clé inconnue « ${k} »`);
+    if (typeof s.latex !== "string" || s.latex.trim() === "") {
+      problemes.push(`${lieu} : segment ${i} : \`latex\` doit être une chaîne non vide`);
+    } else {
+      if (s.latex.length > LONGUEUR_LATEX_MAX) problemes.push(`${lieu} : segment ${i} : ${s.latex.length} caractères (maximum ${LONGUEUR_LATEX_MAX})`);
+      if (s.latex.includes("$")) problemes.push(`${lieu} : segment ${i} : le fragment ne doit contenir aucun « $ » (tout est déjà mathématique)`);
+      for (const c of commandesInterditesDans(s.latex)) problemes.push(`${lieu} : segment ${i} : commande interdite \\${c}`);
+    }
+    if (s.role !== undefined && !(ROLES_COEFFICIENT as readonly unknown[]).includes(s.role)) problemes.push(`${lieu} : segment ${i} : rôle « ${String(s.role)} » inconnu (a, b ou c)`);
+    if (s.emphase !== undefined && typeof s.emphase !== "boolean") problemes.push(`${lieu} : segment ${i} : \`emphase\` doit être un booléen`);
+    if (s.emphase === true && s.role !== undefined) problemes.push(`${lieu} : segment ${i} : \`emphase\` et \`role\` s'excluent (l'emphase n'est pas un coefficient)`);
+  });
+  return problemes;
+}
+
 /** Liste des problèmes d'une aide typée (vide = valide). Ne lève jamais. */
 export function validerAide(aide: unknown): string[] {
   if (typeof aide !== "object" || aide === null || Array.isArray(aide)) return ["aide typée : objet attendu"];
@@ -116,27 +183,37 @@ export function validerAide(aide: unknown): string[] {
   const problemes: string[] = [];
 
   if (objet.type === "formule_coloree") {
-    for (const k of clesInconnues(objet, ["type", "segments"])) problemes.push(`formule_coloree : clé inconnue « ${k} »`);
-    if (!Array.isArray(objet.segments) || objet.segments.length === 0) {
-      problemes.push("formule_coloree : `segments` doit être un tableau non vide");
+    for (const k of clesInconnues(objet, ["type", "segments", "paliers"])) problemes.push(`formule_coloree : clé inconnue « ${k} »`);
+    const aSegments = objet.segments !== undefined;
+    const aPaliers = objet.paliers !== undefined;
+    if (aSegments === aPaliers) {
+      problemes.push("formule_coloree : exactement UNE des clés `segments` ou `paliers` est attendue");
       return problemes;
     }
-    if (objet.segments.length > NB_SEGMENTS_MAX) problemes.push(`formule_coloree : ${objet.segments.length} segments (maximum ${NB_SEGMENTS_MAX})`);
-    objet.segments.forEach((segment: unknown, i: number) => {
-      if (typeof segment !== "object" || segment === null || Array.isArray(segment)) {
-        problemes.push(`formule_coloree : segment ${i} : objet attendu`);
+    if (aSegments) {
+      problemes.push(...validerSegments(objet.segments, "formule_coloree"));
+      return problemes;
+    }
+    if (!Array.isArray(objet.paliers) || objet.paliers.length === 0 || objet.paliers.length > PALIERS_MAX) {
+      problemes.push(`formule_coloree : \`paliers\` doit être un tableau de 1 à ${PALIERS_MAX} paliers`);
+      return problemes;
+    }
+    objet.paliers.forEach((palier: unknown, i: number) => {
+      const lieu = `formule_coloree : palier ${i + 1}`;
+      if (typeof palier !== "object" || palier === null || Array.isArray(palier)) {
+        problemes.push(`${lieu} : objet attendu`);
         return;
       }
-      const s = segment as Record<string, unknown>;
-      for (const k of clesInconnues(s, ["latex", "role"])) problemes.push(`formule_coloree : segment ${i} : clé inconnue « ${k} »`);
-      if (typeof s.latex !== "string" || s.latex.trim() === "") {
-        problemes.push(`formule_coloree : segment ${i} : \`latex\` doit être une chaîne non vide`);
-      } else {
-        if (s.latex.length > LONGUEUR_LATEX_MAX) problemes.push(`formule_coloree : segment ${i} : ${s.latex.length} caractères (maximum ${LONGUEUR_LATEX_MAX})`);
-        if (s.latex.includes("$")) problemes.push(`formule_coloree : segment ${i} : le fragment ne doit contenir aucun « $ » (tout est déjà mathématique)`);
-        for (const c of commandesInterditesDans(s.latex)) problemes.push(`formule_coloree : segment ${i} : commande interdite \\${c}`);
+      const p = palier as Record<string, unknown>;
+      for (const k of clesInconnues(p, ["legende", "segments"])) problemes.push(`${lieu} : clé inconnue « ${k} »`);
+      if (p.legende !== undefined) {
+        if (typeof p.legende !== "string" || p.legende.trim() === "") problemes.push(`${lieu} : \`legende\` doit être une chaîne non vide`);
+        else {
+          if (p.legende.length > LONGUEUR_LATEX_MAX) problemes.push(`${lieu} : légende de ${p.legende.length} caractères (maximum ${LONGUEUR_LATEX_MAX})`);
+          for (const c of commandesInterditesDans(p.legende)) problemes.push(`${lieu} : commande interdite \\${c}`);
+        }
       }
-      if (s.role !== undefined && !(ROLES_COEFFICIENT as readonly unknown[]).includes(s.role)) problemes.push(`formule_coloree : segment ${i} : rôle « ${String(s.role)} » inconnu (a, b ou c)`);
+      problemes.push(...validerSegments(p.segments, lieu));
     });
     return problemes;
   }

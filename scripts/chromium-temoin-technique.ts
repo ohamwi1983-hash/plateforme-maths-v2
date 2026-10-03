@@ -22,7 +22,7 @@ import { join } from "node:path";
 import { demarrerServeur, stubSupabase } from "./support/serveurChromium";
 import { appeler, creerScenario, creerTache, imposerProfilAssignation, installerBase, type Scenario } from "./support/harnaisRouteur";
 import {
-  CHAMP_ALLURE, CHAMP_AXE, CHAMP_COEFFICIENTS, CHAMP_COURBE, CHAMP_DIVISEURS, CHAMP_EXTREMUM, CHAMP_IMAGE, CHAMP_PARITE, CHAMP_QUOTIENT, CHAMP_RACINES, CHAMP_SIGNES, CHAMP_SIGNES_VARIATION, CHAMP_SOMME,
+  CHAMP_ALLURE, CHAMP_CARRE, CHAMP_AXE, CHAMP_COEFFICIENTS, CHAMP_COURBE, CHAMP_DIVISEURS, CHAMP_EXTREMUM, CHAMP_IMAGE, CHAMP_PARITE, CHAMP_QUOTIENT, CHAMP_RACINES, CHAMP_SIGNES, CHAMP_SIGNES_VARIATION, CHAMP_SOMME,
   generateurTemoinTechnique as temoin, graineDeProfil, reponseBruteCorrecte, VARIANTE_TEMOIN, type ExerciceEtendu, type ExerciceTemoin,
 } from "../src/generateurs/_temoinTechnique";
 
@@ -34,11 +34,15 @@ import { projeterMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta
 import { champsMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/ecrans";
 import { fonctionEffective, fonctionVraie, type ExerciceMotifDelta } from "../src/generateurs/analyseFonctionMotifDelta/types";
 import { genererExerciceFx } from "../src/generateurs/fxDepuisGraphe/generation";
-import { chaineCanonique, parametreEtape, transformationsAdmises, POLYNOME_DEPART } from "../src/generateurs/fxDepuisGraphe/chaine";
-import { latexFonction } from "../src/generateurs/fxDepuisGraphe/formatage";
-import { parametres as parametresFx, polynomeDe as polynomeDeFx, type Parametres as ParametresFx, type Transformation as TransformationFx } from "../src/generateurs/fxDepuisGraphe/types";
-import { constante as constanteFx, plusP as plusPFx } from "../src/generateurs/fxDepuisGraphe/polynome";
+import { chaineCanonique, parametreEtape, transformationsAdmises, POLYNOME_DEPART } from "../src/generateurs/_noyauQuadratique/chaine";
+import { latexFonction } from "../src/generateurs/_noyauQuadratique/formatage";
+import { parametres as parametresFx } from "../src/generateurs/fxDepuisGraphe/types";
+import { polynomeDe as polynomeDeFx, type Parametres as ParametresFx, type Transformation as TransformationFx } from "../src/generateurs/_noyauQuadratique/types";
+import { constante as constanteFx, plusP as plusPFx } from "../src/generateurs/_noyauQuadratique/polynome";
 import { rat as ratFx, signeR as signeRFx, type Rat as RatFx } from "../src/generateurs/analyseFonctionMotifDelta/exact/rationnel";
+import { genererExerciceCc } from "../src/generateurs/completionDuCarre/generation";
+import { latexFonctionDeveloppee } from "../src/generateurs/completionDuCarre/enonce";
+import { parametres as parametresCc } from "../src/generateurs/completionDuCarre/types";
 
 const RACINE = join(__dirname, "..");
 const CAPTURES = process.env.CAPTURES_DIR ?? join(RACINE, "captures-chromium");
@@ -2330,6 +2334,57 @@ async function scenarioFigureAidePaliers(navigateur: any, base: string, largeur:
 }
 
 /**
+ * Aide `formule_coloree` À PALIERS avec EMPHASE (RAPPORT §59) sur le TÉMOIN (profil `formule`) : le palier 1 montre la légende et la formule SANS emphase ; « Un indice de plus ? » sert le palier 2, où
+ * la quantité `(b/2a)²` est mise en évidence (rendue par KaTeX, sans couleur en ligne ni repli en source) ; une seule pénalité ; recharger la page rejoue le palier atteint (« Revoir l'indice »).
+ */
+async function scenarioFormulePaliers(navigateur: any, base: string, largeur: number) {
+  const l = `${largeur} formule paliers`;
+  imposerProfilAssignation("formule");
+  const s: Scenario = creerScenario();
+  installerBase(s.base);
+  const tacheId = creerTache(s, { nom: "Formule à paliers", aide_activee: true, aide_penalite_pourcent: 25, reponse_visible: true, variantes: [{ variante_id: VARIANTE_TEMOIN, nombre_exercices: 1 }] });
+  const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tacheId, eleve_ids: ["eleve-1"] } });
+  verifier(a.statut === 201, `${l} : assignation ${a.statut}`);
+  const ligne = s.base.table("exercices_assignes")[0]!;
+  const ex = temoin.generer(Number(ligne.graine));
+  const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+  const courant = page.locator(".moteur-ecran-courant");
+  await page.waitForSelector(".moteur-champ-expression");
+  verifier((await courant.locator(".moteur-aide-texte").isHidden()) && (await courant.locator(".moteur-emphase").count()) === 0, `${l} : zone d'aide fermée, aucune emphase d'office`);
+  const bouton = courant.locator(".moteur-aide button");
+  await bouton.click();
+  if ((await bouton.innerText()).startsWith("Confirmer")) await bouton.click();
+  await page.waitForSelector(".moteur-formule-palier");
+  verifier((await courant.locator(".moteur-formule-palier .moteur-aide-legende").innerText()).length > 0 && (await courant.locator(".moteur-formule .katex").count()) === 1 && (await courant.locator(".moteur-emphase").count()) === 0, `${l} : palier 1 : légende + formule, SANS emphase`);
+  verifier(/Un indice de plus/.test(await bouton.innerText()), `${l} : « Un indice de plus ? » proposé`);
+  await bouton.click();
+  await page.waitForSelector(".moteur-emphase");
+  verifier((await courant.locator(".moteur-emphase").count()) === 1 && (await courant.locator(".moteur-emphase").evaluate((e: any) => e.closest(".katex-html") !== null)) && (await page.locator(".moteur-math-source").count()) === 0, `${l} : palier 2 : UNE quantité en emphase, rendue par KaTeX`);
+  const emphase = courant.locator(".moteur-emphase");
+  const bordure = (await emphase.evaluate((e: any) => getComputedStyle(e).borderBottomWidth)) as string;
+  verifier(bordure === "2px" && (await emphase.evaluate((e: any) => !(e.getAttribute("style") ?? "").includes("color"))), `${l} : l'emphase est un soulignement épais (la couleur ne suffit pas) et n'a aucune couleur en ligne`);
+  verifier((await courant.locator(".moteur-aide button:visible").count()) === 0, `${l} : après le dernier palier, plus de bouton d'indice`);
+  verifier(journal.requetes.filter((r: any) => r.url.endsWith("/api/reponses/aide")).map((r: any) => JSON.parse(r.corps ?? "{}").palier).join() === ",2", `${l} : première demande sans palier, la suivante palier 2`);
+  verifier(s.base.table("aides_utilisees").length === 1 && s.base.table("aides_utilisees")[0]!.palier === 2, `${l} : une seule ligne d'usage, palier 2 (pénalité binaire)`);
+  await page.reload();
+  await page.waitForSelector(".carte-tache");
+  await page.locator(".carte-tache").click();
+  await page.waitForSelector(".moteur-champ-expression");
+  verifier(/Revoir l'indice/.test(await courant.locator(".moteur-aide button").innerText()), `${l} : après rechargement, « Revoir l'indice »`);
+  await courant.locator(".moteur-aide button").click();
+  await page.waitForSelector(".moteur-emphase");
+  verifier((await courant.locator(".moteur-aide button:visible").count()) === 0 && s.base.table("aides_utilisees").length === 1, `${l} : « Revoir » rejoue le palier atteint (2), sans nouvelle pénalité`);
+  await page.screenshot({ path: join(CAPTURES, `${l.replace(/ /g, "-")}.png`), fullPage: true });
+  await courant.locator(".moteur-champ").fill(reponseBruteCorrecte(ex, CHAMP_CARRE));
+  await courant.getByRole("button", { name: "Valider", exact: true }).click();
+  await page.waitForSelector(".moteur-statut-correct");
+  verifier(!(await page.evaluate("document.documentElement.scrollWidth > window.innerWidth")), `${l} : pas de défilement horizontal`);
+  verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+  await contexte.close();
+  imposerProfilAssignation("aleatoire");
+}
+
+/**
  * Configuration PAR LIGNE de composition (RAPPORT §55) dans le formulaire du professeur, avec le générateur de TEST à configuration (scripts/support/generateurConfigurable.ts) :
  * il n'est ni dans le catalogue réel ni dans l'arbre JSON, donc injecté ici au registre/catalogue du serveur ET dans la page (arbre JSON + table de correspondance, par interception).
  * Vérifie : lignes ajoutées/retirées, nouvelle ligne VIDE (jamais pré-cochée), message et bouton « Créer » désactivé, cases exclusives, doublons signalés, envoi et stockage de la
@@ -3100,6 +3155,278 @@ async function scenarioApercu(navigateur: any, base: string, largeur: number) {
   await contexte.close();
 }
 
+// ══ gen9 « Complète le carré » (RAPPORT §59) : câblage prof.html (CLAUDE.md « discipline de câblage »), puis parcours élève ══
+
+/**
+ * Câblage RÉEL de gen9 dans `prof.html` (aucune interception : vrai JSON, vraie table `CORRESPONDANCE_JSON_VERS_PILOTE`, vrai `GET /api/catalogue-generateurs`) : l'entrée « 68. Complète le carré » est
+ * dans « La fonction du second degré », sa variante est un BLOC de lignes configurables dont le champ « nombre d'exercices » n'est PAS `disabled`, la case TH y est OBLIGATOIRE (cochée et
+ * verrouillée), une tâche à DEUX lignes est créée par l'interface puis assignée par la route réelle.
+ */
+async function scenarioGen9Prof(navigateur: any, base: string, largeur: number) {
+  const l = `${largeur} gen9 prof`;
+  const s: Scenario = creerScenario();
+  installerBase(s.base);
+  const { page, contexte, journal } = await preparerPage(navigateur, base, largeur, largeur < 600 ? 800 : 900, `prof:${s.profId}`, "p@x");
+  await page.goto(base + "/prof.html");
+  await page.waitForSelector('button[data-onglet="taches"]:visible');
+  await page.locator('button[data-onglet="taches"]').click();
+  await page.locator("#bouton-accordeon-creer").click();
+  await page.waitForSelector("#composition-dynamique input.stepper-valeur", { state: "attached" });
+  await page.evaluate("document.querySelectorAll('#composition-dynamique details').forEach((d) => { d.open = true; })");
+  const bloc = '#composition-dynamique [data-config-variante-id="completion_du_carre"]';
+  verifier((await page.locator(bloc).count()) === 1, `${l} : la variante completion_du_carre est un bloc de lignes configurables (entrée JSON + correspondance + descripteur serveur)`);
+  const arbre = (await page.evaluate(`(() => { const d = document.querySelector('${bloc}').closest("details.arbre-generateur"); const chapitre = d.parentElement.closest("details"); return { generateur: d.querySelector("summary").textContent.trim(), chapitre: chapitre ? chapitre.querySelector("summary").textContent.trim() : null }; })()`)) as { generateur: string; chapitre: string | null };
+  verifier(arbre.generateur === "68. Complète le carré" && /second degré/.test(arbre.chapitre ?? ""), `${l} : rangé sous « La fonction du second degré » (${JSON.stringify(arbre)})`);
+  verifier((await page.locator(`${bloc} .ligne-config`).count()) === 0 && (await page.locator(`${bloc} .ajouter-ligne-config`).isEnabled()), `${l} : aucune ligne au départ ; « Ajouter une ligne » actif (équivalent du champ non disabled)`);
+  await page.locator("#nom-tache").fill("Complète le carré");
+  await page.locator(`${bloc} .ajouter-ligne-config`).click();
+  await page.locator(`${bloc} .ajouter-ligne-config`).click();
+  const lignes = page.locator(`${bloc} .ligne-config`);
+  const th = lignes.nth(0).locator('input[data-case-id="TH"]');
+  verifier((await th.isChecked()) && (await th.isDisabled()) && (await lignes.nth(0).locator('input[data-case-id="TV"]').isChecked()) === false, `${l} : TH est cochée et VERROUILLÉE dès la naissance de la ligne, les autres cases vides`);
+  verifier((await page.locator(`${bloc} input[data-variante-id="completion_du_carre"]:disabled`).count()) === 0 && (await lignes.nth(0).locator("input[data-variante-id]").isEnabled()), `${l} : champs « nombre d'exercices » NON désactivés`);
+  verifier(await page.locator("#btn-creer-tache").isEnabled(), `${l} : « Créer » actif : une ligne TH seule est valide`);
+  const cocher = async (ligne: number, id: string) => lignes.nth(ligne).locator(`.case-config:has(input[data-case-id="${id}"])`).click();
+  await cocher(0, "EV");
+  await cocher(0, "CV"); // exclusif avec EV : décoche EV
+  verifier(!(await lignes.nth(0).locator('input[data-case-id="EV"]').isChecked()) && (await lignes.nth(0).locator('input[data-case-id="CV"]').isChecked()) && (await th.isChecked()), `${l} : EV et CV s'excluent ; TH reste cochée`);
+  await cocher(0, "EV");
+  await cocher(1, "TV");
+  await cocher(1, "SOX");
+  await lignes.nth(1).locator("input[data-variante-id]").fill("2");
+  await page.screenshot({ path: join(CAPTURES, `${largeur}-gen9-prof-formulaire.png`), fullPage: false });
+  verifier(!(await page.evaluate("document.documentElement.scrollWidth > window.innerWidth")), `${l} : pas de défilement horizontal`);
+  await page.locator("#btn-creer-tache").click();
+  await page.waitForFunction(`document.getElementById("nom-tache").value === ""`);
+  const composition = s.base.table("taches_composition");
+  verifier(composition.length === 2 && composition.every((c) => c.variante_id === "completion_du_carre" && c.generateur_id === "gen9"), `${l} : deux lignes de composition gen9 créées par l'interface`);
+  verifier(JSON.stringify(composition.map((c) => c.configuration)) === '[{"actives":["TH","EV"]},{"actives":["TH","TV","SOX"]}]' && JSON.stringify(composition.map((c) => c.nombre_exercices)) === "[1,2]", `${l} : configurations canoniques (TH incluse) et nombres stockés (${JSON.stringify(composition.map((c) => [c.configuration, c.nombre_exercices]))})`);
+  const tacheId = s.base.table("taches").find((t) => t.nom === "Complète le carré")!.id as string;
+  const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: tacheId, eleve_ids: ["eleve-1"] } });
+  verifier(a.statut === 201 && a.corps.nombre_exercices_generes === 3, `${l} : assignation de la tâche créée (${a.statut} ${JSON.stringify(a.corps)})`);
+  const exercices = s.base.table("exercices_assignes").filter((x) => x.tache_id === tacheId);
+  verifier(exercices.length === 3 && exercices.filter((x) => JSON.stringify(x.configuration) === '{"actives":["TH","EV"]}').length === 1 && exercices.filter((x) => JSON.stringify(x.configuration) === '{"actives":["TH","TV","SOX"]}').length === 2 && exercices.every((x) => typeof x.composition_id === "string"), `${l} : exercices assignés : configuration figée et ligne d'origine`);
+  verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+  await contexte.close();
+}
+
+/** Tâche gen9 d'UNE ligne (configuration donnée), assignée à l'élève avec la graine voulue ; renvoie l'exercice brut. */
+async function assignerCc(s: Scenario, actives: TransformationFx[], graine: number, options: { feedback?: boolean; visible?: boolean; aide?: boolean; tentatives?: number; nombre?: number } = {}) {
+  imposerProfilAssignation("aleatoire");
+  const cree = await appeler("taches", "POST", {
+    jeton: `prof:${s.profId}`,
+    corps: { nom: `gen9 ${actives.join("+")}`, feedback_immediat: options.feedback ?? true, reponse_visible: options.visible ?? true, tentatives_supplementaires: options.tentatives ?? 0, aide_activee: options.aide ?? false, composition: [{ variante_id: "completion_du_carre", nombre_exercices: options.nombre ?? 1, configuration: { actives } }] },
+  });
+  verifier(cree.statut === 201, `gen9 ${actives.join("+")} : création de la tâche ${cree.statut} ${JSON.stringify(cree.corps)}`);
+  const origine = Math.random;
+  Math.random = () => graine / 2 ** 32;
+  try {
+    const a = await appeler("assignations", "POST", { jeton: `prof:${s.profId}`, corps: { tache_id: cree.corps.id, eleve_ids: ["eleve-1"] } });
+    verifier(a.statut === 201, `gen9 ${actives.join("+")} : assignation ${a.statut} ${JSON.stringify(a.corps)}`);
+  } finally {
+    Math.random = origine;
+  }
+  const ligne = s.base.table("exercices_assignes").find((x) => x.tache_id === cree.corps.id)!;
+  const brut = genererExerciceCc(Number(ligne.graine), { actives });
+  return { brut, f: parametresCc(brut), tacheId: cree.corps.id as string, ligne };
+}
+
+/** Réponse d'élève de l'écran 1 portant UNE erreur mécanique (a juste) : `{ p', q' }` choisis par l'appelant ; écrite par `ecritureFx` (forme canonique). */
+const avecErreur = (f: ParametresFx, p: RatFx, q: RatFx): string => ecritureFx({ a: f.a, p, q });
+const ratProduit = (x: RatFx, y: RatFx): RatFx => ratFx(x.n * y.n, x.d * y.d);
+const ratSomme = (x: RatFx, y: RatFx): RatFx => ratFx(x.n * y.d + y.n * x.d, x.d * y.d);
+
+/**
+ * Parcours gen9 dans le navigateur : (1) parcours juste pour plusieurs configurations, avec le score aux deux écrans (3 + 2) ; (2) RECOPIER l'énoncé développé : « Ta réponse n'a pas pu être lue »
+ * + le message sur la forme attendue, la tentative suivante est acceptée ; (3) CHAQUE code de l'écran 1 stocké mais jamais affiché ; à a = −1 AUCUN code (collisions) ; (4) les DEUX paliers d'aide
+ * (formule, puis schéma avec la quantité en emphase) ; (5) l'écran 2 sous les trois régimes (option 4).
+ */
+async function scenarioGen9Eleve(navigateur: any, base: string, largeur: number) {
+  const CONFIGS: { actives: TransformationFx[]; nom: string }[] = [
+    { actives: ["TH"], nom: "TH seule" },
+    { actives: ["TH", "TV"], nom: "TH+TV" },
+    { actives: ["TH", "EV"], nom: "TH+EV" },
+    { actives: ["TH", "CV", "SOX"], nom: "TH+CV+SOX" },
+    { actives: ["TH", "TV", "EV", "SOX"], nom: "TH+TV+EV+SOX" },
+  ];
+  // ── 1. Parcours juste, score aux deux écrans ──
+  for (const cas of CONFIGS) {
+    const l = `${largeur} gen9 ${cas.nom}`;
+    const s: Scenario = creerScenario();
+    installerBase(s.base);
+    const { brut, f } = await assignerCc(s, cas.actives, 31337, { visible: true });
+    const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+    const courant = page.locator(".moteur-ecran-courant");
+    await page.waitForSelector(".moteur-champ-expression");
+    verifier((await page.locator(".moteur-ecran-courant .figure-svg").count()) === 0, `${l} : aucune figure (gen9 n'en a pas)`);
+    const consigne1 = await lireConsigneGen7(page);
+    const question1 = await lireQuestionGen7(page);
+    verifier(consigne1.startsWith("Complète le carré") && !consigne1.includes("$") && question1.includes(`$${latexFonctionDeveloppee(brut)}$`) && /forme canonique/.test(question1), `${l} : consigne générale ; la question donne f DÉVELOPPÉE et demande la forme canonique (« ${question1.slice(0, 140)} »)`);
+    const ordre1: string[] = await page.evaluate(`[...document.querySelector(".moteur-ecran-courant").children].map((e) => e.className.split(" ").filter((c) => /^(moteur-consigne|moteur-question|moteur-figure|moteur-champ-expression)$/.test(c))[0] ?? "").filter(Boolean)`);
+    verifier(ordre1.join() === "moteur-consigne,moteur-question,moteur-champ-expression", `${l} : ordre consigne / question / saisie (${ordre1.join()})`);
+    verifier((await page.locator(".moteur-ecran-courant .moteur-apercu-expression .katex").count()) === 1, `${l} : aperçu LaTeX de la saisie présent`);
+    await ecrireExpressionFx(page, ecritureFx(f));
+    await page.waitForSelector(".moteur-statut-correct");
+    await page.getByRole("button", { name: /Question suivante/ }).click();
+    await page.waitForSelector(".moteur-chaine");
+    const question2 = await lireQuestionGen7(page);
+    verifier(question2.includes(`$f(x) = ${latexFonction(f)}$`) && (await lireConsigneGen7(page)) === consigne1, `${l} : l'écran 2 garde la consigne et sa QUESTION reprend la fonction (« ${question2.slice(0, 120)} »)`);
+    verifier((await courant.locator(".moteur-chaine-etape").first().locator(".moteur-select option:not([disabled])").count()) === 5 && (await courant.locator(".moteur-aide button").count()) === 0, `${l} : cinq transformations au menu quelle que soit la ligne ; aucun bouton d'aide`);
+    await composerChaineFx(page, chaineEleveFx(f, cas.actives));
+    await page.waitForSelector(".moteur-statut-correct");
+    await page.getByRole("button", { name: /Voir la fin/ }).click();
+    await page.waitForSelector(".moteur-fin");
+    const rangees: string[] = await page.locator(".moteur-fin .moteur-recap-table tbody tr").allInnerTexts();
+    verifier(rangees.length === 3 && /^Forme canonique\s+3 \/ 3 pts$/.test(rangees[0]!) && /^Chaîne de transformations\s+2 \/ 2 pts$/.test(rangees[1]!) && /^Total\s+5 \/ 5 pts$/.test(rangees[2]!), `${l} : score aux DEUX écrans et total 5 / 5 (${JSON.stringify(rangees)})`);
+    verifier(s.base.table("reponses").length === 2 && s.base.table("reponses").every((r) => r.statut === "correct"), `${l} : deux réponses justes en base`);
+    await page.screenshot({ path: join(CAPTURES, `${largeur}-gen9-${cas.nom.replace(/[^A-Za-z0-9]+/g, "-")}.png`), fullPage: true });
+    verifier(!(await page.evaluate("document.documentElement.scrollWidth > window.innerWidth")), `${l} : pas de défilement horizontal`);
+    verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+    await contexte.close();
+  }
+
+  // ── 2. RECOPIER l'énoncé développé : parse_error (compte comme une tentative, `moteurTentatives.ts`), message sur la forme attendue, la tentative suivante est acceptée ──
+  {
+    const l = `${largeur} gen9 recopie`;
+    const s: Scenario = creerScenario();
+    installerBase(s.base);
+    const { f } = await assignerCc(s, ["TH", "EV"], 7070, { visible: true, tentatives: 1 });
+    const b = coefficientsDeveloppesCc(f);
+    const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+    const courant = page.locator(".moteur-ecran-courant");
+    await ecrireExpressionFx(page, `${b.a}x^2${b.b < 0 ? "" : "+"}${b.b}x${b.c < 0 ? "" : "+"}${b.c}`);
+    await page.waitForSelector(".moteur-statut-parse_error");
+    const message = await courant.locator(".moteur-message-syntaxe").innerText();
+    verifier(/Ta réponse n'a pas pu être lue/.test(await courant.innerText()) && /forme canonique/.test(message), `${l} : « Ta réponse n'a pas pu être lue » + message sur la forme canonique (« ${message.slice(0, 100)} »)`);
+    verifier(s.base.table("reponses").length === 1 && s.base.table("reponses")[0]!.statut === "parse_error", `${l} : la recopie est stockée comme parse_error (jamais correct)`);
+    verifier((await courant.locator(".moteur-solution").count()) === 0, `${l} : une tentative reste : rien n'est révélé`);
+    await page.screenshot({ path: join(CAPTURES, `${largeur}-gen9-recopie.png`), fullPage: true });
+    await courant.locator(".moteur-champ").fill(ecritureFx(f));
+    await courant.getByRole("button", { name: "Valider", exact: true }).click();
+    await page.waitForSelector(".moteur-statut-correct");
+    verifier(s.base.table("reponses").length === 2 && s.base.table("reponses")[1]!.statut === "correct", `${l} : la forme canonique juste est ensuite acceptée`);
+    verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+    await contexte.close();
+  }
+
+  // ── 3. Les codes de l'écran 1 : stockés, jamais affichés ; à a = −1 AUCUN code ; à a = 1 les codes « facteur oublié » n'existent pas ──
+  {
+    const CODES: { code: string; actives: TransformationFx[]; reponse: (f: ParametresFx) => string }[] = [
+      { code: "P_FACTEUR_A_OUBLIE", actives: ["TH", "EV"], reponse: (f) => avecErreur(f, ratProduit(f.a, f.p), f.q) },
+      { code: "SIGNE_P_INVERSE", actives: ["TH", "EV"], reponse: (f) => avecErreur(f, ratFx(-f.p.n, f.p.d), f.q) },
+      { code: "Q_FACTEUR_A_OUBLIE", actives: ["TH", "EV"], reponse: (f) => avecErreur(f, f.p, ratSomme(f.q, ratProduit(ratSomme(f.a, ratFx(-1)), ratProduit(f.p, f.p)))) },
+      { code: "Q_SIGNE_INVERSE", actives: ["TH", "EV"], reponse: (f) => avecErreur(f, f.p, ratSomme(f.q, ratProduit(ratProduit(ratFx(2), f.a), ratProduit(f.p, f.p)))) },
+      // a = 1 (TH seule) : les erreurs « signe de p » et « signe de q » existent toujours.
+      { code: "SIGNE_P_INVERSE", actives: ["TH"], reponse: (f) => avecErreur(f, ratFx(-f.p.n, f.p.d), f.q) },
+      { code: "Q_SIGNE_INVERSE", actives: ["TH"], reponse: (f) => avecErreur(f, f.p, ratSomme(f.q, ratProduit(ratFx(2), ratProduit(f.p, f.p)))) },
+      // a = −1 (TH + SOX) : p' = a·p = −p et q' = q + (a−1)p² = q + 2a·p² coïncident : AUCUN code.
+      { code: "", actives: ["TH", "SOX"], reponse: (f) => avecErreur(f, ratFx(-f.p.n, f.p.d), f.q) },
+      { code: "", actives: ["TH", "SOX"], reponse: (f) => avecErreur(f, f.p, ratSomme(f.q, ratProduit(ratFx(-2), ratProduit(f.p, f.p)))) },
+    ];
+    for (const [i, cas] of CODES.entries()) {
+      const l = `${largeur} gen9 code ${cas.code || "aucun (a = −1)"} ${cas.actives.join("+")} #${i}`;
+      const s: Scenario = creerScenario();
+      installerBase(s.base);
+      const { f } = await assignerCc(s, cas.actives, 5150 + i, { visible: true });
+      const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+      await ecrireExpressionFx(page, cas.reponse(f));
+      await page.waitForSelector(".moteur-statut-not_equivalent");
+      const ligne = s.base.table("reponses")[0]!;
+      const stocke = String(ligne.bug_detecte ?? "");
+      verifier(cas.code === "" ? stocke === "" : stocke.includes(cas.code), `${l} : code stocké « ${stocke} »`);
+      const texte = await page.locator("body").innerText();
+      verifier(!/(P_FACTEUR_A_OUBLIE|Q_FACTEUR_A_OUBLIE|SIGNE_P_INVERSE|Q_SIGNE_INVERSE)/.test(texte), `${l} : aucun code affiché à l'élève`);
+      verifier((await page.locator(".moteur-ecran-courant .moteur-partie-fausse").count()) >= 1, `${l} : le champ est surligné comme n'importe quelle réponse fausse (porte §52)`);
+      verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+      await contexte.close();
+    }
+  }
+
+  // ── 4. Les DEUX paliers d'aide ──
+  {
+    const l = `${largeur} gen9 aide`;
+    const s: Scenario = creerScenario();
+    installerBase(s.base);
+    const { f } = await assignerCc(s, ["TH", "TV", "EV"], 2718, { visible: true, aide: true });
+    const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+    const courant = page.locator(".moteur-ecran-courant");
+    await page.waitForSelector(".moteur-champ-expression");
+    verifier((await courant.locator(".moteur-emphase").count()) === 0, `${l} : aucune aide d'office`);
+    const bouton = courant.locator(".moteur-aide button");
+    await bouton.click();
+    if ((await bouton.innerText()).startsWith("Confirmer")) await bouton.click();
+    await page.waitForSelector(".moteur-formule-palier");
+    const palier1 = (await courant.locator(".moteur-formule .katex annotation").first().textContent()) as string;
+    verifier((await courant.locator(".moteur-formule-palier .moteur-aide-legende").innerText()).length > 0 && (await courant.locator(".moteur-emphase").count()) === 0 && /x\^2/.test(palier1) && (await courant.locator(".moteur-coef-a").count()) >= 1 && (await courant.locator(".moteur-coef-c").count()) >= 1, `${l} : palier 1 : a mis en facteur (rôles a et c), SANS emphase (« ${palier1} »)`);
+    verifier(/Un indice de plus/.test(await bouton.innerText()), `${l} : « Un indice de plus ? » proposé`);
+    await bouton.click();
+    await page.waitForSelector(".moteur-emphase");
+    const palier2 = (await courant.locator(".moteur-formule .katex annotation").first().textContent()) as string;
+    verifier((await courant.locator(".moteur-emphase").count()) === 1 && /\\dfrac\{b\}\{2a\}/.test(palier2) && !/[0-13-9]/.test(palier2), `${l} : palier 2 : le schéma SYMBOLIQUE, avec (b/2a)² en emphase (« ${palier2} »)`);
+    const emphase = courant.locator(".moteur-emphase");
+    verifier((await emphase.evaluate((e: any) => getComputedStyle(e).borderBottomWidth)) === "2px" && (await emphase.evaluate((e: any) => e.closest(".katex-html") !== null)) && (await page.locator(".moteur-math-source").count()) === 0, `${l} : l'emphase est un soulignement épais, rendue par KaTeX (jamais en source)`);
+    verifier((await courant.locator(".moteur-aide button:visible").count()) === 0, `${l} : après le dernier palier, plus de bouton d'indice`);
+    verifier(s.base.table("aides_utilisees").length === 1 && s.base.table("aides_utilisees")[0]!.palier === 2, `${l} : une seule ligne d'usage, palier 2 (pénalité binaire)`);
+    verifier(!(await page.evaluate("document.documentElement.scrollWidth > window.innerWidth")), `${l} : pas de défilement horizontal de la page avec le palier 2`);
+    await page.screenshot({ path: join(CAPTURES, `${largeur}-gen9-aide-palier-2.png`), fullPage: true });
+    await ecrireExpressionFx(page, ecritureFx(f));
+    await page.waitForSelector(".moteur-statut-correct");
+    verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+    await contexte.close();
+  }
+
+  // ── 5. Option 4 : une réponse fausse à l'écran 1, puis l'écran 2 sous les TROIS régimes ──
+  for (const regime of [
+    { nom: "coupée", o: { feedback: false, visible: false }, montree: false },
+    { nom: "immédiate sans case", o: { feedback: true, visible: false }, montree: false },
+    { nom: "immédiate avec case", o: { feedback: true, visible: true }, montree: true },
+  ]) {
+    const l = `${largeur} gen9 option 4 (${regime.nom})`;
+    const s: Scenario = creerScenario();
+    installerBase(s.base);
+    const { f } = await assignerCc(s, ["TH"], 99, regime.o);
+    const gEleve: ParametresFx = { a: ratFx(1), p: f.p, q: ratFx(5) }; // même p, q = 5 que TH ne justifie pas
+    const { page, contexte, journal } = await ouvrirTacheGen7(navigateur, base, largeur, s);
+    await ecrireExpressionFx(page, ecritureFx(gEleve));
+    if (regime.o.feedback) await page.waitForSelector(".moteur-statut-not_equivalent");
+    else await page.waitForSelector(".moteur-statut");
+    if (!regime.o.feedback) verifier((await page.locator(".moteur-statut-correct, .moteur-statut-not_equivalent, .moteur-solution").count()) === 0, `${l} : aucun verdict ni solution après l'écran 1`);
+    verifier((await page.locator(".moteur-solution").count() >= 1) === regime.montree, `${l} : la solution de l'écran 1 ${regime.montree ? "est" : "n'est PAS"} montrée`);
+    await page.getByRole("button", { name: /Question suivante/ }).click();
+    await page.waitForSelector(".moteur-chaine");
+    const question = await lireQuestionGen7(page);
+    const affichee = regime.montree ? f : gEleve;
+    verifier(question.includes(`$f(x) = ${latexFonction(affichee)}$`), `${l} : l'énoncé de l'écran 2 affiche ${regime.montree ? "la VRAIE fonction (§45)" : "la fonction confirmée par l'élève"} (« ${question.slice(0, 150)} »)`);
+    if (!regime.montree) verifier(!question.includes(`$f(x) = ${latexFonction(f)}$`), `${l} : la vraie fonction ne fuit pas`);
+    await composerChaineFx(page, chaineEleveFx(affichee, ["TH"]));
+    if (regime.o.feedback) {
+      await page.waitForSelector(".moteur-statut-correct");
+      verifier((await page.locator(".moteur-ecran-courant .moteur-statut-correct").count()) === 1, `${l} : la chaîne vers la fonction affichée est JUSTE, même avec une transformation que la ligne n'active pas`);
+    } else {
+      await page.waitForSelector(".moteur-statut, .moteur-fin, .moteur-retour");
+    }
+    await page.getByRole("button", { name: /Voir la fin/ }).click();
+    await page.waitForSelector(".moteur-fin");
+    const rangees: string[] = await page.locator(".moteur-fin .moteur-recap-table tbody tr").allInnerTexts();
+    const sansScore = regime.o.feedback && !regime.o.visible; // « le score suit la solution » (§50)
+    if (sansScore) verifier(rangees.length === 0 && (await page.locator(".moteur-rappel-score, .moteur-rappel-total-points").count()) === 0, `${l} : sans « Afficher la réponse attendue », aucun score n'est montré (verdicts seuls)`);
+    else verifier(rangees.length === 3 && /^Forme canonique\s+0 \/ 3 pts$/.test(rangees[0]!) && /^Chaîne de transformations\s+2 \/ 2 pts$/.test(rangees[1]!) && /^Total\s+2 \/ 5 pts$/.test(rangees[2]!), `${l} : écran 1 = 0 / 3, écran 2 = 2 / 2 : se tromper exprès ne rapporte JAMAIS plus que de réussir (${JSON.stringify(rangees)})`);
+    const reps = s.base.table("reponses");
+    verifier(reps.find((r) => r.champ === "chaine")?.statut === "correct" && reps.find((r) => r.champ === "forme")?.statut === "not_equivalent", `${l} : en base, écran 1 faux et écran 2 juste`);
+    await page.screenshot({ path: join(CAPTURES, `${largeur}-gen9-option-4-${regime.nom.replace(/[^A-Za-z]+/g, "-")}.png`), fullPage: true });
+    verifier(journal.pageerrors.length === 0, `${l} : erreurs JS : ${journal.pageerrors.join(" | ")}`);
+    await contexte.close();
+  }
+}
+
+/** Coefficients développés ENTIERS (gen9 les garantit) d'une fonction : `ax² + bx + c`, pour la saisie d'une recopie. */
+function coefficientsDeveloppesCc(f: ParametresFx): { a: number; b: number; c: number } {
+  const a = f.a.n / f.a.d;
+  const p = f.p.n / f.p.d;
+  const q = f.q.n / f.q.d;
+  return { a, b: -2 * a * p, c: a * p * p + q };
+}
+
 async function main() {
   const { serveur, url } = await demarrerServeur();
   const navigateur = await chromium.launch();
@@ -3107,15 +3434,28 @@ async function main() {
     await temoinControleHttp(navigateur, url);
     for (const largeur of [390, 1280]) {
       // Confort de développement : `SCENARIOS_GEN8_SEULEMENT=1` ne joue que les scénarios gen8 (la suite complète prend plusieurs minutes). Jamais utilisé pour valider une livraison.
+      if (process.env.SCENARIOS_GEN9_SEULEMENT === "1") {
+        await scenarioGen9Prof(navigateur, url, largeur);
+        controlerReponsesHttp(`${largeur} gen9 prof`);
+        await scenarioGen9Eleve(navigateur, url, largeur);
+        controlerReponsesHttp(`${largeur} gen9 élève`);
+        continue;
+      }
       if (process.env.SCENARIOS_GEN8_SEULEMENT === "1") {
         await scenarioGen8Prof(navigateur, url, largeur);
         controlerReponsesHttp(`${largeur} gen8 prof`);
         await scenarioGen8Eleve(navigateur, url, largeur);
         controlerReponsesHttp(`${largeur} gen8 élève`);
+        await scenarioGen9Prof(navigateur, url, largeur);
+        controlerReponsesHttp(`${largeur} gen9 prof`);
+        await scenarioGen9Eleve(navigateur, url, largeur);
+        controlerReponsesHttp(`${largeur} gen9 élève`);
         await scenarioChaineTransformations(navigateur, url, largeur);
         controlerReponsesHttp(`${largeur} chaîne`);
         await scenarioFigureAidePaliers(navigateur, url, largeur);
         controlerReponsesHttp(`${largeur} figure aide paliers`);
+        await scenarioFormulePaliers(navigateur, url, largeur);
+        controlerReponsesHttp(`${largeur} formule paliers`);
         continue;
       }
       // Chaque scénario est suivi du contrôle de ses réponses HTTP >= 400 (attendus déclarés à part, s'il y en a).
@@ -3147,8 +3487,14 @@ async function main() {
       controlerReponsesHttp(`${largeur} gen8 prof`);
       await scenarioGen8Eleve(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} gen8 élève`);
+      await scenarioGen9Prof(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} gen9 prof`);
+      await scenarioGen9Eleve(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} gen9 élève`);
       await scenarioFigureAidePaliers(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} figure aide paliers`);
+      await scenarioFormulePaliers(navigateur, url, largeur);
+      controlerReponsesHttp(`${largeur} formule paliers`);
       await scenarioChaineTransformations(navigateur, url, largeur);
       controlerReponsesHttp(`${largeur} chaîne`);
       await scenarioPartiesFausses(navigateur, url, largeur);

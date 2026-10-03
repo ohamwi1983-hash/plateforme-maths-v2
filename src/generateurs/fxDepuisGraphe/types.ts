@@ -1,15 +1,11 @@
-import { multiplierR, oppR, rat, type Rat } from "../analyseFonctionMotifDelta/exact/rationnel";
-import { constante, decalerP, foisScalaire, plusP, puissanceP, X, type Polynome } from "./polynome";
+import { multiplierR, rat } from "../analyseFonctionMotifDelta/exact/rationnel";
+import { parametresDeTirage, polynomeDe, type Parametres, type ParametresJson, type RepliFx, type Transformation } from "../_noyauQuadratique/types";
+import type { Polynome } from "../_noyauQuadratique/polynome";
 
 /**
- * Modèle de gen8 « f(x) à partir du graphe » (`variante_id` `fx_depuis_graphe`, RAPPORT §56). Une parabole `f(x) = a(x − p)² + q` obtenue à partir de `x²` par les transformations ACTIVES de la
- * ligne de composition : `TH` (translation horizontale, `p`), `TV` (translation verticale, `q`), `EV` (étirement vertical, `m > 1`), `CV` (compression verticale, `0 < m < 1`), `SOX` (symétrie
- * d'axe Ox, signe de `a`). Une transformation INACTIVE vaut sa valeur NEUTRE (`p = 0`, `q = 0`, `m = 1`, pas de symétrie) et n'est JAMAIS affichée. Tout est rationnel : aucun irrationnel.
+ * Modèle de gen8 « f(x) à partir du graphe » (`variante_id` `fx_depuis_graphe`, RAPPORT §56). Les types et conversions communs (transformations, `Parametres`, `polynomeDe`…) vivent dans le
+ * noyau partagé `../_noyauQuadratique/types.ts` (RAPPORT §59) ; ne reste ici que ce qui est propre à gen8 : l'exercice, son graphique et le point `A`.
  */
-export const TRANSFORMATIONS = ["TH", "TV", "EV", "CV", "SOX"] as const;
-export type Transformation = (typeof TRANSFORMATIONS)[number];
-
-export const estTransformation = (v: unknown): v is Transformation => typeof v === "string" && (TRANSFORMATIONS as readonly string[]).includes(v);
 
 /** Exercice brut, JSON-sérialisable, régénéré depuis `(graine, configuration)` : jamais stocké. */
 export interface ExerciceFx {
@@ -38,54 +34,9 @@ export interface ExerciceFx {
   effectif?: ParametresJson;
 }
 
-export interface RepliFx {
-  th: number;
-  tv: number;
-  facteurN: number;
-  facteurD: number;
-  sox: boolean;
-}
-
-/** Paramètres `(a, p, q)` d'une fonction, sous forme JSON (fractions irréductibles) : la forme stockée dans l'exercice projeté. */
-export interface ParametresJson {
-  an: number;
-  ad: number;
-  pn: number;
-  pd: number;
-  qn: number;
-  qd: number;
-}
-
 export const estActive = (ex: Pick<ExerciceFx, "actives">, t: Transformation): boolean => ex.actives.includes(t);
 
-/** Les trois paramètres de `f(x) = a(x − p)² + q`, exacts. */
-export interface Parametres {
-  a: Rat;
-  p: Rat;
-  q: Rat;
-}
-
-export const versJson = ({ a, p, q }: Parametres): ParametresJson => ({ an: a.n, ad: a.d, pn: p.n, pd: p.d, qn: q.n, qd: q.d });
-export const depuisJson = (j: ParametresJson): Parametres => ({ a: rat(j.an, j.ad), p: rat(j.pn, j.pd), q: rat(j.qn, j.qd) });
-
-/** Les paramètres du repli (même construction que `parametres`, sur les champs `repli`). */
-export function parametresRepli(ex: Pick<ExerciceFx, "repli">): Parametres {
-  const m = rat(ex.repli.facteurN, ex.repli.facteurD);
-  return { a: ex.repli.sox ? oppR(m) : m, p: rat(ex.repli.th), q: rat(ex.repli.tv) };
-}
-
-export const facteur = (ex: Pick<ExerciceFx, "facteurN" | "facteurD">): Rat => rat(ex.facteurN, ex.facteurD);
-
-export function parametres(ex: ExerciceFx): Parametres {
-  const m = facteur(ex);
-  return { a: ex.sox ? oppR(m) : m, p: rat(ex.th), q: rat(ex.tv) };
-}
-
-/** `a(x − p)² + q`, développé. */
-export function polynomeDe({ a, p, q }: Parametres): Polynome {
-  const carre = decalerP(puissanceP(X, 2), p); // (x − p)²
-  return plusP(foisScalaire(carre, a), constante(q));
-}
+export const parametres = (ex: ExerciceFx): Parametres => parametresDeTirage(ex);
 
 export const polynomeVrai = (ex: ExerciceFx): Polynome => polynomeDe(parametres(ex));
 

@@ -1,0 +1,23 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Référence — aide formule_coloree à paliers avec emphase</title>
+<!-- RÉFÉRENCE de l'aide `formule_coloree` étendue (RAPPORT §59, demande du propriétaire pour gen9 « Complète le carré ») : une aide à PALIERS dont chaque palier a une légende d'auteur (texte) et une
+     formule en segments ; un segment peut porter une EMPHASE neutre (une quantité qui n'est pas un coefficient : `(b/2a)²`). L'emphase n'est PAS un rôle a/b/c : elle n'emploie aucun des trois
+     tokens `--coef-*` (réservés aux coefficients) ; elle emploie `--violet-clair` en fond et un SOULIGNEMENT épais `--violet-vif` : la couleur ne suffit jamais. Elle est mesurée sur le style CALCULÉ
+     (`chromium-design`, 390 et 1280 px). La zone d'aide est celle des aides typées (ambre clair, filet ambre vif), comme `bouton-aide.html`. Valeurs = tokens du design system. -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; padding: 16px; background: #FAF9FC; font-family: 'Inter', sans-serif; font-size: 16px; color: #1C1730; }
+  .zone { box-sizing: border-box; width: 100%; max-width: 560px; margin: 0; padding: 8px 16px; background: #FDF1E2; border: 1px solid #F5A623; border-radius: 13px; color: #1C1730; overflow-wrap: anywhere; }
+  .palier { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+  .legende { margin: 0; }
+  .formule { display: flex; justify-content: center; flex-wrap: wrap; align-items: baseline; gap: 0; font-size: 1.15em; }
+  /* Emphase d'une quantité : fond violet clair, soulignement épais violet vif, léger retrait horizontal (la forme porte le sens, pas seulement la couleur). */
+  .emphase { padding: 0 4px; background: #F1EBFC; border-bottom: 2px solid #7C3AED; border-radius: 13px; }
+</style>
+<div class="zone" data-ref="zone">
+  <div class="palier" data-ref="palier">
+    <p class="legende" data-ref="legende">On met en facteur le coefficient de x², sur les deux premiers termes.</p>
+    <div class="formule" data-ref="formule"><span>f(x) = 2(x² − 6x) + 19 avec </span><span class="emphase" data-ref="emphase">(b/2a)²</span></div>
+  </div>
+</div>

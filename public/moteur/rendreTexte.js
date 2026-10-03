@@ -63,7 +63,7 @@ export function reglagesKatex(roles) {
       throwOnError: true,
       displayMode: false,
       trust: (contexte) => {
-        if (roles === true && contexte.command === "\\htmlClass" && /^moteur-coef-[abc]$/.test(String(contexte.class))) return true;
+        if (roles === true && contexte.command === "\\htmlClass" && /^(moteur-coef-[abc]|moteur-emphase)$/.test(String(contexte.class))) return true;
         refus = true;
         return false;
       },

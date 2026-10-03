@@ -14,13 +14,16 @@ import { poidsDesEcrans } from "../lib/poidsEcran";
 import { verifierAvecControle } from "../lib/registreGenerateurs";
 import { creerPrng } from "../lib/prng";
 import { generateurFxDepuisGraphe as G } from "../src/generateurs/fxDepuisGraphe/generateur";
-import { effectifDepuisReponses, parametresDepuisReponse, projeterFx } from "../src/generateurs/fxDepuisGraphe/cascade";
-import { POLYNOME_DEPART, chaineCanonique, estXCarre, etapeLocalementValide, longueurMinimale, necessaires, parametreEtape, transformationsAdmises } from "../src/generateurs/fxDepuisGraphe/chaine";
-import { CHAMP_CHAINE, CHAMP_EXPRESSION, CHOIX_CHAINE, POIDS_CHAINE, POIDS_EXPRESSION } from "../src/generateurs/fxDepuisGraphe/ecrans";
-import { latexFonction } from "../src/generateurs/fxDepuisGraphe/formatage";
+import { effectifDepuisReponses, projeterFx } from "../src/generateurs/fxDepuisGraphe/cascade";
+import { parametresDepuisReponse } from "../src/generateurs/_noyauQuadratique/effectif";
+import { POLYNOME_DEPART, chaineCanonique, estXCarre, etapeLocalementValide, longueurMinimale, necessaires, parametreEtape, transformationsAdmises } from "../src/generateurs/_noyauQuadratique/chaine";
+import { CHAMP_CHAINE, CHAMP_EXPRESSION, POIDS_CHAINE, POIDS_EXPRESSION } from "../src/generateurs/fxDepuisGraphe/ecrans";
+import { CHOIX_CHAINE } from "../src/generateurs/_noyauQuadratique/ecranChaine";
+import { latexFonction } from "../src/generateurs/_noyauQuadratique/formatage";
 import { genererExerciceFx } from "../src/generateurs/fxDepuisGraphe/generation";
-import { coefficient, constante, decalerP, degre, egalP, foisScalaire, lirePolynome, plusP, type Polynome } from "../src/generateurs/fxDepuisGraphe/polynome";
-import { TRANSFORMATIONS, depuisJson, estTransformation, parametres, parametresRepli, polynomeDe, versJson, type ExerciceFx, type Parametres, type Transformation } from "../src/generateurs/fxDepuisGraphe/types";
+import { coefficient, constante, decalerP, degre, egalP, foisScalaire, lirePolynome, plusP, type Polynome } from "../src/generateurs/_noyauQuadratique/polynome";
+import { parametres, type ExerciceFx } from "../src/generateurs/fxDepuisGraphe/types";
+import { TRANSFORMATIONS, depuisJson, estTransformation, parametresRepli, polynomeDe, versJson, type Parametres, type Transformation } from "../src/generateurs/_noyauQuadratique/types";
 import { egalR, oppR, rat, signeR, type Rat } from "../src/generateurs/analyseFonctionMotifDelta/exact/rationnel";
 
 const echecs: string[] = [];
@@ -354,7 +357,7 @@ verifier(chainesJugees === CONFIGURATIONS.length * GRAINES.length, "toutes les c
   for (const [i, v] of [[0, "3.0"], [0, "+3"], [0, "6/2"], [0, "03"], [1, "4/2"], [1, "2,0"], [1, "(2)"], [2, "8/2"], [2, "4"]] as [number, string][]) {
     verifier(G.verifier(ex, CHAMP_CHAINE, avecValeur(i, v)).statut === "correct", `valeur équivalente acceptée : étape ${i} « ${v} »`);
   }
-  // Valeur illisible ou qui n'est pas un nombre : parse_error (aucune tentative consommée), message désignant l'étape.
+  // Valeur illisible ou qui n'est pas un nombre : parse_error (compte comme une tentative ratée, comme tout statut ≠ correct : lib/moteurTentatives.ts), message désignant l'étape.
   for (const v of ["x", "2x", "trois", "1/0", "3 vers la droite", "((", "3+", "x^2"]) {
     const r = G.verifier(ex, CHAMP_CHAINE, avecValeur(1, v));
     verifier(r.statut === "parse_error" && r.codesCompetence.length === 0 && r.messageErreur.startsWith("Étape 2 : la valeur"), `valeur illisible « ${v} » : parse_error sur l'étape 2`);

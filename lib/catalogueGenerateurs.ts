@@ -25,6 +25,9 @@ export const CATALOGUE_GENERATEURS = [
   // gen8 « f(x) à partir du graphe » (RAPPORT §56-§57) : UNE seule entrée ; les transformations actives (TH, TV, EV | CV, SOX) se choisissent PAR LIGNE de composition (`Generateur.configuration`,
   // §55), pas par multiplication de variantes. Libellé IDENTIQUE à `public/catalogue-generateurs-complet.json` (4e, n° 67).
   { generateur_id: "gen8", variante_id: "fx_depuis_graphe", label: "f(x) à partir du graphe" },
+  // gen9 « Complète le carré » (RAPPORT §59) : UNE seule entrée, comme gen8 ; les transformations actives se choisissent PAR LIGNE, avec `TH` OBLIGATOIRE (`Generateur.configuration.obligatoires`).
+  // Libellé IDENTIQUE à `public/catalogue-generateurs-complet.json` (4e, n° 68).
+  { generateur_id: "gen9", variante_id: "completion_du_carre", label: "Complète le carré" },
 ] as const;
 
 export type VariantePilote = (typeof CATALOGUE_GENERATEURS)[number]["variante_id"];

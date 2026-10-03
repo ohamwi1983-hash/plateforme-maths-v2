@@ -96,6 +96,10 @@ export function versTexteBrut(texte) {
  */
 export function assemblerFormuleColoree(segments) {
   return segments
-    .map((segment) => (segment.role === "a" || segment.role === "b" || segment.role === "c" ? `\\htmlClass{moteur-coef-${segment.role}}{${segment.latex}}` : segment.latex))
+    .map((segment) => {
+      if (segment.role === "a" || segment.role === "b" || segment.role === "c") return `\\htmlClass{moteur-coef-${segment.role}}{${segment.latex}}`;
+      if (segment.emphase === true) return `\\htmlClass{moteur-emphase}{${segment.latex}}`; // mise en évidence neutre (RAPPORT §59) : jamais un token --coef-*
+      return segment.latex;
+    })
     .join("");
 }

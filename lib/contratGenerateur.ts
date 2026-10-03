@@ -362,6 +362,8 @@ export type ResultatVerification =
  *  - La configuration est stockée sous sa forme CANONIQUE `{ actives: string[] }` (`lib/configurationLigne.ts`, seule autorité) : identifiants connus, sans doublon, dans l'ordre de `cases`.
  *  - Une ligne SANS case cochée est REFUSÉE (400) : aucune configuration par défaut n'est jamais choisie à la place du professeur, une nouvelle ligne naît vide.
  *  - `exclusifs` : groupes d'identifiants dont AU PLUS un peut être actif ensemble (ex. `["EV", "CV"]`).
+ *  - `obligatoires` (RAPPORT §59) : cases qui DOIVENT être actives (ex. `TH` pour gen9 : sans translation horizontale, `b = 0` et rien n'est à compléter). Une configuration qui en omet une est
+ *    REFUSÉE (400), jamais complétée par un défaut ; le formulaire du professeur les affiche cochées et verrouillées. Une case obligatoire n'appartient à aucun groupe `exclusifs`.
  *  - Elle est copiée sur chaque `exercices_assignes` à l'assignation (figée) : `generer(graine, configuration)` ne relit jamais la ligne de composition.
  */
 export interface DescripteurConfigurationCases {
@@ -370,6 +372,7 @@ export interface DescripteurConfigurationCases {
   libelle: string;
   cases: { id: string; libelle: string }[];
   exclusifs?: string[][];
+  obligatoires?: string[];
 }
 
 /** Forme canonique d'une configuration de ligne `cases`. */

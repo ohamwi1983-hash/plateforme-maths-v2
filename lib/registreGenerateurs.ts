@@ -3,6 +3,7 @@ import { CATALOGUE_GENERATEURS } from "./catalogueGenerateurs";
 import { DICTIONNAIRE_COMPETENCES } from "./dictionnaireCompetences";
 import { generateurTemoinTechnique } from "../src/generateurs/_temoinTechnique";
 import { GENERATEURS_MOTIF_DELTA } from "../src/generateurs/analyseFonctionMotifDelta/generateurs";
+import { generateurCompletionDuCarre } from "../src/generateurs/completionDuCarre/generateur";
 import { generateurFxDepuisGraphe } from "../src/generateurs/fxDepuisGraphe/generateur";
 
 /**
@@ -16,7 +17,7 @@ import { generateurFxDepuisGraphe } from "../src/generateurs/fxDepuisGraphe/gene
  * (ce qu'on peut composer) : le registre sait EXÉCUTER. Les deux ne sont pas fusionnés, leur
  * cohérence est contrôlée par `verifierCoherenceRegistre` au chargement de ce module.
  */
-export const REGISTRE_GENERATEURS: readonly Generateur<any>[] = [generateurTemoinTechnique, ...GENERATEURS_MOTIF_DELTA, generateurFxDepuisGraphe];
+export const REGISTRE_GENERATEURS: readonly Generateur<any>[] = [generateurTemoinTechnique, ...GENERATEURS_MOTIF_DELTA, generateurFxDepuisGraphe, generateurCompletionDuCarre];
 
 interface EntreeCatalogue {
   generateur_id: string;
@@ -58,6 +59,11 @@ export function verifierCoherenceRegistre(
       erreurs.push(`${g.variante_id} : générateur non curriculaire présent dans CATALOGUE_GENERATEURS (jamais exposé au professeur)`);
     }
     if (new Set(g.codesCompetenceDeclares).size !== g.codesCompetenceDeclares.length) erreurs.push(`${g.variante_id} : codesCompetenceDeclares contient des doublons`);
+    // Cases obligatoires du descripteur de configuration (RAPPORT §59) : connues, et dans aucun groupe exclusif (sinon une case obligatoire en interdirait une autre à jamais).
+    for (const id of g.configuration?.obligatoires ?? []) {
+      if (!g.configuration?.cases.some((c) => c.id === id)) erreurs.push(`${g.variante_id} : case obligatoire "${id}" absente de \`cases\``);
+      if ((g.configuration?.exclusifs ?? []).some((groupe) => groupe.includes(id))) erreurs.push(`${g.variante_id} : case obligatoire "${id}" membre d'un groupe exclusif`);
+    }
   }
   return erreurs;
 }

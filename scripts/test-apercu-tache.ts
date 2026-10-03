@@ -96,7 +96,7 @@ async function main(): Promise<void> {
   try {
     const cat = await appeler("catalogue-generateurs", "GET", { jeton: jetonProf });
     const entrees = cat.corps as { variante_id: string; executable: boolean }[];
-    verifier(entrees.length === 11 && entrees.find((e) => e.variante_id === "af_delta_aucune_racine")?.executable === false && entrees.filter((e) => e.variante_id !== "af_delta_aucune_racine").every((e) => e.executable === true), "catalogue : `executable` est dérivé du registre (faux seulement pour la variante retirée)");
+    verifier(entrees.length === 12 && entrees.find((e) => e.variante_id === "af_delta_aucune_racine")?.executable === false && entrees.filter((e) => e.variante_id !== "af_delta_aucune_racine").every((e) => e.executable === true), "catalogue : `executable` est dérivé du registre (faux seulement pour la variante retirée)");
     const refus = await appeler("taches/apercu", "POST", { jeton: jetonProf, corps: corps1 });
     verifier(refus.statut === 409 && refus.corps.variantes_indisponibles?.join() === "af_delta_aucune_racine", `variante sans générateur : 409 (${refus.statut} ${JSON.stringify(refus.corps)})`);
     verifier(table("taches").some((t) => t.id === tache1.id) && table("exercices_assignes").filter((e) => e.tache_id === tache1.id).length === 3, "le 409 n'a rien supprimé : l'aperçu précédent reste en place");

@@ -2,7 +2,7 @@ import { creerPrng, type Prng } from "../../../lib/prng";
 import { decoderChaineTransformations, decoderChampsMultiples, decoderIntervalle, decoderListeValeurs, decoderListeValeursOuAucune, decoderTableauSignes, lireNombreOuFraction } from "../../../lib/reponsesEcran";
 import { etatActuelSequentiel, type ColonneTableauSignes, type EcranDeclare, type EcranTableauSignes, type Generateur, type ReponseConfirmee, type ResultatVerification, type SousChamp } from "../../../lib/contratGenerateur";
 import { comparerCasesTableau, resoudreRangees } from "../../../lib/structureTableau";
-import type { AideTypee } from "../../../lib/aideTypee";
+import type { AideTypee, SegmentFormule } from "../../../lib/aideTypee";
 import { figureParabole } from "../../../lib/figureParabole";
 
 /**
@@ -64,7 +64,14 @@ export const CHAMP_CHAINE = "chaine";
  */
 export const GRAINE_PROFIL_GRAPHE = 4_294_967_000;
 
-export type ProfilTemoin = "base" | "etendu" | "graphe";
+/**
+ * Le profil `formule` (RAPPORT §59) couvre l'aide `formule_coloree` À PALIERS avec EMPHASE (légende + formule par palier, une quantité mise en évidence sans rôle de coefficient). Graines
+ * réservées dans `[GRAINE_PROFIL_FORMULE ; GRAINE_PROFIL_GRAPHE[` : comme `graphe`, jamais tiré en pratique (probabilité ~1e-7), donc `base` et `etendu` restent EXACTEMENT les mêmes.
+ */
+export const CHAMP_CARRE = "carre";
+export const GRAINE_PROFIL_FORMULE = 4_294_966_000;
+
+export type ProfilTemoin = "base" | "etendu" | "graphe" | "formule";
 
 /** f(x) = a(x − p)² + q ; A = (xA ; f(xA)) à coordonnées entières. */
 export interface ExerciceGraphe {
@@ -86,6 +93,13 @@ export interface ExerciceEtendu {
   quotient: { racines: [number, number]; pole: number };
 }
 
+/** f(x) = a(x − p)² + q, développé en ax² + bx + c avec b = −2ap et c = ap² + q. */
+export interface ExerciceFormule {
+  a: number;
+  p: number;
+  q: number;
+}
+
 export interface ExerciceTemoin {
   a: number;
   b: number;
@@ -99,6 +113,8 @@ export interface ExerciceTemoin {
   etendu?: ExerciceEtendu;
   /** Présent ssi `profil === "graphe"`. */
   graphe?: ExerciceGraphe;
+  /** Présent ssi `profil === "formule"`. */
+  formule?: ExerciceFormule;
 }
 
 // ════════════════════════════════════════════════════════════════════════════════════════════
@@ -623,6 +639,7 @@ function reponseBruteCorrecteEtendue(ex: ExerciceEtendu, champ: string): string 
 const NOMS_ECRANS: Readonly<Record<string, string>> = {
   [CHAMP_SOMME]: "Somme",
   [CHAMP_COURBE]: "Courbe",
+  [CHAMP_CARRE]: "Carré",
   [CHAMP_CHAINE]: "Chaîne",
   [CHAMP_PARITE]: "Parité",
   [CHAMP_DIVISEURS]: "Diviseurs",
@@ -693,14 +710,57 @@ function ecransGraphe(g: ExerciceGraphe): EcranDeclare[] {
   ];
 }
 
+/** `+ 3`, `- 3` (jamais `+ -3`) pour écrire un terme signé en LaTeX. */
+const termeSigne = (n: number): string => `${n < 0 ? "-" : "+"} ${Math.abs(n)}`;
+
+/**
+ * Profil `formule` : UN écran `champ_expression` dont l'aide `formule_coloree` a DEUX paliers. Palier 1 : le coefficient `a` mis en facteur sur les deux premiers termes (rôles `a` et `c`).
+ * Palier 2 : la même formule, suivie de la quantité `(b/2a)²` en EMPHASE (symbolique : aucune valeur numérique, qui donnerait `p²`).
+ */
+function ecransFormule(f: ExerciceFormule): EcranDeclare[] {
+  const b = -2 * f.a * f.p;
+  const c = f.a * f.p * f.p + f.q;
+  const facteurA = f.a === 1 ? [] : f.a === -1 ? [{ latex: "-" }] : [{ latex: String(f.a), role: "a" as const }];
+  const bSurA = -2 * f.p; // b / a
+  const formule: SegmentFormule[] = [
+    { latex: "f(x) = " },
+    ...facteurA,
+    { latex: `\\left(x^2 ${termeSigne(bSurA)}x\\right) ${c < 0 ? "-" : "+"} ` },
+    ...(c === 0 ? [] : [{ latex: String(Math.abs(c)), role: "c" as const }]),
+  ];
+  const developpe = `f(x) = ${f.a === 1 ? "" : f.a === -1 ? "-" : f.a}x^2 ${termeSigne(b)}x ${termeSigne(c)}`;
+  return [
+    {
+      type: "champ_expression",
+      champ: CHAMP_CARRE,
+      consigne: `On complète le carré dans $${developpe}$.`,
+      question: "Quelle est la valeur de $p$ dans $a(x - p)^2 + q$ ?",
+      apercu: { libelle: "p =" },
+      aide: {
+        type: "formule_coloree",
+        paliers: [
+          { legende: "On met le coefficient de $x^2$ en facteur sur les deux premiers termes.", segments: formule },
+          { legende: "Pour compléter le carré, on utilise la quantité mise en évidence.", segments: [...formule, { latex: "\\quad\\text{avec}\\quad" }, { latex: "\\left(\\dfrac{b}{2a}\\right)^2", emphase: true }] },
+        ],
+      },
+      poids: 1,
+    },
+  ];
+}
+
 function ecransDe(ex: ExerciceTemoin): EcranDeclare[] {
-  const ecrans = ex.profil === "graphe" && ex.graphe ? ecransGraphe(ex.graphe) : ex.profil === "etendu" && ex.etendu ? ecransEtendus(ex.etendu) : ecransBase(ex);
+  const ecrans = ex.profil === "formule" && ex.formule ? ecransFormule(ex.formule) : ex.profil === "graphe" && ex.graphe ? ecransGraphe(ex.graphe) : ex.profil === "etendu" && ex.etendu ? ecransEtendus(ex.etendu) : ecransBase(ex);
   return ecrans.map((e) => ({ ...e, nom: NOMS_ECRANS[e.champ] }));
 }
 
 function grapheDe(ex: ExerciceTemoin): ExerciceGraphe {
   if (!ex.graphe) throw new Error(`Champ ${CHAMP_COURBE} inconnu pour un exercice de profil « ${ex.profil} » (${VARIANTE_TEMOIN})`);
   return ex.graphe;
+}
+
+function formuleDe(ex: ExerciceTemoin): ExerciceFormule {
+  if (!ex.formule) throw new Error(`Champ ${CHAMP_CARRE} inconnu pour un exercice de profil « ${ex.profil} » (${VARIANTE_TEMOIN})`);
+  return ex.formule;
 }
 
 function etenduDe(ex: ExerciceTemoin, champ: string): ExerciceEtendu {
@@ -729,6 +789,12 @@ export const generateurTemoinTechnique: Generateur<ExerciceTemoin> = {
     const n = prng.choisir([12, 18, 20, 24, 30, 36]);
     const r1 = prng.entierEntre(-4, 1);
     const r2 = r1 + prng.entierEntre(2, 5);
+    if (graine >= GRAINE_PROFIL_FORMULE && graine < GRAINE_PROFIL_GRAPHE) {
+      const fa = prng.choisir([1, 2, 3, -2]);
+      const fp = prng.choisir([-4, -3, -2, -1, 1, 2, 3, 4]);
+      const fq = prng.entierEntre(-3, 3);
+      return { a, b, n, r1, r2, profil: "formule", formule: { a: fa, p: fp, q: fq } };
+    }
     if (graine >= GRAINE_PROFIL_GRAPHE) {
       const ga = prng.choisir([1, 2, 3]);
       const gp = prng.entierEntre(-3, 3);
@@ -752,6 +818,11 @@ export const generateurTemoinTechnique: Generateur<ExerciceTemoin> = {
       if (!chaine.ok) return { statut: "parse_error", codesCompetence: [], messageErreur: chaine.message };
       const fausses = chaine.valeur.flatMap((e, i) => (e.transformation === CHAINE_ATTENDUE[i] ? [] : [`etape:${i}`]));
       return fausses.length === 0 && chaine.valeur.length === CHAINE_ATTENDUE.length ? resultat("correct") : { statut: "not_equivalent", codesCompetence: [], partiesFausses: fausses };
+    }
+    if (champ === CHAMP_CARRE) {
+      const lu = evaluerExpression(reponseBrute);
+      if (!lu.ok) return { statut: "parse_error", codesCompetence: [], messageErreur: lu.message };
+      return lu.valeur === formuleDe(ex).p ? resultat("correct") : { statut: "not_equivalent", codesCompetence: [], partiesFausses: ["champ"] };
     }
     if (champ === CHAMP_COURBE) {
       const lu = evaluerExpression(reponseBrute);
@@ -799,6 +870,7 @@ export const generateurTemoinTechnique: Generateur<ExerciceTemoin> = {
 
   solutionAttendue(ex: ExerciceTemoin, champ: string): string {
     if (CHAMPS_ETENDUS.includes(champ)) return solutionAttendueEtendue(etenduDe(ex, champ), champ);
+    if (champ === CHAMP_CARRE) return `$p = ${formuleDe(ex).p}$`;
     if (champ === CHAMP_COURBE) return `$a = ${grapheDe(ex).a}$`;
     if (champ === CHAMP_CHAINE) return CHAINE_ATTENDUE.join(", puis ");
     if (champ === CHAMP_SOMME) return String(ex.a + ex.b);
@@ -826,6 +898,7 @@ export const generateurTemoinTechnique: Generateur<ExerciceTemoin> = {
  */
 export function reponseBruteCorrecte(ex: ExerciceTemoin, champ: string): string {
   if (CHAMPS_ETENDUS.includes(champ)) return reponseBruteCorrecteEtendue(etenduDe(ex, champ), champ);
+  if (champ === CHAMP_CARRE) return String(formuleDe(ex).p);
   if (champ === CHAMP_COURBE) return String(grapheDe(ex).a);
   if (champ === CHAMP_CHAINE) return JSON.stringify({ etapes: CHAINE_ATTENDUE.map((transformation, i) => ({ expression: i === 0 ? "(x-1)^2" : "(x-1)^2+1", transformation, valeur: "1" })) });
   if (champ === CHAMP_SOMME) return String(ex.a + ex.b);
@@ -842,8 +915,10 @@ export function reponseBruteCorrecte(ex: ExerciceTemoin, champ: string): string 
  */
 export function graineDeProfil(profil: ProfilTemoin, indice: number, forme?: { large: boolean }): number {
   let trouvees = 0;
-  // Profil `graphe` : graines réservées >= GRAINE_PROFIL_GRAPHE (les autres profils se cherchent depuis 0, comme avant).
-  for (let graine = profil === "graphe" ? GRAINE_PROFIL_GRAPHE : 0; graine < (profil === "graphe" ? 4_294_967_295 : 1_000_000); graine++) {
+  // Profils `graphe` et `formule` : graines réservées (les autres profils se cherchent depuis 0, comme avant).
+  const debut = profil === "graphe" ? GRAINE_PROFIL_GRAPHE : profil === "formule" ? GRAINE_PROFIL_FORMULE : 0;
+  const fin = profil === "graphe" ? 4_294_967_295 : profil === "formule" ? GRAINE_PROFIL_GRAPHE : 1_000_000;
+  for (let graine = debut; graine < fin; graine++) {
     const ex = generateurTemoinTechnique.generer(graine);
     if (ex.profil !== profil) continue;
     if (profil === "etendu" && forme && ex.etendu?.large !== forme.large) continue;

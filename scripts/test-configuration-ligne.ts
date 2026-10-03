@@ -48,6 +48,24 @@ async function main(): Promise<void> {
   verifier(cleConfiguration(null) === "" && cleConfiguration({ actives: ["A", "B"] }) === '["A","B"]', "clé de configuration");
   verifier(libelleConfiguration(D, { actives: ["A", "C"] }) === "Case A, Case C" && libelleConfiguration(D, null) === null && libelleConfiguration(undefined, { actives: ["A"] }) === null, "libellé de configuration");
 
+  // Cases OBLIGATOIRES (RAPPORT §59) : refusées si absentes (jamais complétées), admises sinon, sans effet sur l'ordre canonique.
+  {
+    const DO = { type: "cases", libelle: "x", cases: [{ id: "A", libelle: "Case A" }, { id: "B", libelle: "Case B" }, { id: "C", libelle: "Case C" }], exclusifs: [["B", "C"]], obligatoires: ["A"] };
+    const co = (brute: unknown) => canoniserConfigurationCases(DO, brute);
+    verifier(co({ actives: ["B"] }).ok === false && /« Case A » est obligatoire/.test(co({ actives: ["B"] }).erreur), "case obligatoire absente : refusée, l'erreur la nomme");
+    verifier(JSON.stringify(co({ actives: ["A"] })) === JSON.stringify({ ok: true, configuration: { actives: ["A"] } }), "la case obligatoire seule : admise");
+    verifier(JSON.stringify(co({ actives: ["C", "A"] })) === JSON.stringify({ ok: true, configuration: { actives: ["A", "C"] } }), "obligatoire + autre : ordre canonique conservé");
+    verifier(co({ actives: [] }).erreur === MESSAGE_CONFIGURATION_VIDE, "configuration vide : le message de la ligne vide (inchangé)");
+    verifier(co({ actives: ["A", "B", "C"] }).ok === false && /s'excluent/.test(co({ actives: ["A", "B", "C"] }).erreur), "les exclusifs restent contrôlés");
+    // Cohérence du registre : une case obligatoire connue et hors de tout groupe exclusif.
+    const { verifierCoherenceRegistre } = require("../lib/registreGenerateurs");
+    const faux = (configuration: unknown) => ({ ...g, variante_id: "faux_gen", configuration });
+    const erreurs = (configuration: unknown) => verifierCoherenceRegistre([faux(configuration)], [{ generateur_id: g.generateur_id, variante_id: "faux_gen" }], {}).filter((e: string) => /obligatoire/.test(e));
+    verifier(erreurs(DO).length === 0, "(sanité) descripteur obligatoire sain : aucune erreur de case obligatoire");
+    verifier(erreurs({ ...DO, obligatoires: ["Z"] }).some((e: string) => /absente de/.test(e)), "case obligatoire inconnue : incohérence signalée");
+    verifier(erreurs({ ...DO, obligatoires: ["B"] }).some((e: string) => /groupe exclusif/.test(e)), "case obligatoire dans un groupe exclusif : incohérence signalée");
+  }
+
   // ── 2. validerComposition : lignes à 0, fusion des doublons (décisions C et E), refus (B, D) ──
   const L = (configuration: unknown, nombre = 1, chrono?: number) => ({ variante_id: VARIANTE_CONFIGURABLE, nombre_exercices: nombre, ...(chrono === undefined ? {} : { chrono_duree_secondes: chrono }), configuration });
   const ok = (compo: unknown[], mode: "aucun" | "par_ecran" | "global" = "aucun") => validerComposition(compo, mode);
