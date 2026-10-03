@@ -105,8 +105,8 @@ async function main(): Promise<void> {
   if (compteurs && avant) {
     const base = compteurs.requetesBase - avant.requetesBase;
     const auth = compteurs.appelsAuth - avant.appelsAuth;
-    console.log(`Requêtes émises par la suppression : ${base} requêtes de base de données (séquentielles) + ${auth} appels Auth (séquentiels).`);
-    console.log("Durée réelle ≈ requêtes de base × latence d'une requête + appels Auth × latence d'un appel Auth — à mesurer sur une cible réelle (BASE_URL + JETON_ADMIN).");
+    console.log(`Requêtes émises par la suppression : ${base} requêtes de base de données (séquentielles) + ${auth} appels Auth (par lots de 10 en parallèle depuis RAPPORT §63).`);
+    console.log("Durée réelle ≈ requêtes de base × latence d'une requête + ⌈appels Auth / 10⌉ × latence d'un appel Auth — à mesurer sur une cible réelle (BASE_URL + JETON_ADMIN).");
   }
   // Nettoyage : les tâches créées par l'outil ne sont plus assignées une fois la classe supprimée, donc supprimables (elles ne doivent pas rester dans la liste du compte utilisé).
   let tachesSupprimees = 0;

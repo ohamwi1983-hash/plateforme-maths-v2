@@ -12,7 +12,7 @@ export {}; // module
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { BaseMemoire } from "./support/fauxSupabase";
-import { ETAPES_SUPPRESSION_CLASSE_TEST, supprimerClasseDeTest, type EtapeSuppression } from "../lib/suppressionClasseTest";
+import { ETAPES_SUPPRESSION_CLASSE_TEST, TAILLE_LOT_COMPTES_AUTH, supprimerClasseDeTest, type EtapeSuppression } from "../lib/suppressionClasseTest";
 
 const echecs: string[] = [];
 let nb = 0;
@@ -145,6 +145,36 @@ async function main(): Promise<void> {
     const tout2 = JSON.stringify([...s.base.tables.entries()]);
     const partage = await supprimerClasseDeTest(adminDe(s), s.classeTest);
     verifier(!partage.ok && partage.statut === 409 && (partage.elevesPartages ?? []).length === 1 && JSON.stringify([...s.base.tables.entries()]) === tout2, "élève partagé : 409 avec son nom, RIEN n'est supprimé");
+  }
+
+  // ── 3b. Comptes Auth supprimés par lots de 10 EN PARALLÈLE (RAPPORT §63) : 25 élèves, concurrence mesurée, un échec n'arrête pas les autres ──
+  {
+    const s = scene();
+    for (let k = 0; k < 22; k++) {
+      const id = `extra-${k}`;
+      s.base.inserer("eleves", { id, nom: id, prenom: "X", actif: true });
+      s.base.utilisateursAuth.set(id, { id, email: `${id}@pilote.local`, password: "mdp", banni: null });
+      s.base.inserer("inscriptions", { eleve_id: id, classe_id: s.classeTest });
+    }
+    let enCours = 0;
+    let maxEnCours = 0;
+    const appels: string[] = [];
+    const original = s.base.auth.admin.deleteUser.bind(s.base.auth.admin);
+    s.base.auth.admin.deleteUser = async (id: string) => {
+      enCours++;
+      maxEnCours = Math.max(maxEnCours, enCours);
+      appels.push(id);
+      await new Promise((ok) => setTimeout(ok, 5));
+      enCours--;
+      if (id === "extra-3") return { data: null, error: { message: "échec simulé" } } as never;
+      return original(id);
+    };
+    const r = await supprimerClasseDeTest(adminDe(s), s.classeTest);
+    verifier(r.ok && r.eleves === 25 && appels.length === 25, `25 comptes Auth demandés (${appels.length})`);
+    verifier(maxEnCours > 1 && maxEnCours <= TAILLE_LOT_COMPTES_AUTH, `concurrence : plusieurs appels simultanés, jamais plus de ${TAILLE_LOT_COMPTES_AUTH} (observé ${maxEnCours})`);
+    verifier(r.ok && r.comptesAuthNonSupprimes.join() === "extra-3", `un compte en échec est rapporté sans arrêter les autres (${r.ok ? r.comptesAuthNonSupprimes.join() : "?"})`);
+    verifier(s.base.table("classes").every((c) => c.id !== s.classeTest) && s.base.table("eleves").every((e) => !String(e.id).startsWith("extra-")), "les lignes sont supprimées même si un compte Auth échoue");
+    verifier([...s.base.utilisateursAuth.keys()].sort().join() === "a1,extra-3,r1,r2", `les 24 autres comptes sont supprimés ; restent le compte en échec et les 3 comptes hors classe (${[...s.base.utilisateursAuth.keys()].sort().join()})`);
   }
 
   // ── 4. Mutation : retirer n'importe quelle étape est détecté ──

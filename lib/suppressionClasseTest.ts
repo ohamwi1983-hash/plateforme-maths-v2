@@ -6,6 +6,9 @@ type Admin = ReturnType<typeof supabaseAdmin>;
 /** Taille des lots de `.in(...)` (même valeur que la suppression de l'aperçu, `lib/routes/taches-apercu.ts`) : une URL PostgREST trop longue échoue. */
 export const TAILLE_LOT_SUPPRESSION_CLASSE = 100;
 
+/** Comptes Auth supprimés EN PARALLÈLE par lot (même motif et même valeur que `TAILLE_LOT_EMAILS`, `lib/routes/admin/profs/index.ts`) : un appel Auth par élève dominait la durée (RAPPORT §63). */
+export const TAILLE_LOT_COMPTES_AUTH = 10;
+
 /** Ce que l'étape vise : les exercices des élèves (`exercice_assigne_id`), les élèves de la classe (`eleve_id` / `id`), ou la classe elle-même. */
 export type PorteeEtape = "exercices" | "eleves" | "classe";
 
@@ -80,9 +83,11 @@ export async function supprimerClasseDeTest(admin: Admin, classeId: string, etap
   const comptesAuthNonSupprimes: string[] = [];
   for (const etape of etapes) {
     if (etape.genre === "auth") {
-      for (const id of eleveIds) {
-        const { error } = await admin.auth.admin.deleteUser(id);
-        if (error) comptesAuthNonSupprimes.push(id);
+      // Un lot de 10 appels en parallèle, lots l'un après l'autre : l'échec d'un compte n'arrête pas les autres (il est rapporté, la suppression des lignes est déjà faite).
+      for (let i = 0; i < eleveIds.length; i += TAILLE_LOT_COMPTES_AUTH) {
+        const lot = eleveIds.slice(i, i + TAILLE_LOT_COMPTES_AUTH);
+        const resultats = await Promise.all(lot.map(async (id) => ({ id, erreur: (await admin.auth.admin.deleteUser(id)).error })));
+        for (const { id, erreur } of resultats) if (erreur) comptesAuthNonSupprimes.push(id);
       }
       continue;
     }
